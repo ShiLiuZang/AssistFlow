@@ -1,21 +1,31 @@
 from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from app.api.chat import router as chat_router
+from app.api.extract import router as extract_router
 
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# 主应用负责把各业务路由和静态前端组装成一个可启动的 Web 服务。
 app = FastAPI(title="Minihelp Handwritten", version="0.1.0")
+app.include_router(chat_router)
+app.include_router(extract_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "minihelp-handwritten", "chapter": "ch01"}
+    """返回进程存活状态；不检查模型、数据库或其他外部服务。"""
+    return {
+        "status": "ok",
+        "service": "minihelp-handwritten",
+        "chapter": "ch01",
+    }
 
 
 @app.get("/", include_in_schema=False)
 async def chat_page() -> FileResponse:
+    """返回聊天首页，页面随后通过 /api/chat 调用后端。"""
     return FileResponse(STATIC_DIR / "index.html")
