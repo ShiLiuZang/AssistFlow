@@ -1,15 +1,9 @@
 <!doctype html>
-<!--
-  来源：公众号@小林coding
-  后端八股网站：xiaolincoding.com
-  Agent网站：xiaolinnote.com
-  简历模版：jianli.xiaolinnote.com
--->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>喵喵优选 · 智能客服</title>
+  <title>智能客服</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect x='2' y='2' width='4' height='4' fill='%232b2632'/><rect x='10' y='2' width='4' height='4' fill='%232b2632'/><rect x='2' y='4' width='12' height='9' fill='%232b2632'/><rect x='3' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='11' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='3' y='5' width='10' height='7' fill='%23ff9f57'/><rect x='5' y='7' width='1' height='2' fill='%232b2632'/><rect x='10' y='7' width='1' height='2' fill='%232b2632'/><rect x='7' y='9' width='2' height='1' fill='%23ff8095'/></svg>" />
   <style>
     :root {
@@ -573,11 +567,8 @@
     for (const el of document.querySelectorAll("[data-cat]")) el.innerHTML = CAT_SVG;
 
     function getUserId() {
-      let id = localStorage.getItem(SESSION_KEY);
-      if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem(SESSION_KEY, id);
-      }
+      const id = "u1"; // Ch02 固定演示身份；生产环境必须改为可信登录身份
+      localStorage.setItem(SESSION_KEY, id);
       return id;
     }
 
@@ -1073,7 +1064,11 @@
           try {
             await streamInto(nb, () => fetch("/api/actions/resume", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ conversation_id: getConversationId(), confirmed }),
+              body: JSON.stringify({
+                conversation_id: getConversationId(),
+                user_id: getUserId(),
+                confirmed,
+              }),
             }));
           } catch (e) {
             nb.className = "bubble error";
@@ -1091,7 +1086,7 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    // 读一条 SSE 流,按帧分发到 on.{delta,tool,citations,actions,interrupt};done 存 conversation_id;event: error 抛错
+    // 读一条 SSE 流,按帧分发到 on.{delta,tools,citations,actions,interrupt};done 存 conversation_id;event: error 抛错
     async function readSSEStream(resp, on) {
       if (!resp.ok || !resp.body) throw new Error("bad response");
       const reader = resp.body.getReader();
@@ -1205,7 +1200,8 @@
       try {
         const r = await fetch("/api/conversations?user_id=" + encodeURIComponent(getUserId()));
         if (!r.ok) return;
-        renderConvList((await r.json()).items || []);
+        const payload = await r.json();
+        renderConvList(payload.items || payload || []);
       } catch (e) { /* 侧栏失败不影响聊天 */ }
     }
 
@@ -1249,9 +1245,13 @@
       setConversationId(cid);
       messagesEl.innerHTML = "";
       try {
-        const r = await fetch("/api/conversations/" + cid + "/messages");
+        const r = await fetch(
+          "/api/conversations/" + cid + "/messages?user_id=" +
+          encodeURIComponent(getUserId())
+        );
         if (r.ok) {
-          for (const m of ((await r.json()).items || [])) {
+          const payload = await r.json();
+          for (const m of (payload.items || payload || [])) {
             if (!m.content) continue;
             if (m.role === "user") {
               addRow("user").textContent = m.content;

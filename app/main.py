@@ -4,7 +4,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from app.api.chat import router as chat_router
 from app.api.extract import router as extract_router
-
+from app.api.conversations import router as conversations_router
+from app.api.actions import router as actions_router
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -13,7 +14,8 @@ app = FastAPI(title="Minihelp Handwritten", version="0.1.0")
 app.include_router(chat_router)
 app.include_router(extract_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
+app.include_router(conversations_router)
+app.include_router(actions_router)
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
@@ -21,7 +23,7 @@ async def health() -> dict[str, str]:
     return {
         "status": "ok",
         "service": "minihelp-handwritten",
-        "chapter": "ch01",
+        "chapter": "ch02",
     }
 
 
