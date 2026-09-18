@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from datetime import datetime
 from app.db.database import SessionLocal
-from app.db.models import Conversation, Message, Ticket
+from app.db.models import Conversation, KnowledgeChunk, Message, Ticket
 
 async def create_conversation(user_id: str) -> int:
     """创建会话并返回数据库 ID。"""
@@ -129,3 +129,70 @@ async def get_pending_ticket_call(conversation_id: int) -> dict | None:
                 return tool_call
 
     return None
+
+
+async def insert_knowledge_chunk(
+    category: str,
+    questions: str,
+    answer: str,
+    section_path: str | None = None,
+    content_type: str | None = None,
+    is_key_clause: int = 0,
+) -> int:
+    async with SessionLocal() as session:
+        chunk = KnowledgeChunk(
+            category=category,
+            questions=questions,
+            answer=answer,
+            section_path=section_path,
+            content_type=content_type,
+            is_key_clause=is_key_clause,
+        )
+        session.add(chunk)
+        await session.commit()
+        await session.refresh(chunk)
+        return chunk.id
+
+
+async def list_pending_chunks() -> list[KnowledgeChunk]:
+    async with SessionLocal() as session:
+        statement = (
+            select(KnowledgeChunk)
+            .where(KnowledgeChunk.vectorize_status == "pending")
+            .order_by(KnowledgeChunk.id)
+        )
+        result = await session.scalars(statement)
+        return list(result)
+
+
+async def mark_chunk_vectorized(chunk_id: int, vector_id: str) -> None:
+    async with SessionLocal() as session:
+        chunk = await session.get(KnowledgeChunk, chunk_id)
+        if chunk is None:
+            return
+        chunk.vector_id = vector_id
+        chunk.vectorize_status = "done"
+        await session.commit()
+
+
+async def set_chunk_neighbors(
+    chunk_id: int,
+    prev_id: int | None,
+    next_id: int | None,
+) -> None:
+    async with SessionLocal() as session:
+        chunk = await session.get(KnowledgeChunk, chunk_id)
+        if chunk is None:
+            return
+        chunk.prev_chunk_id = prev_id
+        chunk.next_chunk_id = next_id
+        await session.commit()
+
+
+async def count_chunks_by_content_types(content_types: set[str]) -> int:
+    async with SessionLocal() as session:
+        statement = select(KnowledgeChunk).where(
+            KnowledgeChunk.content_type.in_(content_types)
+        )
+        result = await session.scalars(statement)
+        return len(list(result))

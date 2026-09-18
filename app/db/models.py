@@ -62,3 +62,25 @@ class Ticket(Base):
         DateTime,
         server_default=func.now(),
     )
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category: Mapped[str] = mapped_column(String(255))
+    questions: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    section_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_key_clause: Mapped[int] = mapped_column(default=0)
+    prev_chunk_id: Mapped[int | None] = mapped_column(nullable=True)
+    next_chunk_id: Mapped[int | None] = mapped_column(nullable=True)
+    vector_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    vectorize_status: Mapped[str] = mapped_column(
+        String(20), default="pending", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+    )

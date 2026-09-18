@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     handwritten_database_url: str = (
         "mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_handwritten"
     )
+    embed_model: str
+    embed_base_url: str
+    embed_api_key: str
+    milvus_uri: str = "http://127.0.0.1:19530"
+    milvus_collection: str = "minihelp_handwritten_knowledge"
 
 
 # 模块导入时创建唯一配置对象；缺少必填字段会立即报错。
