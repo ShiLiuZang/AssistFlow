@@ -7,35 +7,7 @@ from app.kb.documents import Chunk
 async def write_pending(
     chunks: list[Chunk],
 ) -> list[int]:
-    ids: list[int] = []
-
-    for chunk in chunks:
-        chunk_id = await repository.insert_knowledge_chunk(
-            chunk.category,
-            chunk.questions,
-            chunk.answer,
-            section_path=chunk.section_path,
-            content_type=chunk.content_type,
-            is_key_clause=chunk.is_key_clause,
-        )
-        ids.append(chunk_id)
-
-    for index, chunk_id in enumerate(ids):
-        prev_id = ids[index - 1] if index > 0 else None
-
-        next_id = (
-            ids[index + 1]
-            if index < len(ids) - 1
-            else None
-        )
-
-        await repository.set_chunk_neighbors(
-            chunk_id,
-            prev_id,
-            next_id,
-        )
-
-    return ids
+    return await repository.ensure_knowledge_chunks(chunks)
 def _batches(items: list, size: int):
     for start in range(0, len(items), size):
         yield items[start:start + size]
@@ -44,6 +16,8 @@ async def vectorize_pending(
     batch_size: int = 64,
     collection: str = milvus_client.COLLECTION,
 ) -> int:
+    if batch_size < 1:
+        raise ValueError("batch_size 必须为正数")
     pending = await repository.list_pending_chunks()
     done = 0
 

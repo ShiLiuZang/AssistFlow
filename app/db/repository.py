@@ -196,3 +196,39 @@ async def count_chunks_by_content_types(content_types: set[str]) -> int:
         )
         result = await session.scalars(statement)
         return len(list(result))
+
+
+async def ensure_knowledge_chunks(chunks: list) -> list[int]:
+    """单进程建库：复用完全相同的原文，补齐缺块和邻接关系。
+
+    一份材料在一个事务中完成；旧版逐条提交留下的部分数据也能复用。
+    这是固定材料的重跑入口，不负责删除或替换已修改的旧版材料。
+    """
+    async with SessionLocal() as session:
+        rows = []
+        used = set()
+        for chunk in chunks:
+            statement = select(KnowledgeChunk).where(
+                KnowledgeChunk.category == chunk.category,
+                KnowledgeChunk.questions == chunk.questions,
+                KnowledgeChunk.answer == chunk.answer,
+                KnowledgeChunk.section_path == chunk.section_path,
+                KnowledgeChunk.content_type == chunk.content_type,
+            ).order_by(KnowledgeChunk.id)
+            matches = list(await session.scalars(statement))
+            row = next((item for item in matches if item.id not in used), None)
+            if row is None:
+                row = KnowledgeChunk(
+                    category=chunk.category, questions=chunk.questions,
+                    answer=chunk.answer, section_path=chunk.section_path,
+                    content_type=chunk.content_type, is_key_clause=chunk.is_key_clause,
+                )
+                session.add(row)
+                await session.flush()
+            used.add(row.id)
+            rows.append(row)
+        for index, row in enumerate(rows):
+            row.prev_chunk_id = rows[index - 1].id if index else None
+            row.next_chunk_id = rows[index + 1].id if index + 1 < len(rows) else None
+        await session.commit()
+        return [row.id for row in rows]

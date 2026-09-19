@@ -2,19 +2,11 @@
 
 import asyncio
 
-from app.db import repository
 from app.kb import documents, dualwrite
 from app.kb.sources import KB_DIR, SOURCE_TYPES
 
 
 async def main() -> None:
-    existing = await repository.count_chunks_by_content_types(
-        set(SOURCE_TYPES.values())
-    )
-    if existing:
-        print(f"已存在 {existing} 条知识块，为避免重复，本次跳过。")
-        return
-
     total = 0
     for filename, content_type in SOURCE_TYPES.items():
         markdown = (KB_DIR / filename).read_text(encoding="utf-8")
@@ -23,7 +15,7 @@ async def main() -> None:
         total += len(ids)
         print(f"{filename}: {len(ids)} chunks")
 
-    print(f"建库完成：{total} 条 pending 知识块")
+    print(f"建库完成：核对 {total} 条知识块，已有数据复用，缺失数据补为 pending")
 
 
 if __name__ == "__main__":
