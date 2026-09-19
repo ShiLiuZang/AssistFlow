@@ -30,10 +30,14 @@ async def embed_texts(
             model=settings.embed_model,
             input=batch,
         )
-
+        items=sorted(response.data,key=lambda item:item.index)
+        indices=[item.index for item in items]
+        excepted_indices=list(range(len(batch)))
+        if indices!=excepted_indices:
+            raise ValueError("嵌入结果失败,重复或者越界")
         vectors.extend(
             item.embedding
-            for item in response.data
+            for item in items
         )
 
     return vectors
