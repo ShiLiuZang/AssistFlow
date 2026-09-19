@@ -53,6 +53,11 @@ async def vectorize_pending(
                 "section_path": row.section_path or "",
                 "content_type": row.content_type or "",
                 "category": row.category or "",
+                "text": (
+                    f"{row.category}\n"
+                    f"{row.questions}\n"
+                    f"{row.answer}"
+                ),
             }
             for row, vector in zip(batch, vectors)
         ]

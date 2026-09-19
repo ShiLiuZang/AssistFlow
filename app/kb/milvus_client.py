@@ -1,8 +1,14 @@
 import asyncio
 import functools
+
 from concurrent.futures import ThreadPoolExecutor
 
-from pymilvus import DataType, MilvusClient
+from pymilvus import (
+    DataType,
+    Function,
+    FunctionType,
+    MilvusClient,
+)
 
 from app.config import settings
 
@@ -76,6 +82,16 @@ def ensure_collection(
         return
 
     if client.has_collection(collection):
+        description=client.describe_collection(collection)
+        fileds={
+             filed["name"]:filed
+             for filed in description.get("fields", [])
+         }
+        if not {"dense","sparse","text"}.issubset(fileds):
+           raise ValueError("现有集合缺少 Ch04 字段，请使用新集合并重新向量化")
+        dense_dim=int (fileds["dense"].get("params",{}).get("dim",0))
+        if dense_dim!=DIM:
+           raise ValueError("当前维度不匹配")
         client.load_collection(collection)
 
     else:
@@ -124,7 +140,27 @@ def ensure_collection(
             DataType.VARCHAR,
             max_length=255,
         )
+        schema.add_field(
+            "text",
+            DataType.VARCHAR,
+            max_length=16384,
+            enable_analyzer=True,
+            analyzer_params={"type":"chinese"}
 
+        )
+        schema.add_field(
+            "sparse",
+            DataType.SPARSE_FLOAT_VECTOR,
+        )
+
+        schema.add_function(
+            Function(
+                name="text_bm25",
+                input_field_names=["text"],
+                output_field_names=["sparse"],
+                function_type=FunctionType.BM25,
+            )
+        )
         index_params = client.prepare_index_params()
 
         index_params.add_index(
@@ -132,12 +168,17 @@ def ensure_collection(
             index_type="AUTOINDEX",
             metric_type="COSINE",
         )
-
+        index_params.add_index(
+            field_name="sparse",
+            index_type="SPARSE_INVERTED_INDEX",
+            metric_type="BM25",
+        )
         client.create_collection(
             collection_name=collection,
             schema=schema,
             index_params=index_params,
         )
+
 
         client.load_collection(collection)
 
