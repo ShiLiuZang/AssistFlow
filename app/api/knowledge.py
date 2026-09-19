@@ -1,4 +1,6 @@
 from typing import Literal
+import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -9,6 +11,15 @@ from app.core.evidence import answer_from_hits
 
 
 router = APIRouter(tags=["knowledge"])
+REPORT_PATH = Path(__file__).resolve().parents[2] / "reports" / "04.json"
+
+
+@router.get("/rag-eval")
+async def report():
+    """没有真实评测报告时明确返回尚未评估。"""
+    if not REPORT_PATH.exists():
+        return {"status": "not_evaluated", "message": "尚未评估"}
+    return json.loads(REPORT_PATH.read_text(encoding="utf-8"))
 
 
 
