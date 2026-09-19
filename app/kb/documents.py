@@ -1,6 +1,5 @@
 """Ch03：把 Markdown 文档转换成结构化知识块。"""
 
-# 后续教学逐步实现 Chunk 和 build_chunks。
 from dataclasses import dataclass
 from app.kb import chunking
 
@@ -58,21 +57,7 @@ def build_chunks(
 
         if not body:
             continue
-        if chunking.is_table_block(body):
-            pieces = chunking.split_table_rows(
-                body,
-                table_max_rows,
-            )
-        else:
-            base_chunks = chunking.recursive_split(
-                body,
-                chunk_size,
-                chunk_overlap=0,
-            )
-            pieces = chunking.apply_sentence_overlap(
-                base_chunks,
-                overlap,
-            )
+        pieces = chunking.split_body(body, chunk_size, overlap, table_max_rows)
         for piece in pieces:
             result.append(
                 Chunk(

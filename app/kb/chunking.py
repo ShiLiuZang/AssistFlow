@@ -1,6 +1,5 @@
 """Ch03：Markdown 标题解析、正文切分、重叠和表格切分。"""
 import re
-# 后续教学逐步实现，本次只初始化模块。
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
@@ -50,6 +49,7 @@ def recursive_split(
         separators=CJK_SEPARATORS,
         is_separator_regex=False,
         length_function=len,
+        keep_separator="end",
     )
 
     result = splitter.split_text(text)
@@ -63,6 +63,8 @@ def _split_sentences(text: str) -> list[str]:
     return [sentence for sentence in sentences if sentence]
 
 def _trailing_sentences(text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
     sentences = _split_sentences(text)
     selected = []
     total = 0
@@ -73,8 +75,6 @@ def _trailing_sentences(text: str, max_chars: int) -> str:
 
         selected.insert(0, sentence)
         total += len(sentence)
-        # 判断加入后是否超过 max_chars
-        # 没超过就插入 selected 开头，并累计长度
 
     return "".join(selected)
 
@@ -154,3 +154,30 @@ def split_table_rows(
         result.append("\n".join(block))
 
     return result
+
+
+def split_body(text: str, chunk_size: int, overlap: int, table_max_rows: int) -> list[str]:
+    """混合正文先分出表格，避免把表后说明当数据行。"""
+    if chunk_size < 1 or overlap < 0 or table_max_rows < 1:
+        raise ValueError("分块大小/表格行数必须为正，重叠不能为负")
+    lines = text.splitlines()
+    pieces, prose = [], []
+    def flush_prose():
+        if prose:
+            parts = recursive_split("\n".join(prose), chunk_size)
+            pieces.extend(apply_sentence_overlap(parts, overlap))
+            prose.clear()
+    index = 0
+    while index < len(lines):
+        if index + 1 < len(lines) and _find_table_header(lines[index:index + 2]) == 0:
+            flush_prose()
+            end = index + 2
+            while end < len(lines) and lines[end].lstrip().startswith("|"):
+                end += 1
+            pieces.extend(split_table_rows("\n".join(lines[index:end]), table_max_rows))
+            index = end
+        else:
+            prose.append(lines[index])
+            index += 1
+    flush_prose()
+    return pieces
