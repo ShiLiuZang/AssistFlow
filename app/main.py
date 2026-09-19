@@ -6,7 +6,7 @@ from app.api.chat import router as chat_router
 from app.api.extract import router as extract_router
 from app.api.conversations import router as conversations_router
 from app.api.actions import router as actions_router
-
+from app.api.knowledge import router as knowledge_router
 STATIC_DIR = Path(__file__).parent / "static"
 
 # 主应用负责把各业务路由和静态前端组装成一个可启动的 Web 服务。
@@ -16,7 +16,7 @@ app.include_router(extract_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(conversations_router)
 app.include_router(actions_router)
-
+app.include_router(knowledge_router)
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     """返回进程存活状态；不检查模型、数据库或其他外部服务。"""
