@@ -15,11 +15,12 @@ from app.core.llm import get_chat_model
 from app.core.prompts import CHAT_SYSTEM_PROMPT
 from app.schemas.chat import ChatRequest
 from app.tools.ticket_tools import create_ticket
+from app.tools.knowledge_tools import search_knowledge
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
 
 MAX_TOOL_ROUNDS = 3
-TOOL_BY_NAME=[query_order, create_ticket]
+TOOL_BY_NAME=[query_order, create_ticket, search_knowledge]
 def make_sse(data: dict) -> str:
     """把字典编码成一个以空行结尾的 SSE 数据帧。"""
     payload = json.dumps(data, ensure_ascii=False)
@@ -108,6 +109,10 @@ async def stream_chat(
                             "user_id": request.user_id,
                         }
                         tool_result = await query_order.ainvoke(tool_args)
+
+                    elif tool_call["name"] == search_knowledge.name:
+                        yield make_sse({"event": "tool", "name": search_knowledge.name})
+                        tool_result = await search_knowledge.ainvoke(tool_call["args"])
 
                     elif tool_call["name"] == create_ticket.name:
                         if pending_interrupt is None:
