@@ -33,16 +33,17 @@ async def stream_ticket_decision(
             result = {"confirmed": False, "message": "用户取消建单"}
             answer = "已取消，本次没有创建工单。"
 
-        await repository.append_message(
-            request.conversation_id,
-            "user",
-            "确认提交工单" if request.confirmed else "取消建单",
-        )
+        # 先闭合 assistant 的工具调用，再记录用户确认，避免破坏模型消息协议。
         await repository.append_message(
             request.conversation_id,
             "tool",
             json.dumps(result, ensure_ascii=False),
             tool_call_id=str(tool_call["id"]),
+        )
+        await repository.append_message(
+            request.conversation_id,
+            "user",
+            "确认提交工单" if request.confirmed else "取消建单",
         )
         await repository.append_message(
             request.conversation_id,
