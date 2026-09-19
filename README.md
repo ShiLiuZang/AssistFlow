@@ -3,7 +3,8 @@
 Ch01：FastAPI、请求校验、SSE 增量输出、结构化提取。
 Ch02：订单工具、会话历史、工单预览确认、工具消息配对。
 Ch03：Markdown 分块、原文建库恢复、Embedding、Milvus Dense 检索与聊天接入。
-Ch04：独立实现和教案见 [教学代码包](teaching-package/README.md)，不写回原项目。
+Ch04：在原项目手写检索、引用和评测；验收见 [记录](docs/CH04_ACCEPTANCE.md)。
+Ch05：Workflow + Agent 混合架构已初始化，见 [学习进度](docs/CH05_PROGRESS.md)。完整参考代码独立保存，不自动覆盖原项目。
 
 约束见 [教学约束](docs/TEACHING_RULES.md)，实际修复和验证边界见 [修复记录](docs/REPAIR_STATUS.md)。
 
