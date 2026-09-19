@@ -58,26 +58,26 @@ async def stream_chat(
     不把半截回答写入会话历史。
     """
 
-    model = get_chat_model(streaming=True).bind_tools(TOOL_BY_NAME)
-    records = await repository.list_messages(conversation_id)
-    history = restore_messages(records)
-
-    messages = [
-        SystemMessage(content=CHAT_SYSTEM_PROMPT),
-        *history,
-        HumanMessage(content=request.message),
-    ]
-    await repository.append_message(
-        conversation_id,
-        "user",
-        request.message,
-    )
-
-    working_messages = list(messages)
-
-    answer = "工具调用次数过多，请稍后重试"
-
     try:
+        model = get_chat_model(streaming=True).bind_tools(TOOL_BY_NAME)
+        records = await repository.list_messages(conversation_id)
+        history = restore_messages(records)
+
+        messages = [
+            SystemMessage(content=CHAT_SYSTEM_PROMPT),
+            *history,
+            HumanMessage(content=request.message),
+        ]
+        await repository.append_message(
+            conversation_id,
+            "user",
+            request.message,
+        )
+
+        working_messages = list(messages)
+
+        answer = "工具调用次数过多，请稍后重试"
+
         for _ in range(MAX_TOOL_ROUNDS):
             ai_message = None
             async for chunk in model.astream(working_messages):
