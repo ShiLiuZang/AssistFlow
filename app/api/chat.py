@@ -89,36 +89,55 @@ async def stream_chat(
             if not ai_message.tool_calls:
                 answer = str(ai_message.content)
                 break
-
+            pending_interrupt = None
             for tool_call in ai_message.tool_calls:
-                if tool_call["name"] == query_order.name:
-                    yield make_sse({"event": "tool", "name": query_order.name})
-                    tool_args = {
-                        **tool_call["args"],
-                        "user_id": request.user_id,
-                    }
-
-                    tool_result = await query_order.ainvoke(tool_args)
-                elif tool_call["name"] == create_ticket.name:
-                    preview = await create_ticket.ainvoke(
-                        tool_call["args"]
-                    )
-                    yield make_sse(
-                        {
-                            "event": "interrupt",
-                            "kind": "confirm_ticket",
-                            "conversation_id": conversation_id,
-                            "preview": {
-                                "ticket_type": preview["ticket_type"],
-                                "description": preview["description"],
-                            },
+                try:
+                    if tool_call["name"] == query_order.name:
+                        yield make_sse({
+                            "event": "tool",
+                            "name": query_order.name,
+                        })
+                        tool_args = {
+                            **tool_call["args"],
+                            "user_id": request.user_id,
                         }
+                        tool_result = await query_order.ainvoke(tool_args)
+
+                    elif tool_call["name"] == create_ticket.name:
+                        if pending_interrupt is None:
+                            preview = await create_ticket.ainvoke(
+                                tool_call["args"]
+                            )
+                            pending_interrupt = {
+                                "event": "interrupt",
+                                "kind": "confirm_ticket",
+                                "conversation_id": conversation_id,
+                                "preview": {
+                                    "ticket_type": preview["ticket_type"],
+                                    "description": preview["description"],
+                                },
+                            }
+                            # 这一条等用户确认后，由 resume 补上工具结果。
+                            continue
+
+                        # 当前界面一次只确认一张工单。
+                        tool_result = {
+                            "error": "本轮只处理一张工单，此请求未执行",
+                        }
+
+                    else:
+                        tool_result = {
+                            "error": "未知工具",
+                        }
+
+                except Exception:
+                    logger.exception(
+                        "工具执行失败 name=%s tool_call_id=%s",
+                        tool_call["name"],
+                        tool_call["id"],
                     )
-                    return
-                else:
                     tool_result = {
-                        "found": False,
-                        "error": "未知工具",
+                        "error": "工具执行失败，请稍后重试",
                     }
 
                 tool_message = ToolMessage(
@@ -134,7 +153,9 @@ async def stream_chat(
                     str(tool_message.content),
                     tool_call_id=tool_call["id"],
                 )
-
+            if pending_interrupt is not None:
+                yield make_sse(pending_interrupt)
+                return
         yield make_sse({"delta": answer})
 
 
