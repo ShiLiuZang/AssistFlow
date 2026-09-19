@@ -8,6 +8,8 @@ from pymilvus import (
     Function,
     FunctionType,
     MilvusClient,
+    AnnSearchRequest,
+    RRFRanker,
 )
 
 from app.config import settings
@@ -248,8 +250,64 @@ def dense_search(
         _convert_hit(hit)
         for hit in result[0]
     ]
+def bm25_search(
+        client: MilvusClient,
+        text:str,
+        top_k: int,
+        collection: str = COLLECTION,
+)->list[dict]:
+    """使用 BM25 查询匹配知识原文中的词项。"""
+    result = client.search(
+        collection_name=collection,
+        data=[text],
+        anns_field="sparse",
+        limit=top_k,
+        output_fields=_OUTPUT_FIELDS,
+        search_params={
+            "metric_type": "BM25",
+        }
+    )
+    return [
+        _convert_hit(hit)
+        for hit in result[0]
+    ]
+def hybrid_search(
+        client: MilvusClient,
+        vector: list[float],
+        text: str,
+        top_k: int,
+        collection: str = COLLECTION,
+        recall:int =50,
 
-
+)->list[dict]:
+    """两路召回后使用 RRF 融合排名。"""
+    dense_request=AnnSearchRequest(
+        data=[vector],
+        anns_field="dense",
+        limit=recall,
+        param={
+            "metric_type": "COSINE",
+        }
+    )
+    sparse_request=AnnSearchRequest(
+        data=[text],
+        anns_field="sparse",
+        limit=recall,
+        param={
+            "metric_type": "BM25",
+        }
+    )
+    result=client.hybrid_search(
+        collection_name=collection,
+        reqs=[dense_request, sparse_request],
+        ranker=RRFRanker(k=60),
+        limit=top_k,
+        output_fields=_OUTPUT_FIELDS,
+    )
+    return [
+        _convert_hit(hit)
+        for hit in result[0]
+    ]
 def count(
     client: MilvusClient,
     collection: str = COLLECTION,
