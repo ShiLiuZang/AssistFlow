@@ -57,7 +57,7 @@ async def stream_chat(
     不把半截回答写入会话历史。
     """
 
-    model = get_chat_model(streaming=False).bind_tools(TOOL_BY_NAME)
+    model = get_chat_model(streaming=True).bind_tools(TOOL_BY_NAME)
     records = await repository.list_messages(conversation_id)
     history = restore_messages(records)
 
@@ -78,7 +78,13 @@ async def stream_chat(
 
     try:
         for _ in range(MAX_TOOL_ROUNDS):
-            ai_message = await model.ainvoke(working_messages)
+            ai_message = None
+            async for chunk in model.astream(working_messages):
+                ai_message = chunk if ai_message is None else ai_message + chunk
+                if isinstance(chunk.content, str) and chunk.content:
+                    yield make_sse({"delta": chunk.content})
+            if ai_message is None:
+                raise ValueError("模型返回空流")
             working_messages.append(ai_message)
             await repository.append_message(
                 conversation_id,
@@ -156,7 +162,9 @@ async def stream_chat(
             if pending_interrupt is not None:
                 yield make_sse(pending_interrupt)
                 return
-        yield make_sse({"delta": answer})
+        else:
+            await repository.append_message(conversation_id, "assistant", answer)
+            yield make_sse({"delta": answer})
 
 
 
@@ -203,6 +211,9 @@ async def chat(request: ChatRequest) -> StreamingResponse:
             )
 
         conversation_id = conversation.id
+
+        if await repository.get_pending_ticket_call(conversation_id) is not None:
+            raise HTTPException(status_code=409, detail="请先确认或取消待处理工单")
 
     return StreamingResponse(
         stream_chat(request, conversation_id),
