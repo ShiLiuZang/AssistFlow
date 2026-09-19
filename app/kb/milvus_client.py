@@ -1,3 +1,4 @@
+import json
 import asyncio
 import functools
 
@@ -227,12 +228,19 @@ def _convert_hit(hit: dict) -> dict:
         "category": entity["category"],
     }
 
-
+def category_filter(category:str|None) -> str:
+    if category is None:
+        return ""
+    return "category == " + json.dumps(
+        category,
+        ensure_ascii=False,
+    )
 def dense_search(
     client: MilvusClient,
     vector: list[float],
     top_k: int,
     collection: str = COLLECTION,
+    category: str | None = None,
 ) -> list[dict]:
     """使用 Dense 向量执行语义相似度检索。"""
     result = client.search(
@@ -244,6 +252,7 @@ def dense_search(
         search_params={
             "metric_type": "COSINE",
         },
+        filter=category_filter(category),
     )
 
     return [
@@ -255,6 +264,7 @@ def bm25_search(
         text:str,
         top_k: int,
         collection: str = COLLECTION,
+        category: str | None = None,
 )->list[dict]:
     """使用 BM25 查询匹配知识原文中的词项。"""
     result = client.search(
@@ -265,7 +275,8 @@ def bm25_search(
         output_fields=_OUTPUT_FIELDS,
         search_params={
             "metric_type": "BM25",
-        }
+        },
+        filter = category_filter(category),
     )
     return [
         _convert_hit(hit)
@@ -278,16 +289,19 @@ def hybrid_search(
         top_k: int,
         collection: str = COLLECTION,
         recall:int =50,
+        category: str | None = None,
 
 )->list[dict]:
     """两路召回后使用 RRF 融合排名。"""
+    expr = category_filter(category)
     dense_request=AnnSearchRequest(
         data=[vector],
         anns_field="dense",
         limit=recall,
         param={
             "metric_type": "COSINE",
-        }
+        },
+        expr=expr,
     )
     sparse_request=AnnSearchRequest(
         data=[text],
@@ -295,7 +309,8 @@ def hybrid_search(
         limit=recall,
         param={
             "metric_type": "BM25",
-        }
+        },
+        expr=expr,
     )
     result=client.hybrid_search(
         collection_name=collection,
@@ -303,6 +318,7 @@ def hybrid_search(
         ranker=RRFRanker(k=60),
         limit=top_k,
         output_fields=_OUTPUT_FIELDS,
+
     )
     return [
         _convert_hit(hit)
