@@ -74,6 +74,14 @@ def answer_is_grounded(
         return False
 
     cited = cited_numbers(answer)
+    quoted = {
+        quote["n"]
+        for quote in quotes
+    }
+
+    if not cited.issubset(quoted):
+        return False
+
     by_number = {
         item["n"]: item
         for item in citations
