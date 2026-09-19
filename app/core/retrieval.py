@@ -1,9 +1,16 @@
 """Ch04：统一知识检索入口。"""
 from app.config import settings
-from app.core import embeddings
+    
 from app.kb import milvus_client
+from app.core import embeddings, rerank
 
-STRATEGIES={"vector","bm25","hybrid"}
+STRATEGIES = {
+    "vector",
+    "bm25",
+    "hybrid",
+    "hybrid_rerank",
+}
+
 
 async def search_knowledge(
     query:str,
@@ -28,6 +35,13 @@ async def search_knowledge(
             raise ValueError("查询向量维度不匹配")
 
     def search():
+        recall = max(top_k, settings.recall_top_k)
+
+        candidate_k = (
+            recall
+            if strategy == "hybrid_rerank"
+            else top_k
+        )
         milvus=client if client is not None else milvus_client.get_client()
         milvus_client.ensure_collection(
             milvus,
@@ -53,10 +67,25 @@ async def search_knowledge(
             milvus,
             vector,
             query,
-            top_k,
+            candidate_k,
             collection=collection,
             category=category,
-            recall=max(top_k,settings.recall_top_k),
+            recall=recall,
         )
 
-    return await milvus_client.acall(search)
+    hits = await milvus_client.acall(search)
+
+    if strategy == "hybrid_rerank":
+        ranked = await rerank.rerank_hits(
+            query,
+            hits,
+            top_k,
+        )
+
+        return [
+            hit
+            for hit in ranked
+            if hit["rerank_score"] >= settings.rerank_min_score
+        ]
+
+    return hits
