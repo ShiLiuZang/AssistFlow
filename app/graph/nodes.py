@@ -1,5 +1,4 @@
 import json
-from logging import exception
 
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
@@ -103,11 +102,47 @@ def make_nodes(services):
             "tools",
             messages=messages,
         )
+    async def classify(state: ConversationState):
+        intent=await services.classify(state["query"])
+        return update(
+            state,
+            "classify",
+            intent=intent,
+        )
+    async def chat(state: ConversationState):
+        return update(
+            state,
+            "chat",
+            answer="你好，可以咨询商品知识、订单或售后问题。"
+        )
+    async def complaint(state: ConversationState):
+        return update(
+            state,
+            "complaint",
+            answer="已了解你的投诉，请通过订单售后入口联系人工客服处理。",
+        )
+
+    async def finish(state: ConversationState):
+        if state.get("intent") == "business":
+            messages = []
+        else:
+            messages = [
+                AIMessage(content=state["answer"])
+            ]
+
+        return update(
+            state,
+            "finish",
+            messages=messages,
+        )
     return {
         "retrieve": retrieve,
         "answer": answer,
         "fallback": fallback,
         "agent": agent,
         "tools": tools,
-
+        "complaint": complaint,
+        "chat": chat,
+        "classify": classify,
+        "finish": finish,
     }
