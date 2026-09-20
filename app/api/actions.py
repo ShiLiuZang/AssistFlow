@@ -2,7 +2,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.chat import make_sse
@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/actions", tags=["actions"])
 async def stream_ticket_decision(
     request: ResumeTicketRequest,
     tool_call: dict,
+    runtime=None,
 ) -> AsyncIterator[str]:
     try:
         args = dict(tool_call.get("args") or {})
@@ -51,6 +52,27 @@ async def stream_ticket_decision(
             answer,
         )
 
+        if runtime is not None:
+            try:
+                await runtime.run_turn(
+                    "",
+                    request.user_id,
+                    str(request.conversation_id),
+                    resume={
+                        "confirmed": request.confirmed,
+                        "tool_result": result,
+                    },
+                )
+            except ValueError as exc:
+                if str(exc) != "没有待恢复的操作":
+                    raise
+            except Exception:
+                logger.exception(
+                    "图状态恢复失败 conversation_id=%s",
+                    request.conversation_id,
+                )
+
+
         yield make_sse({"delta": answer})
         yield make_sse(
             {
@@ -66,7 +88,10 @@ async def stream_ticket_decision(
 
 
 @router.post("/resume")
-async def resume_ticket(request: ResumeTicketRequest) -> StreamingResponse:
+async def resume_ticket(
+    request: ResumeTicketRequest,
+    http_request: Request,
+) -> StreamingResponse:
     conversation = await repository.get_conversation(
         request.conversation_id,
         request.user_id,
@@ -79,6 +104,10 @@ async def resume_ticket(request: ResumeTicketRequest) -> StreamingResponse:
         raise HTTPException(status_code=409, detail="没有待确认的工单")
 
     return StreamingResponse(
-        stream_ticket_decision(request, tool_call),
+        stream_ticket_decision(
+            request,
+            tool_call,
+            getattr(http_request.app.state, "graph_runtime", None),
+        ),
         media_type="text/event-stream",
     )

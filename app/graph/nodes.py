@@ -92,6 +92,12 @@ def make_nodes(services):
             try:
                 if call["name"] not in services.tools:
                     result = {"error": "未知工具"}
+                elif (
+                    call["name"] == "create_ticket"
+                    and isinstance(approved, dict)
+                    and "tool_result" in approved
+                ):
+                    result = approved["tool_result"]
                 elif call["name"] == "create_ticket" and approved is not True:
                     result = {"cancelled": True}
                 else:
