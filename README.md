@@ -6,6 +6,8 @@ Ch03：Markdown 分块、原文建库恢复、Embedding、Milvus Dense 检索与
 Ch04：在原项目手写检索、引用和评测；验收见 [记录](docs/CH04_ACCEPTANCE.md)。
 Ch05：Workflow + Agent 混合架构及网页接入已完成，真实模型、MySQL、Milvus 验收见 [验收记录](docs/CH05_LIVE_ACCEPTANCE.md)，流程说明见 [学习进度](docs/CH05_PROGRESS.md)。完整参考代码独立保存。
 
+Ch05 链路和架构见 [架构文档](docs/CH05_ARCHITECTURE.md)，包含普通请求、图节点、工单确认、检查点、消息同步和 SSE 事件。
+
 Ch06：独立教学包已生成并审查，原项目尚未接入，见 [课时安排](teaching-package/ch06/docs/LESSONS.md) 和 [学习进度](docs/CH06_PROGRESS.md)。
 
 约束见 [教学约束](docs/TEACHING_RULES.md)，实际修复和验证边界见 [修复记录](docs/REPAIR_STATUS.md)。
