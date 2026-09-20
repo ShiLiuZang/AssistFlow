@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     handwritten_database_url: str = (
         "mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_handwritten"
     )
+    graph_checkpoint_path: str = "data/graph-checkpoints.sqlite"
     embed_model: str
     embed_base_url: str
     embed_api_key: str
