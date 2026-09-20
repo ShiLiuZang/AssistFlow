@@ -25,6 +25,23 @@ def make_sse(data: dict) -> str:
     """把字典编码成一个以空行结尾的 SSE 数据帧。"""
     payload = json.dumps(data, ensure_ascii=False)
     return f"data: {payload}\n\n"
+
+
+def graph_event_to_sse(
+    event: dict,
+    conversation_id: int,
+) -> str:
+    """把图运行时事件转换为现有聊天 SSE 协议。"""
+    if event.get("event") == "end":
+        return "data: [DONE]\n\n"
+
+    payload = dict(event)
+    if payload.get("event") == "done":
+        payload["conversation_id"] = conversation_id
+
+    return make_sse(payload)
+
+
 def restore_messages(records: list) -> list:
     """把数据库消息恢复为 LangChain 消息。"""
     messages = []
