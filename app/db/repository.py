@@ -1,3 +1,6 @@
+import json
+from uuid import uuid4
+from app.core.conversation_lock import conversation_lock
 from sqlalchemy import select
 from datetime import datetime
 from app.db.database import SessionLocal
@@ -121,7 +124,7 @@ async def get_pending_ticket_call(conversation_id: int) -> dict | None:
     }
 
     for record in reversed(records):
-        for tool_call in reversed(record.tool_calls or []):
+        for tool_call in record.tool_calls or []:
             if (
                 tool_call.get("name") == "create_ticket"
                 and tool_call.get("id") not in resolved_ids
@@ -232,3 +235,120 @@ async def ensure_knowledge_chunks(chunks: list) -> list[int]:
             row.next_chunk_id = rows[index + 1].id if index + 1 < len(rows) else None
         await session.commit()
         return [row.id for row in rows]
+
+
+async def get_ticket_decision(conversation_id: int, call_id: str) -> dict | None:
+    records = await list_messages(conversation_id)
+    for record in reversed(records):
+        if record.role in {"ticket_decision", "tool"} and record.tool_call_id == call_id:
+            result = json.loads(record.content or "{}")
+            if "confirmed" in result:
+                return result
+    return None
+
+
+async def decide_ticket(conversation_id: int, user_id: str, call_id: str,
+                        confirmed: bool, *, graph: bool = False) -> dict:
+    """建单与决定同事务提交。相同调用的重试返回首次决定，不再次建单。"""
+    async with conversation_lock(user_id, conversation_id):
+        async with SessionLocal() as session, session.begin():
+            owner = await session.scalar(select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user_id,
+            ).with_for_update())
+            if owner is None:
+                raise ValueError("会话不存在")
+            records = list(await session.scalars(select(Message).where(
+                Message.conversation_id == conversation_id,
+            ).order_by(Message.id)))
+            for record in reversed(records):
+                if record.role in {"ticket_decision", "tool"} and record.tool_call_id == call_id:
+                    result = json.loads(record.content or "{}")
+                    if "confirmed" in result:
+                        if result["confirmed"] is not confirmed:
+                            raise ValueError("该调用已经作出不同决定")
+                        return result
+                    raise ValueError("该调用已经处理，不能再次建单")
+            call = next((call for record in reversed(records)
+                         for call in record.tool_calls or []
+                         if call.get("id") == call_id and call.get("name") == "create_ticket"), None)
+            if call is None:
+                raise ValueError("没有待确认的工单")
+            if confirmed:
+                args = call.get("args") or {}
+                ticket = Ticket(conversation_id=conversation_id,
+                                ticket_no="PENDING-" + uuid4().hex,
+                                ticket_type=str(args.get("ticket_type") or "咨询"),
+                                description=str(args.get("description") or ""))
+                session.add(ticket)
+                await session.flush()
+                ticket.ticket_no = f"T{datetime.now():%Y%m%d}{ticket.id:04d}"
+                result = {"confirmed": True, "ticket_no": ticket.ticket_no}
+            else:
+                result = {"confirmed": False, "message": "用户取消建单"}
+            # 图的决定单独记录；ToolMessage 随图历史按顺序同步，避免多调用协议被打断。
+            session.add(Message(conversation_id=conversation_id,
+                                role="ticket_decision" if graph else "tool",
+                                content=json.dumps(result, ensure_ascii=False), tool_call_id=call_id))
+            if not graph:
+                session.add(Message(conversation_id=conversation_id, role="user",
+                                    content="确认提交工单" if confirmed else "取消建单"))
+                session.add(Message(conversation_id=conversation_id, role="assistant",
+                                    content=ticket_answer(result)))
+            return result
+
+
+def ticket_answer(result: dict) -> str:
+    return (f"工单已创建，工单号：{result['ticket_no']}" if result["confirmed"]
+            else "已取消，本次没有创建工单。")
+
+
+async def persist_graph_messages(conversation_id: int, user_id: str, messages: list) -> None:
+    """全量图历史按游标增量保存；消息和游标同事务提交，可在失败后重试。
+
+    graph_sync/ticket_decision 为内部记录，既有展示和模型历史恢复会忽略它们。
+    """
+    async with conversation_lock(user_id, conversation_id):
+        async with SessionLocal() as session, session.begin():
+            owner = await session.scalar(select(Conversation).where(
+                Conversation.id == conversation_id, Conversation.user_id == user_id,
+            ).with_for_update())
+            if owner is None:
+                raise ValueError("会话不存在")
+            marker = await session.scalar(select(Message).where(
+                Message.conversation_id == conversation_id, Message.role == "graph_sync",
+            ).order_by(Message.id.desc()))
+            start = int(marker.content) if marker else 0
+            if marker is None:
+                # 兼容此前已经落库、但尚未记录同步游标的图历史。
+                existing = list(await session.scalars(select(Message).where(
+                    Message.conversation_id == conversation_id,
+                ).order_by(Message.id)))
+                position = 0
+                for message in messages:
+                    role = {"human": "user", "ai": "assistant", "tool": "tool"}.get(message.type)
+                    found = next((i for i in range(position, len(existing))
+                                  if existing[i].role == role
+                                  and existing[i].content == str(message.content)
+                                  and (existing[i].tool_calls or []) == (getattr(message, "tool_calls", []) or [])
+                                  and existing[i].tool_call_id == getattr(message, "tool_call_id", None)), None)
+                    if found is None:
+                        break
+                    position = found + 1
+                    start += 1
+            if start > len(messages):
+                raise ValueError("图历史与已保存游标不一致")
+            for message in messages[start:]:
+                role = {"human": "user", "ai": "assistant", "tool": "tool"}.get(message.type)
+                if role is None:
+                    raise ValueError("不支持的图消息类型")
+                session.add(Message(
+                    conversation_id=conversation_id, role=role, content=str(message.content),
+                    tool_calls=getattr(message, "tool_calls", None) or None,
+                    tool_call_id=getattr(message, "tool_call_id", None),
+                ))
+            if marker:
+                marker.content = str(len(messages))
+            else:
+                session.add(Message(conversation_id=conversation_id, role="graph_sync",
+                                    content=str(len(messages))))

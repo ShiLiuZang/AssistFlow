@@ -35,9 +35,17 @@ def graph_event_to_sse(
     if event.get("event") == "end":
         return "data: [DONE]\n\n"
 
+    if event.get("event") == "error":
+        return 'event: error\ndata: {"message":"图执行失败，请重试"}\n\n'
+
     payload = dict(event)
-    if payload.get("event") == "done":
+    if payload.get("event") == "citations":
+        payload["items"] = payload.pop("citations", [])
+    if payload.get("event") in {"done", "interrupt"}:
         payload["conversation_id"] = conversation_id
+
+    if payload.get("event") == "interrupt":
+        payload.update(payload.pop("preview"))
 
     return make_sse(payload)
 
@@ -139,6 +147,7 @@ async def stream_chat(
                             pending_interrupt = {
                                 "event": "interrupt",
                                 "kind": "confirm_ticket",
+                                "tool_call_id": tool_call["id"],
                                 "conversation_id": conversation_id,
                                 "preview": {
                                     "ticket_type": preview["ticket_type"],

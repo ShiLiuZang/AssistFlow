@@ -9,6 +9,9 @@ REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工
 
 
 def make_nodes(services):
+    if services.max_steps < 1:
+        raise ValueError("max_steps 必须为正数")
+
     def update(state: ConversationState,name:str,**values):
         return {
             "trace":[*state.get("trace",[]),name],
@@ -75,26 +78,24 @@ def make_nodes(services):
     async def tools(state: ConversationState):
         calls = state["messages"][-1].tool_calls
         messages = []
-        tickets=[
-            call for call in calls
-            if call["name"] == "create_ticket"
-        ]
-        approved=(
-            interrupt({
-                "kind": "confirm_ticket",
-                "previews": [call["args"] for call in tickets]
-            }
-        )
-            if tickets
-            else False
-        )
+        approvals = {}
+        # 先收集每个调用的确认，再执行工具；恢复会从节点开头重跑。
         for call in calls:
+            if call["name"] == "create_ticket" and call["name"] in services.tools:
+                approvals[call["id"]] = interrupt({
+                    "kind": "confirm_ticket",
+                    "tool_call_id": call["id"],
+                    "preview": call["args"],
+                })
+        for call in calls:
+            approved = approvals.get(call["id"], False)
             try:
                 if call["name"] not in services.tools:
                     result = {"error": "未知工具"}
                 elif (
                     call["name"] == "create_ticket"
                     and isinstance(approved, dict)
+                    and approved.get("tool_call_id") == call["id"]
                     and "tool_result" in approved
                 ):
                     result = approved["tool_result"]

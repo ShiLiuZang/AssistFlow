@@ -1,6 +1,7 @@
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from collections.abc import AsyncIterator
+from app.core.conversation_lock import conversation_lock
 
 
 class Runtime:
@@ -15,35 +16,41 @@ class Runtime:
             *,
             resume=None,
     ):
-        config={
-            "configurable":{
-                "thread_id":f"{user_id}:{conversation_id}",
-            },
-            "recursion_limit":64
-        }
-        snapshot = await self.graph.aget_state(config)
-        pending = bool(snapshot.next)
-
-        if resume is None and pending:
-            raise ValueError("请先确认或取消待处理操作")
-
-        if resume is not None and not pending:
-            raise ValueError("没有待恢复的操作")
-        if resume is not None:
-            payload=Command(resume=resume)
-        else:
-            payload = {
-                "query": query,
-                "user_id": user_id,
-                "messages": [HumanMessage(content=query)],
-                "intent": "",
-                "evidence": [],
-                "answer": "",
-                "citations": [],
-                "steps": 0,
-                "trace": [],
+        async with conversation_lock(user_id, conversation_id):
+            config={
+                "configurable":{
+                    "thread_id":f"{user_id}:{conversation_id}",
+                },
+                "recursion_limit":64
             }
-        return await self.graph.ainvoke(payload, config=config)
+            snapshot = await self.graph.aget_state(config)
+            pending = any(task.interrupts for task in snapshot.tasks)
+
+            if resume is None and pending:
+                raise ValueError("请先确认或取消待处理操作")
+
+            if resume is not None and not pending:
+                raise ValueError("没有待恢复的操作")
+            if resume is None and snapshot.next:
+                # 执行异常留下的任务可重试，不能误当作人工确认。
+                recovered = await self.graph.ainvoke(None, config=config)
+                if recovered.get("__interrupt__") or query == snapshot.values.get("query"):
+                    return recovered
+            if resume is not None:
+                payload=Command(resume=resume)
+            else:
+                payload = {
+                    "query": query,
+                    "user_id": user_id,
+                    "messages": [HumanMessage(content=query)],
+                    "intent": "",
+                    "evidence": [],
+                    "answer": "",
+                    "citations": [],
+                    "steps": 0,
+                    "trace": [],
+                }
+            return await self.graph.ainvoke(payload, config=config)
 
     async def stream_turn(
             self,
@@ -51,7 +58,7 @@ class Runtime:
             user_id: str,
             conversation_id: str,
             *,
-            resume: bool | None = None,
+            resume: bool | dict | None = None,
     ) -> AsyncIterator[dict]:
         try:
             result = await self.run_turn(

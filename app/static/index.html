@@ -1037,7 +1037,9 @@
     }
 
     // ---------- ch08:工单预览确认卡(interrupt confirm_ticket → 确认提交/取消 → resume 续跑)----------
-    function renderTicketConfirm(bubble, preview) {
+    function renderTicketConfirm(bubble, preview, toolCallId) {
+      const ticketConversationId = getConversationId();
+      const ticketUserId = getUserId();
       const intro = document.createElement("div");
       intro.className = "bubble-text";
       intro.textContent = "请确认工单信息:";
@@ -1064,15 +1066,13 @@
           try {
             await streamInto(nb, () => fetch("/api/actions/resume", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                conversation_id: getConversationId(),
-                user_id: getUserId(),
-                confirmed,
-              }),
+              body: JSON.stringify({ user_id: ticketUserId, conversation_id: ticketConversationId, tool_call_id: toolCallId, confirmed }),
             }));
           } catch (e) {
             nb.className = "bubble error";
             nb.textContent = "续跑失败,请稍后重试";
+            btn.disabled = false;
+            card.classList.remove("decided");
           } finally {
             setBusy(false);
           }
@@ -1160,7 +1160,7 @@
           interrupted = true;
           if (!structured) { bubble.innerHTML = ""; structured = true; }
           // ch08:中断按 kind 分发——select_order 弹订单卡,confirm_ticket 弹工单预览卡
-          if (data.kind === "confirm_ticket") renderTicketConfirm(bubble, data.preview || {});
+          if (data.kind === "confirm_ticket") renderTicketConfirm(bubble, data.preview || {}, data.tool_call_id);
           else renderOrderCards(bubble, data.orders || []);
         },
       });

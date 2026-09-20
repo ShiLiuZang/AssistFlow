@@ -93,16 +93,3 @@ async def agent(messages):
         SystemMessage(content=CHAT_SYSTEM_PROMPT),
         *messages,
     ])
-def graph_event_to_sse(
-    event: dict,
-    conversation_id: int,
-) -> str:
-    if event.get("event") == "end":
-        return "data: [DONE]\n\n"
-
-    payload = dict(event)
-
-    if payload.get("event") == "done":
-        payload["conversation_id"] = conversation_id
-
-    return make_sse(payload)
