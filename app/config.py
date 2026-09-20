@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     embed_api_key: str
     milvus_uri: str = "http://127.0.0.1:19530"
     milvus_collection: str = "minihelp_handwritten_knowledge"
+    rerank_base_url: str = "https://api.siliconflow.cn/v1"
+    rerank_api_key: str = ""
+    rerank_api_style: str = "auto"
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    recall_top_k: int = 50
+    rerank_top_k: int = 10
+    rerank_min_score: float = 0.3
+    subquery_split: bool = True
 
 
 # 模块导入时创建唯一配置对象；缺少必填字段会立即报错。

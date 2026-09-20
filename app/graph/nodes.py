@@ -146,6 +146,22 @@ def make_nodes(services):
     async def finish(state: ConversationState):
         if state.get("intent") == "business":
             messages = []
+            decisions = []
+            for message in reversed(state.get("messages", [])):
+                if message.type == "human":
+                    break
+                if message.type == "tool":
+                    result = json.loads(message.content)
+                    if isinstance(result, dict) and "confirmed" in result:
+                        decisions.append(
+                            f"工单已创建，工单号：{result['ticket_no']}"
+                            if result["confirmed"] else "已取消，本次没有创建工单。"
+                        )
+            if decisions:
+                # 已持久化的业务决定是最终事实，不能被模型改写成再次确认。
+                answer = "\n".join(reversed(decisions))
+                messages = [AIMessage(content=answer, id=state["messages"][-1].id)]
+                return update(state, "finish", messages=messages, answer=answer)
         else:
             messages = [
                 AIMessage(content=state["answer"])

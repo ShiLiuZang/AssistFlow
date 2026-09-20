@@ -48,11 +48,11 @@ async def health() -> dict[str, str]:
     return {
         "status": "ok",
         "service": "minihelp-handwritten",
-        "chapter": "ch02",
+        "chapter": "ch05",
     }
 
 
 @app.get("/", include_in_schema=False)
 async def chat_page() -> FileResponse:
-    """返回聊天首页，页面随后通过 /api/chat 调用后端。"""
+    """返回聊天首页，页面随后通过 /api/graph-chat 调用后端。"""
     return FileResponse(STATIC_DIR / "index.html")

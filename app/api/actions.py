@@ -28,6 +28,28 @@ def _call_in_current_turn(snapshot, call_id: str) -> bool:
     return False
 
 
+@router.get("/pending")
+async def pending_ticket(conversation_id: int, user_id: str, http_request: Request):
+    if await repository.get_conversation(conversation_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    async with conversation_lock(user_id, conversation_id):
+        runtime = getattr(http_request.app.state, "graph_runtime", None)
+        if runtime is not None:
+            snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
+            pending = _interrupt(snapshot)
+            if pending:
+                saved = await repository.get_ticket_decision(conversation_id, pending["tool_call_id"])
+                return {**pending, "conversation_id": conversation_id,
+                        "confirmed": saved["confirmed"] if saved else None}
+        call = await repository.get_pending_ticket_call(conversation_id)
+        if call is None:
+            return None
+        saved = await repository.get_ticket_decision(conversation_id, call["id"])
+        return {"kind": "confirm_ticket", "conversation_id": conversation_id,
+                "tool_call_id": call["id"], "preview": call["args"],
+                "confirmed": saved["confirmed"] if saved else None}
+
+
 async def stream_ticket_decision(
     request: ResumeTicketRequest, tool_call: dict, runtime: Runtime | None = None,
 ) -> AsyncIterator[str]:

@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.chat import graph_event_to_sse
+from app.api.chat import graph_event_to_sse, restore_messages, make_sse
 from app.db import repository
 from app.core.conversation_lock import conversation_lock
 from app.graph.runtime import Runtime
@@ -36,7 +36,14 @@ async def stream_graph_chat(
     request: ChatRequest, conversation_id: int, runtime: Runtime,
 ) -> AsyncIterator[str]:
     try:
+        yield make_sse({"event": "conversation", "conversation_id": conversation_id})
         async with conversation_lock(request.user_id, conversation_id):
+            config = _thread_config(request.user_id, conversation_id)
+            snapshot = await runtime.graph.aget_state(config)
+            if not snapshot.values:
+                history = restore_messages(await repository.list_messages(conversation_id))
+                if history:
+                    await runtime.graph.aupdate_state(config, {"messages": history}, as_node="finish")
             events = [event async for event in runtime.stream_turn(
                 request.message, request.user_id, str(conversation_id),
             )]
