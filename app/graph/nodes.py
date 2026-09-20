@@ -1,5 +1,5 @@
 import json
-
+from langgraph.types import interrupt
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
@@ -75,11 +75,25 @@ def make_nodes(services):
     async def tools(state: ConversationState):
         calls = state["messages"][-1].tool_calls
         messages = []
-
+        tickets=[
+            call for call in calls
+            if call["name"] == "create_ticket"
+        ]
+        approved=(
+            interrupt({
+                "kind": "confirm_ticket",
+                "previews": [call["args"] for call in tickets]
+            }
+        )
+            if tickets
+            else False
+        )
         for call in calls:
             try:
                 if call["name"] not in services.tools:
                     result = {"error": "未知工具"}
+                elif call["name"] == "create_ticket" and approved is not True:
+                    result = {"cancelled": True}
                 else:
                     result = await services.tools[call["name"]](
                         call["args"],
