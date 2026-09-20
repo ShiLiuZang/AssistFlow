@@ -1,6 +1,6 @@
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
-
+from collections.abc import AsyncIterator
 
 
 class Runtime:
@@ -44,3 +44,57 @@ class Runtime:
                 "trace": [],
             }
         return await self.graph.ainvoke(payload, config=config)
+
+    async def stream_turn(
+            self,
+            query: str,
+            user_id: str,
+            conversation_id: str,
+            *,
+            resume: bool | None = None,
+    ) -> AsyncIterator[dict]:
+        try:
+            result = await self.run_turn(
+                query,
+                user_id,
+                conversation_id,
+                resume=resume,
+            )
+
+            for name in result.get("trace", []):
+                yield {
+                    "event": "node",
+                    "name": name,
+                }
+
+            if result.get("__interrupt__"):
+                yield {
+                    "event": "interrupt",
+                    "preview": result["__interrupt__"][0].value,
+                }
+                return
+
+            if result.get("citations"):
+                yield {
+                    "event": "citations",
+                    "citations": result["citations"],
+                }
+
+            yield {
+                "delta": result["answer"],
+            }
+
+            yield {
+                "event": "done",
+            }
+
+        except Exception:
+            yield {
+                "event": "error",
+                "message": "图执行失败",
+            }
+
+        finally:
+            yield {
+                "event": "end",
+            }
