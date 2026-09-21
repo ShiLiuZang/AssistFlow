@@ -24,3 +24,9 @@ def get_order(order_id: str) -> dict[str, str] | None:
         return None
 
     return order.copy()
+def list_user_orders(user_id: str) -> list[dict[str, str]]:
+    return [
+        order.copy()
+        for order in DEMO_ORDERS.values()
+        if order["user_id"] == user_id
+    ]

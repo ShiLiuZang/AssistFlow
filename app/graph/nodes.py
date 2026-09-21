@@ -3,7 +3,7 @@ from langgraph.types import interrupt
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
-from app.core.coref import resolve
+from app.core.coref import entities, resolve
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
 
@@ -169,6 +169,84 @@ def make_nodes(services):
             resolved_query=result.resolved,
             needs_clarification=result.needs_clarification,
         )
+    async def fetch_order(state: ConversationState):
+        ids = [
+            value
+            for value in entities(state.get("resolved_query", state["query"]))
+            if value.startswith("ORD-")
+        ]
+
+        if len(ids) > 1:
+            return update(
+                state,
+                "fetch_order",
+                order=None,
+                route="clarify",
+            )
+
+        if ids:
+            selected = ids[0]
+        else:
+            orders = await services.list_orders(state["user_id"])
+
+            if not orders:
+                return update(
+                    state,
+                    "fetch_order",
+                    order=None,
+                    route="no_orders",
+                )
+
+            choice = interrupt({
+                "kind": "select_order",
+                "orders": [
+                    {
+                        "order_id": item["order_id"],
+                        "product_name": item["product_name"],
+                    }
+                    for item in orders
+                ],
+            })
+
+            if choice.get("cancelled") is True:
+                return update(
+                    state,
+                    "fetch_order",
+                    order=None,
+                    route="cancelled",
+                )
+
+            selected = choice.get("order_id")
+
+            if selected not in {item["order_id"] for item in orders}:
+                return update(
+                    state,
+                    "fetch_order",
+                    order=None,
+                    route="not_owned",
+                )
+
+        order = await services.get_order(selected)
+
+        if (
+            not order
+            or order.get("user_id") != state["user_id"]
+            or order.get("order_id") != selected
+        ):
+            return update(
+                state,
+                "fetch_order",
+                order=None,
+                route="not_owned",
+            )
+
+        return update(
+            state,
+            "fetch_order",
+            order=dict(order),
+            last_order_id=selected,
+            route="policy",
+        )
     async def finish(state: ConversationState):
         if state.get("intent") == "business":
             messages = []
@@ -209,4 +287,5 @@ def make_nodes(services):
         "classify": classify,
         "finish": finish,
         "resolve_reference": resolve_reference,
+        "fetch_order": fetch_order,
     }

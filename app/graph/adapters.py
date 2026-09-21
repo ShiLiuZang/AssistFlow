@@ -1,5 +1,5 @@
 from typing import Literal
-
+from app.tools.orders import get_order, list_user_orders
 from app.core.llm import get_chat_model
 from pydantic import BaseModel
 from app.core.retrieval import search_knowledge
@@ -10,6 +10,7 @@ class Intent(BaseModel):
         "complaint",
         "chat",
     ]
+from app.tools.orders import get_order, list_user_orders
 from app.core.evidence import answer_from_hits
 from langchain_core.messages import SystemMessage
 
@@ -30,7 +31,10 @@ class Services:
     answer: Callable
     agent: Callable
     tools: dict[str, Callable]
+    list_orders: Callable
+    get_order: Callable
     max_steps: int = 3
+
 def make_services() -> Services:
     return Services(
         classify=classify,
@@ -41,6 +45,8 @@ def make_services() -> Services:
             "query_order": order_tool,
             "create_ticket": ticket_tool,
         },
+        list_orders=list_orders,
+        get_order=get_verified_order,
     )
 async def order_tool(
     args: dict,
@@ -103,3 +109,9 @@ async def classify_detail(query:str):
     return await classify_intent(query, predict)
 async def expand_policy(query: str) -> list[str]:
     return []
+async def list_orders(user_id: str) -> list[dict[str, str]]:
+    return list_user_orders(user_id)
+
+
+async def get_verified_order(order_id: str) -> dict[str, str] | None:
+    return get_order(order_id)
