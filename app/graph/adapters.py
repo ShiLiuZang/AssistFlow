@@ -1,4 +1,5 @@
 from typing import Literal
+
 from app.core.llm import get_chat_model
 from pydantic import BaseModel
 from app.core.retrieval import search_knowledge
@@ -17,7 +18,10 @@ from app.tools.order_tools import query_order
 from app.tools.ticket_tools import create_ticket
 from dataclasses import dataclass
 from typing import Callable
-
+from app.core.intent import (
+    classify as classify_intent,
+    model_predictor,
+)
 
 @dataclass
 class Services:
@@ -93,3 +97,7 @@ async def agent(messages):
         SystemMessage(content=CHAT_SYSTEM_PROMPT),
         *messages,
     ])
+async def classify_detail(query:str):
+    model=get_chat_model()
+    predict = model_predictor(model)
+    return await classify_intent(query, predict)
