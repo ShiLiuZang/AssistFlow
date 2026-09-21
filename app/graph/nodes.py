@@ -3,6 +3,7 @@ from langgraph.types import interrupt
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
+from app.core.coref import resolve
 
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
@@ -143,6 +144,19 @@ def make_nodes(services):
             answer="已了解你的投诉，请通过订单售后入口联系人工客服处理。",
         )
 
+    async def resolve_reference(state: ConversationState):
+        result = resolve(
+            state["query"],
+            state.get("messages", []),
+            state.get("selected_order"),
+        )
+        return update(
+            state,
+            "resolve_reference",
+            query=result.original,
+            resolved_query=result.resolved,
+            needs_clarification=result.needs_clarification,
+        )
     async def finish(state: ConversationState):
         if state.get("intent") == "business":
             messages = []
@@ -182,4 +196,5 @@ def make_nodes(services):
         "chat": chat,
         "classify": classify,
         "finish": finish,
+        "resolve_reference": resolve_reference,
     }

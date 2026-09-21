@@ -36,3 +36,6 @@ class ConversationState(
 
     trace: list[str]
     # 当前轮经过的节点名称
+    resolved_query: str
+    needs_clarification: bool
+    selected_order: str
