@@ -4,7 +4,6 @@ from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
 from app.core.coref import resolve
-
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
 
@@ -21,7 +20,7 @@ def make_nodes(services):
 
     async def retrieve(state: ConversationState):
         # 读取 query
-        query = state["query"]
+        query = state.get("resolved_query") or state["query"]
 
         # 调用检索服务
         hits = await services.retrieve(query)
@@ -31,7 +30,7 @@ def make_nodes(services):
 
     async def answer(state: ConversationState):
         # 读取 query、evidence
-        query = state["query"]
+        query = state.get("resolved_query") or state["query"]
         evidence = state["evidence"]
         # 调用 services.answer
         result= await services.answer(query, evidence)
@@ -80,6 +79,8 @@ def make_nodes(services):
         calls = state["messages"][-1].tool_calls
         messages = []
         approvals = {}
+        verified_order = state.get("last_order_id")
+        current_order = state.get("order")
         # 先收集每个调用的确认，再执行工具；恢复会从节点开头重跑。
         for call in calls:
             if call["name"] == "create_ticket" and call["name"] in services.tools:
@@ -108,9 +109,17 @@ def make_nodes(services):
                         state["user_id"],
                         call["id"],
                     )
+
             except Exception:
                 result = {"error": "工具执行失败"}
-
+            if (
+                call["name"] == "query_order"
+                and isinstance(result, dict)
+                and result.get("found") is True
+                and result.get("order_id")
+            ):
+                verified_order = result["order_id"]
+                current_order = result
             messages.append(
                 ToolMessage(
                     content=json.dumps(result, ensure_ascii=False),
@@ -123,9 +132,13 @@ def make_nodes(services):
             state,
             "tools",
             messages=messages,
+            last_order_id=verified_order,
+            order=current_order,
         )
     async def classify(state: ConversationState):
-        intent=await services.classify(state["query"])
+        intent=await services.classify(
+            state.get("resolved_query") or state["query"]
+        )
         return update(
             state,
             "classify",
@@ -143,12 +156,11 @@ def make_nodes(services):
             "complaint",
             answer="已了解你的投诉，请通过订单售后入口联系人工客服处理。",
         )
-
     async def resolve_reference(state: ConversationState):
         result = resolve(
             state["query"],
             state.get("messages", []),
-            state.get("selected_order"),
+            state.get("last_order_id") or state.get("selected_order"),
         )
         return update(
             state,

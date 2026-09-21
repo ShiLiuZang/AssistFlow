@@ -39,3 +39,6 @@ class ConversationState(
     resolved_query: str
     needs_clarification: bool
     selected_order: str
+    order: dict | None
+    last_order_id: str
+    queries: list[str]

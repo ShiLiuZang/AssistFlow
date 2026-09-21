@@ -11,7 +11,8 @@ def build_graph(services, checkpointer=None):
     for name, node in make_nodes(services).items():
         graph.add_node(name, node)
 
-    graph.add_edge(START, "classify")
+    graph.add_edge(START, "resolve_reference")
+    graph.add_edge("resolve_reference", "classify")
     graph.add_conditional_edges(
         "classify",
         route_by_intent,
