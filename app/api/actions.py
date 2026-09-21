@@ -1,9 +1,8 @@
 import logging
 from collections.abc import AsyncIterator
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-
+from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.api.chat import make_sse, graph_event_to_sse
 from app.api.graph_chat import _thread_config, _persist_graph_messages
 from app.core.conversation_lock import conversation_lock
@@ -37,6 +36,11 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
         if runtime is not None:
             snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
             pending = _interrupt(snapshot)
+            if pending and pending.get("kind") == "select_order":
+                return {
+                    **pending,
+                    "conversation_id": conversation_id,
+                }
             if pending:
                 saved = await repository.get_ticket_decision(conversation_id, pending["tool_call_id"])
                 return {**pending, "conversation_id": conversation_id,
@@ -110,6 +114,54 @@ async def stream_ticket_decision(
         yield 'event: error\ndata: {"message":"工单处理或图恢复失败，请重试同一确认请求"}\n\n'
     finally:
         yield "data: [DONE]\n\n"
+async def stream_order_selection(
+    request: SelectOrderRequest,
+    runtime: Runtime,
+) -> AsyncIterator[str]:
+    try:
+        async with conversation_lock(
+            request.user_id,
+            request.conversation_id,
+        ):
+            resume = request.model_dump(
+                include={"kind", "request_id", "order_id", "cancelled"},
+                exclude_none=True,
+            )
+
+            events = [
+                event
+                async for event in runtime.stream_turn(
+                    "",
+                    request.user_id,
+                    str(request.conversation_id),
+                    resume=resume,
+                )
+            ]
+
+            await _persist_graph_messages(
+                runtime,
+                request.user_id,
+                request.conversation_id,
+            )
+
+        for event in events:
+            if event.get("event") != "end":
+                yield graph_event_to_sse(
+                    event,
+                    request.conversation_id,
+                )
+
+    except Exception:
+        logger.exception(
+            "订单选择或消息保存失败 conversation_id=%s",
+            request.conversation_id,
+        )
+        yield make_sse({
+            "event": "error",
+            "message": "订单选择或消息保存失败，请检查当前待处理状态",
+        })
+    finally:
+        yield "data: [DONE]\n\n"
 
 
 @router.post("/resume")
@@ -135,3 +187,28 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
         raise HTTPException(status_code=409, detail="没有对应的工单调用")
     return StreamingResponse(stream_ticket_decision(request, tool_call, runtime),
                              media_type="text/event-stream")
+
+@router.post("/select-order")
+async def select_order(
+    request: SelectOrderRequest,
+    http_request: Request,
+) -> StreamingResponse:
+    conversation = await repository.get_conversation(
+        request.conversation_id,
+        request.user_id,
+    )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    runtime = getattr(
+        http_request.app.state,
+        "graph_runtime",
+        None,
+    )
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="图服务尚未就绪")
+
+    return StreamingResponse(
+        stream_order_selection(request, runtime),
+        media_type="text/event-stream",
+    )

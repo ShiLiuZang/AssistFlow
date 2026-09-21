@@ -2,7 +2,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from collections.abc import AsyncIterator
 from app.core.conversation_lock import conversation_lock
-
+from uuid import uuid4
 
 class Runtime:
     def __init__(self, graph):
@@ -24,7 +24,11 @@ class Runtime:
                 "recursion_limit":64
             }
             snapshot = await self.graph.aget_state(config)
-            pending = any(task.interrupts for task in snapshot.tasks)
+            pending = [
+                item.value
+                for task in snapshot.tasks
+                for item in task.interrupts
+            ]
 
             if resume is None and pending:
                 raise ValueError("请先确认或取消待处理操作")
@@ -32,15 +36,59 @@ class Runtime:
             if resume is not None and not pending:
                 raise ValueError("没有待恢复的操作")
             if resume is None and snapshot.next:
-                # 执行异常留下的任务可重试，不能误当作人工确认。
-                recovered = await self.graph.ainvoke(None, config=config)
-                if recovered.get("__interrupt__") or query == snapshot.values.get("query"):
-                    return recovered
+                if query != snapshot.values.get("query"):
+                    raise ValueError("请先重试失败的问题")
+
+                return await self.graph.ainvoke(None, config=config)
             if resume is not None:
-                payload=Command(resume=resume)
+                current = pending[0]
+
+                if current.get("kind") == "select_order":
+                    if query:
+                        raise ValueError("选择订单时不能同时发送新问题")
+
+                    if not isinstance(resume, dict):
+                        raise ValueError("选单恢复参数必须是字典")
+
+                    if resume.get("kind") != "select_order":
+                        raise ValueError("恢复类型不匹配")
+
+                    if (
+                            not current.get("request_id")
+                            or resume.get("request_id") != current["request_id"]
+                    ):
+                        raise ValueError("选单请求已过期或不匹配")
+
+                    cancelled = resume.get("cancelled", False)
+
+                    if type(cancelled) is not bool:
+                        raise ValueError("cancelled 必须为布尔值")
+
+                    if cancelled:
+                        if resume.get("order_id") is not None:
+                            raise ValueError("取消不能同时选择订单")
+                    else:
+                        selected = resume.get("order_id")
+                        offered = {
+                            item["order_id"]
+                            for item in current["orders"]
+                        }
+
+                        if not isinstance(selected, str) or selected not in offered:
+                            raise ValueError("必须选择当前卡片中的订单")
+
+                elif (
+                        isinstance(resume, dict)
+                        and resume.get("kind") == "select_order"
+                ):
+                    raise ValueError("当前等待的不是订单选择")
+
+                payload = Command(resume=resume)
             else:
                 payload = {
                     "query": query,
+                    "request_id": uuid4().hex,
+                    "route": "",
                     "user_id": user_id,
                     "messages": [HumanMessage(content=query)],
                     "intent": "",

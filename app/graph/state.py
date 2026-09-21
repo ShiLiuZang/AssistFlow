@@ -42,3 +42,5 @@ class ConversationState(
     order: dict | None
     last_order_id: str
     queries: list[str]
+    request_id: str
+    route: str
