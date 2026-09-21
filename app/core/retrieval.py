@@ -4,6 +4,8 @@ from app.core import  query_understanding
 from app.kb import milvus_client
 from app.core import embeddings, rerank
 import re
+import math
+from app.core.coref import entities
 STRATEGIES = {
     "vector",
     "bm25",
@@ -149,3 +151,81 @@ async def search_knowledge(
         ]
 
     return hits
+async def retrieve_policy(query, order, expand, search):
+    proposed = await expand(query)
+
+    if not isinstance(proposed, list):
+        raise ValueError("扩展结果必须是列表")
+
+    queries = [query]
+    allowed_entities = set(entities(query))
+
+    if isinstance(order, dict) and order.get("order_id"):
+        allowed_entities.add(order["order_id"])
+
+    for item in proposed:
+        if not isinstance(item, str):
+            continue
+
+        item = item.strip()
+
+        if not item or len(item) > 200:
+            continue
+
+        if item in queries:
+            continue
+
+        if not set(entities(item)) <= allowed_entities:
+            continue
+
+        queries.append(item)
+
+        if len(queries) == 3:
+            break
+
+    merged = {}
+
+    for current_query in queries:
+        hits = await search(current_query)
+
+        if not isinstance(hits, list):
+            continue
+
+        for hit in hits:
+            if not isinstance(hit, dict):
+                continue
+
+            hit_id = hit.get("id")
+            score = hit.get("rerank_score")
+
+            if (
+                isinstance(hit_id, bool)
+                or not isinstance(hit_id, (int, str))
+                or isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(score)
+                or not 0.3 <= score <= 1
+                or not isinstance(hit.get("answer"), str)
+                or not hit["answer"].strip()
+                or not isinstance(hit.get("section_path"), str)
+                or not hit["section_path"].strip()
+            ):
+                continue
+
+            if (
+                hit_id not in merged
+                or score > merged[hit_id]["rerank_score"]
+            ):
+                merged[hit_id] = dict(hit)
+
+    valid_hits = sorted(
+        merged.values(),
+        key=lambda hit: (-hit["rerank_score"], str(hit["id"])),
+    )[:5]
+
+    citations = [
+        {**hit, "n": index}
+        for index, hit in enumerate(valid_hits, start=1)
+    ]
+
+    return queries, citations

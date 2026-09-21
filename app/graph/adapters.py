@@ -101,3 +101,5 @@ async def classify_detail(query:str):
     model=get_chat_model()
     predict = model_predictor(model)
     return await classify_intent(query, predict)
+async def expand_policy(query: str) -> list[str]:
+    return []
