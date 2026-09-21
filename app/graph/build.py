@@ -19,6 +19,7 @@ def build_graph(services, checkpointer=None):
         {
             "knowledge": "retrieve",
             "business": "agent",
+            "refund": "fetch_order",
             "complaint": "complaint",
             "chat": "chat",
         }
@@ -31,6 +32,12 @@ def build_graph(services, checkpointer=None):
             "fallback": "fallback",
         }
     )
+    graph.add_conditional_edges(
+        "fetch_order",
+        lambda state: "policy" if state.get("route") == "policy" else "finish",
+        {"policy": "policy", "finish": "finish"},
+    )
+    graph.add_edge("policy", "answer")
     graph.add_conditional_edges(
         "agent",
         should_continue,

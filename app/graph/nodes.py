@@ -4,6 +4,7 @@ from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
 from app.core.coref import entities, resolve
+from app.core.retrieval import retrieve_policy
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
 
@@ -199,6 +200,7 @@ def make_nodes(services):
 
             choice = interrupt({
                 "kind": "select_order",
+                "request_id": state["request_id"],
                 "orders": [
                     {
                         "order_id": item["order_id"],
@@ -247,6 +249,24 @@ def make_nodes(services):
             last_order_id=selected,
             route="policy",
         )
+    async def policy(state: ConversationState):
+        expand = getattr(services, "expand_policy", None)
+        if expand is None:
+            async def expand(_query):
+                return []
+        queries, citations = await retrieve_policy(
+            state.get("resolved_query", state["query"]),
+            state.get("order"),
+            expand,
+            services.retrieve,
+        )
+        return update(
+            state,
+            "policy",
+            queries=queries,
+            citations=citations,
+            evidence=citations,
+        )
     async def finish(state: ConversationState):
         if state.get("intent") == "business":
             messages = []
@@ -288,4 +308,5 @@ def make_nodes(services):
         "finish": finish,
         "resolve_reference": resolve_reference,
         "fetch_order": fetch_order,
+        "policy": policy,
     }

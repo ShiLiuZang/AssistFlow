@@ -33,6 +33,7 @@ class Services:
     tools: dict[str, Callable]
     list_orders: Callable
     get_order: Callable
+    expand_policy: Callable
     max_steps: int = 3
 
 def make_services() -> Services:
@@ -47,6 +48,7 @@ def make_services() -> Services:
         },
         list_orders=list_orders,
         get_order=get_verified_order,
+        expand_policy=expand_policy,
     )
 async def order_tool(
     args: dict,

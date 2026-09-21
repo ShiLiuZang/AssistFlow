@@ -7,8 +7,14 @@ from .state import ConversationState
 
 def route_by_intent(
     state: ConversationState,
-) -> Literal["knowledge", "business", "complaint", "chat"]:
+) -> Literal["knowledge", "business", "refund", "complaint", "chat"]:
     intent = state.get("intent")
+
+    if intent == "business" and any(
+        word in state.get("resolved_query", state.get("query", ""))
+        for word in ("退款", "退货", "换货", "维修")
+    ):
+        return "refund"
 
     if intent in ["knowledge", "business", "complaint", "chat"]:
         return intent
