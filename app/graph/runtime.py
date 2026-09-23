@@ -15,6 +15,9 @@ class Runtime:
             conversation_id: str,
             *,
             resume=None,
+            summary_text: str = "",
+            summary_upto: int = 0,
+            covered_count: int = 0,
     ):
         async with conversation_lock(user_id, conversation_id):
             config={
@@ -88,10 +91,12 @@ class Runtime:
                 payload = {
                     "query": query,
                     "request_id": uuid4().hex,
-                    "route": "",
                     "user_id": user_id,
                     "messages": [HumanMessage(content=query)],
                     "intent": "",
+                    "intent_detail": "",
+                    "intent_confidence": 0.0,
+                    "route": "",
                     "resolved_query": query,
                     "needs_clarification": False,
                     "order": None,
@@ -101,6 +106,9 @@ class Runtime:
                     "answer": "",
                     "steps": 0,
                     "trace": [],
+                    "summary_text": summary_text,
+                    "summary_upto": summary_upto,
+                    "covered_count": covered_count,
                 }
             return await self.graph.ainvoke(payload, config=config)
 
@@ -111,6 +119,9 @@ class Runtime:
             conversation_id: str,
             *,
             resume: bool | dict | None = None,
+            summary_text: str = "",
+            summary_upto: int = 0,
+            covered_count: int = 0,
     ) -> AsyncIterator[dict]:
         try:
             result = await self.run_turn(
@@ -118,6 +129,9 @@ class Runtime:
                 user_id,
                 conversation_id,
                 resume=resume,
+                summary_text=summary_text,
+                summary_upto=summary_upto,
+                covered_count=covered_count,
             )
 
             for name in result.get("trace", []):

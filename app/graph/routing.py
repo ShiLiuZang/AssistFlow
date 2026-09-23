@@ -7,19 +7,30 @@ from .state import ConversationState
 
 def route_by_intent(
     state: ConversationState,
-) -> Literal["knowledge", "business", "refund", "complaint", "chat"]:
-    intent = state.get("intent")
+) -> Literal[
+    "knowledge",
+    "business",
+    "refund",
+    "complaint",
+    "human",
+    "chat",
+    "clarify",
+]:
+    route = state.get("route")
 
-    if intent == "business" and any(
-        word in state.get("resolved_query", state.get("query", ""))
-        for word in ("退款", "退货", "换货", "维修")
-    ):
-        return "refund"
+    if route in {
+        "knowledge",
+        "business",
+        "refund",
+        "complaint",
+        "human",
+        "chat",
+        "clarify",
+    }:
+        return route
 
-    if intent in ["knowledge", "business", "complaint", "chat"]:
-        return intent
+    return "clarify"
 
-    return "chat"
 def confidence_gate(state:ConversationState)->Literal["answer", "fallback"]:
     evidence = state.get("evidence")
     if evidence:

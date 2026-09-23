@@ -12,7 +12,18 @@ def build_graph(services, checkpointer=None):
         graph.add_node(name, node)
 
     graph.add_edge(START, "resolve_reference")
-    graph.add_edge("resolve_reference", "classify")
+    graph.add_conditional_edges(
+        "resolve_reference",
+        lambda state: (
+            "clarify"
+            if state.get("needs_clarification")
+            else "classify"
+        ),
+        {
+            "clarify": "clarify_reference",
+            "classify": "classify",
+        },
+    )
     graph.add_conditional_edges(
         "classify",
         route_by_intent,
@@ -21,7 +32,9 @@ def build_graph(services, checkpointer=None):
             "business": "agent",
             "refund": "fetch_order",
             "complaint": "complaint",
+            "human": "human",
             "chat": "chat",
+            "clarify": "clarify_intent",
         }
     )
     graph.add_conditional_edges(
@@ -34,10 +47,24 @@ def build_graph(services, checkpointer=None):
     )
     graph.add_conditional_edges(
         "fetch_order",
-        lambda state: "policy" if state.get("route") == "policy" else "finish",
-        {"policy": "policy", "finish": "finish"},
+        lambda state: (
+            "policy"
+            if state.get("route") == "policy"
+            else "reply"
+        ),
+        {
+            "policy": "policy",
+            "reply": "order_result",
+        },
     )
-    graph.add_edge("policy", "answer")
+    graph.add_conditional_edges(
+        "policy",
+        confidence_gate,
+        {
+            "answer": "answer",
+            "fallback": "fallback",
+        },
+    )
     graph.add_conditional_edges(
         "agent",
         should_continue,
@@ -47,7 +74,16 @@ def build_graph(services, checkpointer=None):
         },
     )
     graph.add_edge("tools", "agent")
-    for node in ["answer", "fallback", "complaint", "chat"]:
+    for node in [
+        "answer",
+        "fallback",
+        "complaint",
+        "chat",
+        "clarify_reference",
+        "order_result",
+        "human",
+        "clarify_intent",
+    ]:
         graph.add_edge(node, "finish")
     graph.add_edge("finish", END)
     return graph.compile(checkpointer=checkpointer)

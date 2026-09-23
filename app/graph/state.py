@@ -44,3 +44,8 @@ class ConversationState(
     queries: list[str]
     request_id: str
     route: str
+    intent_detail: str
+    intent_confidence: float
+    summary_text: str
+    summary_upto: int
+    covered_count: int

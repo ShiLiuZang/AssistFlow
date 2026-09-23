@@ -34,7 +34,12 @@ def make_nodes(services):
         query = state.get("resolved_query") or state["query"]
         evidence = state["evidence"]
         # 调用 services.answer
-        result= await services.answer(query, evidence)
+        result = await services.answer(
+            query,
+            evidence,
+            order=state.get("order"),
+            summary_text=state.get("summary_text", ""),
+        )
         # 返回 answer、citations 和 trace
         return update(state, "answer",answer=result["answer"],
         citations=result["citations"])
@@ -62,7 +67,9 @@ def make_nodes(services):
             )
 
         message = await services.agent(
-            state.get("messages", [])
+            state.get("messages", []),
+            summary_text=state.get("summary_text", ""),
+            covered_count=state.get("covered_count", 0),
         )
 
         if not isinstance(message, AIMessage):
@@ -136,14 +143,39 @@ def make_nodes(services):
             last_order_id=verified_order,
             order=current_order,
         )
+
     async def classify(state: ConversationState):
-        intent=await services.classify(
-            state.get("resolved_query") or state["query"]
+        messages = state.get("messages", [])
+        covered_count = state.get("covered_count", 0)
+        uncovered = messages[covered_count:]
+        recent_context = [
+            {"role": message.type, "content": str(message.content)[:800]}
+            for message in uncovered[:-1]  # 最后一条是本轮问题，下面单独传
+            if message.type in {"human", "ai"} and message.content
+        ][-4:]
+        prediction, route = await services.classify(
+            state.get("resolved_query") or state["query"],
+            summary_text=state.get("summary_text", ""),
+            recent_context=recent_context,
         )
+
+        legacy = {
+            "knowledge": "knowledge",
+            "business": "business",
+            "refund": "business",
+            "complaint": "complaint",
+            "human": "chat",
+            "chat": "chat",
+            "clarify": "chat",
+        }
+
         return update(
             state,
             "classify",
-            intent=intent,
+            intent=legacy[route],
+            intent_detail=prediction.intent.value,
+            intent_confidence=prediction.confidence,
+            route=route,
         )
     async def chat(state: ConversationState):
         return update(
@@ -158,9 +190,14 @@ def make_nodes(services):
             answer="已了解你的投诉，请通过订单售后入口联系人工客服处理。",
         )
     async def resolve_reference(state: ConversationState):
+        messages = state.get("messages", [])
+        covered_count = state.get("covered_count", 0)
+        if not 0 <= covered_count <= len(messages):
+            raise ValueError("摘要覆盖条数超出图消息范围")
+
         result = resolve(
             state["query"],
-            state.get("messages", []),
+            messages[covered_count:],
             state.get("last_order_id") or state.get("selected_order"),
         )
         return update(
@@ -267,6 +304,48 @@ def make_nodes(services):
             citations=citations,
             evidence=citations,
         )
+    async def clarify_reference(state: ConversationState):
+        return update(
+            state,
+            "clarify_reference",
+            answer="请说明你指的是哪个订单或商品。",
+            citations=[],
+        )
+
+    async def order_result(state: ConversationState):
+        answers = {
+            "clarify": "请一次只提供一个订单号。",
+            "no_orders": "没有查到你当前可选择的订单。",
+            "cancelled": "已取消选择订单，本次没有继续处理。",
+            "not_owned": "没有找到属于你的这笔订单，请核对订单号。",
+        }
+
+        answer = answers.get(
+            state.get("route"),
+            "暂时无法确认订单，请稍后重试。",
+        )
+
+        return update(
+            state,
+            "order_result",
+            answer=answer,
+            citations=[],
+        )
+    async def human(state: ConversationState):
+        return update(
+            state,
+            "human",
+            answer="如需人工协助，请通过订单售后入口联系人工客服。",
+            citations=[],
+        )
+
+    async def clarify_intent(state: ConversationState):
+        return update(
+            state,
+            "clarify_intent",
+            answer="请补充你希望办理的事情，例如查询订单、咨询商品或申请售后。",
+            citations=[],
+        )
     async def finish(state: ConversationState):
         if state.get("intent") == "business":
             messages = []
@@ -281,11 +360,21 @@ def make_nodes(services):
                             f"工单已创建，工单号：{result['ticket_no']}"
                             if result["confirmed"] else "已取消，本次没有创建工单。"
                         )
+
             if decisions:
                 # 已持久化的业务决定是最终事实，不能被模型改写成再次确认。
                 answer = "\n".join(reversed(decisions))
                 messages = [AIMessage(content=answer, id=state["messages"][-1].id)]
                 return update(state, "finish", messages=messages, answer=answer)
+            answer=state.get("answer","")
+            history = state.get("messages",[])
+            last_message=history[-1] if history else None
+            answer_already_present=(
+                getattr(last_message,"type",None)=="ai"
+                and str(last_message.content)==answer
+            )
+            if answer and not answer_already_present:
+                messages = [AIMessage(content=answer)]
         else:
             messages = [
                 AIMessage(content=state["answer"])
@@ -309,4 +398,8 @@ def make_nodes(services):
         "resolve_reference": resolve_reference,
         "fetch_order": fetch_order,
         "policy": policy,
+        "clarify_reference": clarify_reference,
+        "order_result": order_result,
+        "human": human,
+        "clarify_intent": clarify_intent,
     }

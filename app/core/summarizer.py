@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from app.core.llm import get_chat_model
-from app.core.memory import turns
+from app.core.memory import turns, build_window
 
 logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
@@ -55,6 +55,24 @@ async def summarize_delta(old, messages, summarize, keep=2, threshold=1):
     if not isinstance(text, str) or not text.strip():
         raise ValueError("empty summary")
     return Summary(text.strip(), boundary)
+def assemble(system, summary, messages, budget, reserve=0, keep=3):
+    prefix = [{"role": "system", "content": system}]
+    if summary.text:
+        prefix.append({
+            "role": "user",
+            "content": json.dumps({
+                "type": "untrusted_conversation_summary",
+                "text": summary.text,
+            }, ensure_ascii=False),
+        })
+    prefix_cost = len(json.dumps(prefix, ensure_ascii=False)) + reserve
+    recent = [message for message in messages if message.id > summary.upto]
+    return prefix, build_window(
+        recent,
+        budget,
+        reserve=prefix_cost,
+        keep=keep,
+    )
 async def update_persisted_summary(
     user_id: str,
     conversation_id: int,

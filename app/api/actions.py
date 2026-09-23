@@ -1,4 +1,5 @@
 import logging
+
 from collections.abc import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -8,7 +9,7 @@ from app.api.graph_chat import _thread_config, _persist_graph_messages
 from app.core.conversation_lock import conversation_lock
 from app.db import repository
 from app.graph.runtime import Runtime
-from app.schemas.actions import ResumeTicketRequest
+from app.core.summarizer import schedule_persisted_summary, summarize_dialog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/actions", tags=["actions"])
@@ -25,34 +26,6 @@ def _call_in_current_turn(snapshot, call_id: str) -> bool:
         if any(call["id"] == call_id for call in getattr(message, "tool_calls", [])):
             return True
     return False
-
-
-@router.get("/pending")
-async def pending_ticket(conversation_id: int, user_id: str, http_request: Request):
-    if await repository.get_conversation(conversation_id, user_id) is None:
-        raise HTTPException(status_code=404, detail="会话不存在")
-    async with conversation_lock(user_id, conversation_id):
-        runtime = getattr(http_request.app.state, "graph_runtime", None)
-        if runtime is not None:
-            snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
-            pending = _interrupt(snapshot)
-            if pending and pending.get("kind") == "select_order":
-                return {
-                    **pending,
-                    "conversation_id": conversation_id,
-                }
-            if pending:
-                saved = await repository.get_ticket_decision(conversation_id, pending["tool_call_id"])
-                return {**pending, "conversation_id": conversation_id,
-                        "confirmed": saved["confirmed"] if saved else None}
-        call = await repository.get_pending_ticket_call(conversation_id)
-        if call is None:
-            return None
-        saved = await repository.get_ticket_decision(conversation_id, call["id"])
-        return {"kind": "confirm_ticket", "conversation_id": conversation_id,
-                "tool_call_id": call["id"], "preview": call["args"],
-                "confirmed": saved["confirmed"] if saved else None}
-
 
 async def stream_ticket_decision(
     request: ResumeTicketRequest, tool_call: dict, runtime: Runtime | None = None,
@@ -107,6 +80,19 @@ async def stream_ticket_decision(
             else:
                 frames.append(make_sse({"delta": repository.ticket_answer(result)}))
                 frames.append(make_sse({"event": "done", "conversation_id": request.conversation_id}))
+            completed_graph_turn = False
+            if is_graph and not interrupts:
+                latest = await runtime.graph.aget_state(
+                    _thread_config(request.user_id, request.conversation_id)
+                )
+                completed_graph_turn = not latest.next
+
+        if completed_graph_turn:
+            schedule_persisted_summary(
+                request.user_id,
+                request.conversation_id,
+                summarize_dialog,
+            )
         for frame in frames:
             yield frame
     except Exception:
@@ -143,7 +129,16 @@ async def stream_order_selection(
                 request.user_id,
                 request.conversation_id,
             )
-
+        completed = any(e.get("event") == "done" for e in events)
+        interrupted_or_failed = any(
+            e.get("event") in {"interrupt", "error"} for e in events
+        )
+        if completed and not interrupted_or_failed:
+            schedule_persisted_summary(
+                request.user_id,
+                request.conversation_id,
+                summarize_dialog,
+            )
         for event in events:
             if event.get("event") != "end":
                 yield graph_event_to_sse(
@@ -162,6 +157,34 @@ async def stream_order_selection(
         })
     finally:
         yield "data: [DONE]\n\n"
+@router.get("/pending")
+async def pending_ticket(conversation_id: int, user_id: str, http_request: Request):
+    if await repository.get_conversation(conversation_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    async with conversation_lock(user_id, conversation_id):
+        runtime = getattr(http_request.app.state, "graph_runtime", None)
+        if runtime is not None:
+            snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
+            pending = _interrupt(snapshot)
+            if pending and pending.get("kind") == "select_order":
+                return {
+                    **pending,
+                    "conversation_id": conversation_id,
+                }
+            if pending:
+                saved = await repository.get_ticket_decision(conversation_id, pending["tool_call_id"])
+                return {**pending, "conversation_id": conversation_id,
+                        "confirmed": saved["confirmed"] if saved else None}
+        call = await repository.get_pending_ticket_call(conversation_id)
+        if call is None:
+            return None
+        saved = await repository.get_ticket_decision(conversation_id, call["id"])
+        return {"kind": "confirm_ticket", "conversation_id": conversation_id,
+                "tool_call_id": call["id"], "preview": call["args"],
+                "confirmed": saved["confirmed"] if saved else None}
+
+
+
 
 
 @router.post("/resume")
