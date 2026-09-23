@@ -13,6 +13,9 @@ class Conversation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_upto: Mapped[int] = mapped_column(default=0, server_default="0")
+    summary_version: Mapped[int] = mapped_column(default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),

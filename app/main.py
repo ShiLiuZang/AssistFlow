@@ -12,6 +12,7 @@ from app.api.conversations import router as conversations_router
 from app.api.actions import router as actions_router
 from app.api.knowledge import router as knowledge_router
 from app.config import settings
+from app.core.summarizer import close_persisted_summaries
 from app.graph.adapters import make_services
 from app.graph.checkpoint import persistent_runtime
 
@@ -23,8 +24,11 @@ async def lifespan(app: FastAPI):
         settings.graph_checkpoint_path,
     ) as runtime:
         app.state.graph_runtime = runtime
-        yield
-        app.state.graph_runtime = None
+        try:
+            yield
+        finally:
+            await close_persisted_summaries()
+            app.state.graph_runtime = None
 
 
 STATIC_DIR = Path(__file__).parent / "static"
