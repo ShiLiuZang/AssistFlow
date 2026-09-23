@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
@@ -20,8 +21,11 @@ def group_turns(messages):
     if current:
         groups.append(current)
     return groups
-
-
+def estimate(messages):
+    return sum(
+        len(json.dumps(message.__dict__, ensure_ascii=False)) + 8
+        for message in messages
+    )
 def turns(messages):
     groups=[]
     pending=set()
@@ -54,3 +58,18 @@ def turns(messages):
         raise ValueError("finish tool execution before model input")
 
     return groups
+
+def build_window(messages, budget, reserve=0, keep=3, count=estimate):
+    if budget <= reserve or reserve < 0 or keep < 1:
+        raise ValueError("invalid budget or window")
+
+    groups = turns(messages)
+    result = []
+    for group in reversed(groups[-keep:]):
+        candidate = group + result
+        if count(candidate) + reserve > budget:
+            if not result:
+                raise ValueError("current turn exceeds budget")
+            break
+        result = candidate
+    return result
