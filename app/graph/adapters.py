@@ -19,6 +19,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.memory import Message as ViewMessage, build_window
 from app.core.prompts import CHAT_SYSTEM_PROMPT
 from app.tools.order_tools import query_order
+from app.tools.registry import Registry, ToolSpec
 from app.tools.ticket_tools import create_ticket
 from dataclasses import dataclass
 from typing import Callable
@@ -26,6 +27,9 @@ from app.core.intent import (
     classify as classify_intent,
     model_predictor,
 )
+from functools import partial
+
+
 @dataclass
 class Services:
     classify: Callable
@@ -39,19 +43,19 @@ class Services:
     max_steps: int = 3
 
 def make_services() -> Services:
+    registry = make_tool_registry()
     return Services(
         classify=classify_detail,
         retrieve=retrieve,
         answer=answer,
-        agent=agent,
-        tools={
-            "query_order": order_tool,
-            "create_ticket": ticket_tool,
-        },
+        agent=partial(agent, model_tools=registry.model_tools()),
         list_orders=list_orders,
         get_order=get_verified_order,
         expand_policy=expand_policy,
+        tools=registry.execution_tools(),
     )
+
+
 async def order_tool(
     args: dict,
     user_id: str,
@@ -175,11 +179,16 @@ def build_windowed_agent_messages(
         covered_count=covered_count,
     )
     return build_agent_messages(recent, summary_text)
-async def agent(messages, summary_text: str = "", covered_count: int = 0):
-    model = get_chat_model().bind_tools([
-        query_order,
-        create_ticket,
-    ])
+
+
+async def agent(
+    messages,
+    summary_text: str = "",
+    covered_count: int = 0,
+    *,
+    model_tools: list[dict],
+):
+    model = get_chat_model().bind_tools(model_tools)
     return await model.ainvoke(
         build_windowed_agent_messages(messages, summary_text, covered_count)
     )
@@ -220,3 +229,20 @@ async def list_orders(user_id: str) -> list[dict[str, str]]:
 
 async def get_verified_order(order_id: str) -> dict[str, str] | None:
     return get_order(order_id)
+
+
+def make_tool_registry() -> Registry:
+    registry = Registry()
+    registry.register(ToolSpec(
+        name=query_order.name,
+        invoke=order_tool,
+        description=query_order.description,
+        schema=query_order.tool_call_schema.model_json_schema(),
+    ))
+    registry.register(ToolSpec(
+        name=create_ticket.name,
+        invoke=ticket_tool,
+        description=create_ticket.description,
+        schema=create_ticket.tool_call_schema.model_json_schema(),
+    ))
+    return registry
