@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, replace
+from jsonschema import Draft202012Validator
+from referencing import Registry as RefRegistry
 
 
 @dataclass(frozen=True)
@@ -16,12 +18,17 @@ class Registry:
         self._specs: dict[str, ToolSpec] = {}
 
     def register(self, spec: ToolSpec) -> None:
+        Draft202012Validator.check_schema(spec.schema)
         if not spec.name.strip():
             raise ValueError("工具名称不能为空")
         if spec.name in self._specs:
             raise ValueError(f"工具已注册：{spec.name}")
         if not spec.description.strip():
             raise ValueError("工具的描述不能为空")
+        if not isinstance(spec.schema, dict) or spec.schema.get("type") != "object":
+            raise ValueError("工具参数 Schema 必须是对象")
+        if spec.schema.get("additionalProperties") is not False:
+            raise ValueError("工具参数 Schema 必须禁止额外字段")
         self._specs[spec.name] = replace(spec, schema=deepcopy(spec.schema))
 
     def get(self, name: str) -> ToolSpec | None:
@@ -45,3 +52,10 @@ class Registry:
             name: spec.invoke
             for name, spec in self._specs.items()
         }
+
+
+def validate_args(spec: ToolSpec, args: object) -> None:
+    Draft202012Validator(
+        spec.schema,
+        registry=RefRegistry(),
+    ).validate(args)

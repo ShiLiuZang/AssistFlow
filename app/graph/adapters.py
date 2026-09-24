@@ -41,6 +41,7 @@ class Services:
     get_order: Callable
     expand_policy: Callable
     max_steps: int = 3
+    registry: Registry | None = None
 
 def make_services() -> Services:
     registry = make_tool_registry()
@@ -53,6 +54,7 @@ def make_services() -> Services:
         get_order=get_verified_order,
         expand_policy=expand_policy,
         tools=registry.execution_tools(),
+        registry=registry,
     )
 
 
@@ -233,16 +235,20 @@ async def get_verified_order(order_id: str) -> dict[str, str] | None:
 
 def make_tool_registry() -> Registry:
     registry = Registry()
+    order_schema = query_order.tool_call_schema.model_json_schema()
+    order_schema["additionalProperties"] = False
+    ticket_schema = create_ticket.tool_call_schema.model_json_schema()
+    ticket_schema["additionalProperties"] = False
     registry.register(ToolSpec(
         name=query_order.name,
         invoke=order_tool,
         description=query_order.description,
-        schema=query_order.tool_call_schema.model_json_schema(),
+        schema=order_schema,
     ))
     registry.register(ToolSpec(
         name=create_ticket.name,
         invoke=ticket_tool,
         description=create_ticket.description,
-        schema=create_ticket.tool_call_schema.model_json_schema(),
+        schema=ticket_schema,
     ))
     return registry

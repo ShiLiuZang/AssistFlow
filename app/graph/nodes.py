@@ -5,6 +5,10 @@ from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
 from app.core.coref import entities, resolve
 from app.core.retrieval import retrieve_policy
+from jsonschema.exceptions import ValidationError
+from app.tools.registry import validate_args
+
+
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
 
@@ -74,7 +78,22 @@ def make_nodes(services):
 
         if not isinstance(message, AIMessage):
             raise TypeError("Agent 必须返回 AIMessage")
-
+        if message.invalid_tool_calls or any(
+            not isinstance(call, dict)
+            or not isinstance(call.get("id"), str)
+            or not call["id"].strip()
+            or not isinstance(call.get("name"), str)
+            or not call["name"].strip()
+            for call in message.tool_calls
+        ):
+            response = AIMessage(content="工具调用格式错误，请稍后重试。")
+            return update(
+                state,
+                "agent",
+                messages=[response],
+                steps=steps + 1,
+                answer=response.content,
+            )
         return update(
             state,
             "agent",
@@ -89,18 +108,50 @@ def make_nodes(services):
         approvals = {}
         verified_order = state.get("last_order_id")
         current_order = state.get("order")
+        validation_errors: dict[str, dict[str, str]] = {}
+
         # 先收集每个调用的确认，再执行工具；恢复会从节点开头重跑。
         for call in calls:
+            if not isinstance(call.get("args"), dict):
+                validation_errors[call["id"]] = {
+                    "code": "invalid_call",
+                    "error": "工具调用的 args 必须是对象",
+                }
+                continue
+            registry = services.registry
+            if registry is None:
+                raise RuntimeError("工具注册表未配置")
+
+            spec = registry.get(call["name"])
+            if spec is not None:
+                try:
+                    validate_args(spec, call["args"])
+                except ValidationError:
+                    validation_errors[call["id"]] = {
+                        "code": "invalid_args",
+                        "error": "工具参数不符合 Schema，请补充后重试",
+                    }
+                    continue
+                except Exception:
+                    validation_errors[call["id"]] = {
+                        "code": "invalid_schema",
+                        "error": "工具参数定义异常",
+                    }
+                    continue
+
             if call["name"] == "create_ticket" and call["name"] in services.tools:
                 approvals[call["id"]] = interrupt({
                     "kind": "confirm_ticket",
                     "tool_call_id": call["id"],
                     "preview": call["args"],
                 })
+
         for call in calls:
             approved = approvals.get(call["id"], False)
             try:
-                if call["name"] not in services.tools:
+                if call["id"] in validation_errors:
+                    result = validation_errors[call["id"]]
+                elif call["name"] not in services.tools:
                     result = {"error": "未知工具"}
                 elif (
                     call["name"] == "create_ticket"

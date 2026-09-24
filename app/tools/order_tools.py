@@ -11,8 +11,7 @@ from app.tools.orders import get_order
 def query_order(
     order_id: Annotated[
         str,
-        Field(description="需要查询的订单号，例如 ORD-1001"),
-
+        Field(min_length=1, description="需要查询的订单号，例如 ORD-1001"),
     ],
     user_id: Annotated[str, InjectedToolArg],
 ) -> dict[str, object]:
