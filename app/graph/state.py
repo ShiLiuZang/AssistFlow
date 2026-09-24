@@ -18,6 +18,7 @@ class ConversationState(
 
     user_id: str
     # 当前用户的演示身份
+    conversation_id: str
 
     intent: str
     # 当前轮意图，例如 knowledge、business、chat

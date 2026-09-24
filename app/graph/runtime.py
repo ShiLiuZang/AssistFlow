@@ -92,6 +92,7 @@ class Runtime:
                     "query": query,
                     "request_id": uuid4().hex,
                     "user_id": user_id,
+                    "conversation_id": conversation_id,
                     "messages": [HumanMessage(content=query)],
                     "intent": "",
                     "intent_detail": "",

@@ -2,6 +2,7 @@ import json
 from typing import Literal
 from app.tools.orders import get_order, list_user_orders
 from app.core.llm import get_chat_model
+from app.tools.context import ToolContext
 from pydantic import BaseModel
 from app.core.retrieval import search_knowledge
 class Intent(BaseModel):
@@ -60,16 +61,18 @@ def make_services() -> Services:
 
 async def order_tool(
     args: dict,
-    user_id: str,
+    context: ToolContext,
     call_id: str,
 ):
     return await query_order.ainvoke({
         **args,
-        "user_id": user_id,
+        "user_id": context.user_id,
     })
+
+
 async def ticket_tool(
     args: dict,
-    user_id: str,
+    context: ToolContext,
     call_id: str,
 ):
     return await create_ticket.ainvoke(args)

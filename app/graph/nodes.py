@@ -7,6 +7,7 @@ from app.core.coref import entities, resolve
 from app.core.retrieval import retrieve_policy
 from jsonschema.exceptions import ValidationError
 from app.tools.registry import validate_args
+from app.tools.context import ToolContext
 
 
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
@@ -163,9 +164,13 @@ def make_nodes(services):
                 elif call["name"] == "create_ticket" and approved is not True:
                     result = {"cancelled": True}
                 else:
+                    context = ToolContext(
+                        user_id=state["user_id"],
+                        conversation_id=state["conversation_id"],
+                    )
                     result = await services.tools[call["name"]](
                         call["args"],
-                        state["user_id"],
+                        context,
                         call["id"],
                     )
 
