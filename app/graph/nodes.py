@@ -81,13 +81,18 @@ def make_nodes(services):
 
         if not isinstance(message, AIMessage):
             raise TypeError("Agent 必须返回 AIMessage")
-        if message.invalid_tool_calls or any(
-            not isinstance(call, dict)
-            or not isinstance(call.get("id"), str)
-            or not call["id"].strip()
-            or not isinstance(call.get("name"), str)
-            or not call["name"].strip()
-            for call in message.tool_calls
+        if (
+            message.invalid_tool_calls
+            or any(
+                not isinstance(call, dict)
+                or not isinstance(call.get("id"), str)
+                or not call["id"].strip()
+                or not isinstance(call.get("name"), str)
+                or not call["name"].strip()
+                for call in message.tool_calls
+            )
+            or len({call["id"] for call in message.tool_calls})
+            != len(message.tool_calls)
         ):
             response = AIMessage(content="工具调用格式错误，请稍后重试。")
             return update(

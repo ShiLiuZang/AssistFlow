@@ -10,6 +10,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from app.tools.engine import classify_tool_result
 from app.tools.order_tools import query_order
 from app.core.llm import get_chat_model
 from app.core.prompts import CHAT_SYSTEM_PROMPT
@@ -54,34 +55,8 @@ def restored_tool_status(content: str) -> str:
     except (TypeError, ValueError):
         return "error"
 
-    if not isinstance(result, dict):
-        return "error"
-
-    error_codes = {
-        "invalid_call",
-        "unknown_tool",
-        "invalid_args",
-        "invalid_schema",
-        "permission_denied",
-        "business_error",
-        "execution_error",
-        "format_error",
-        "order_not_owned",
-    }
-
-    if result.get("code") in error_codes:
-        return "error"
-
-    if result.get("cancelled") is True:
-        return "error"
-
-    if result.get("confirmed") is False:
-        return "error"
-
-    if result.get("error"):
-        return "error"
-
-    return "success"
+    status = classify_tool_result(result)
+    return "success" if status == "success" else "error"
 
 def restore_messages(records: list) -> list:
     """把数据库消息恢复为 LangChain 消息。"""

@@ -27,7 +27,44 @@ class ToolRun:
     def ok(self) -> bool:
         return self.status == "success"
 
+ERROR_STATUSES = frozenset({
+    "invalid_call",
+    "unknown_tool",
+    "invalid_args",
+    "invalid_schema",
+    "permission_denied",
+    "business_error",
+    "execution_error",
+    "format_error",
+})
 
+
+def classify_tool_result(data: object) -> str:
+    """按当前工具结果约定分类，供执行和历史恢复共同使用。"""
+    if not isinstance(data, dict):
+        return "format_error"
+
+    code = data.get("code")
+
+    if code is not None and not isinstance(code, str):
+        return "format_error"
+
+    if code == "order_not_owned":
+        return "business_error"
+
+    if code in ERROR_STATUSES:
+        return code
+
+    if (
+        data.get("cancelled") is True
+        or data.get("confirmed") is False
+    ):
+        return "permission_denied"
+
+    if data.get("error"):
+        return "business_error"
+
+    return "success"
 def make_tool_run(
     call: dict,
     status: str,
@@ -36,6 +73,8 @@ def make_tool_run(
     duration_ms: int = 0,
 ) -> ToolRun:
     """将业务结果或安全错误转换成统一结果。"""
+    if status == "success":
+        status = classify_tool_result(data)
     try:
         content = json.dumps(data, ensure_ascii=False, allow_nan=False)
     except (TypeError, ValueError, OverflowError):
@@ -168,11 +207,6 @@ async def execute_tool_call(
             },
         )
 
-    if (
-            call["name"] == "query_order"
-            and result.get("found") is False
-            and result.get("code") == "order_not_owned"
-    ):
-        return finish("business_error", result)
+
 
     return finish("success", result)
