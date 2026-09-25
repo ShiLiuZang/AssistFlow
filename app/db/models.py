@@ -1,6 +1,8 @@
 from datetime import datetime
-
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import (
+    JSON, DateTime, ForeignKey, Integer, String, Text,
+    UniqueConstraint, func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -86,4 +88,36 @@ class KnowledgeChunk(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
+    )
+
+
+class ToolAuditLog(Base):
+    __tablename__ = "tool_audit_logs"
+    __table_args__ = (
+        UniqueConstraint(
+            "audit_key",
+            name="uq_tool_audit_logs_audit_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    audit_key: Mapped[str | None] = mapped_column(
+        String(200), nullable=True,
+    )
+    tool_call_id: Mapped[str] = mapped_column(String(100))
+    conversation_id: Mapped[str] = mapped_column(
+        String(64), index=True,
+    )
+    tool_name: Mapped[str] = mapped_column(String(128))
+    source: Mapped[str] = mapped_column(String(16))
+    server: Mapped[str | None] = mapped_column(
+        String(64), nullable=True,
+    )
+    status: Mapped[str] = mapped_column(String(32))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    retry_count: Mapped[int] = mapped_column(Integer)
+    argument_fields: Mapped[list[str]] = mapped_column(JSON)
+    result_chars: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
     )

@@ -17,6 +17,8 @@ class ToolSpec:
     permission: Literal["read", "write"] = "read"
     timeout: float = 5.0
     max_retries: int = 0
+    source: Literal["builtin", "mcp"] = "builtin"
+    server: str | None = None
 
 
 class Registry:
@@ -46,6 +48,16 @@ class Registry:
             raise ValueError("工具 timeout 必须是有限的正数")
         if type(spec.max_retries) is not int or spec.max_retries < 0:
             raise ValueError("工具 max_retries 必须是非负整数")
+        if spec.source not in {"builtin", "mcp"}:
+            raise ValueError("工具来源必须是 builtin 或 mcp")
+
+        if spec.source == "builtin" and spec.server is not None:
+            raise ValueError("内置工具不能设置 MCP 服务名")
+
+        if spec.source == "mcp":
+            if not isinstance(spec.server, str) or not spec.server.strip():
+                raise ValueError("MCP 工具必须设置有效的服务名")
+
         self._specs[spec.name] = replace(spec, schema=deepcopy(spec.schema))
 
     def get(self, name: str) -> ToolSpec | None:

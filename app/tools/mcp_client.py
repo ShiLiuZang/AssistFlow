@@ -11,7 +11,12 @@ import httpx2
 from jsonschema import Draft202012Validator
 from referencing import Registry as RefRegistry
 
-from app.tools.engine import BusinessError, ToolResultFormatError
+from app.tools.engine import (
+    BusinessError,
+    ToolResultFormatError,
+    classify_tool_result,
+)
+from app.tools.formatting import format_logistics_result
 from app.tools.orders import get_user_order, get_user_tracking_no
 from app.tools.context import ToolContext
 from app.tools.registry import Registry, ToolSpec
@@ -179,11 +184,27 @@ async def discover_mcp_tools(
 
                     validator.validate(remote_args)
 
-                    return await transport.call_tool(
+                    result = await transport.call_tool(
                         server_name,
                         tool_name,
                         remote_args,
                     )
+
+                    if classify_tool_result(result) != "success":
+                        return result
+
+                    if (server_name, tool_name) == (
+                        "logistics",
+                        "query_logistics",
+                    ):
+                        try:
+                            return format_logistics_result(result)
+                        except ValueError as error:
+                            raise ToolResultFormatError(
+                                "物流结果格式不符合约定"
+                            ) from error
+
+                    return result
 
                 registry.register(ToolSpec(
                     name=name,
@@ -193,6 +214,8 @@ async def discover_mcp_tools(
                     permission=permission,
                     timeout=5.0,
                     max_retries=2,
+                    source="mcp",
+                    server=server,
                 ))
             except Exception as error:
                 issues.append({

@@ -4,7 +4,13 @@ from app.core.conversation_lock import conversation_lock
 from sqlalchemy import select
 from datetime import datetime
 from app.db.database import SessionLocal
-from app.db.models import Conversation, KnowledgeChunk, Message, Ticket
+from sqlalchemy.exc import IntegrityError
+
+from app.db.models import (
+    Conversation, KnowledgeChunk, Message, Ticket, ToolAuditLog,
+)
+from app.tools.audit import ToolAuditRecord
+
 
 async def create_conversation(user_id: str) -> int:
     """创建会话并返回数据库 ID。"""
@@ -352,3 +358,38 @@ async def persist_graph_messages(conversation_id: int, user_id: str, messages: l
             else:
                 session.add(Message(conversation_id=conversation_id, role="graph_sync",
                                     content=str(len(messages))))
+
+
+async def insert_tool_audit(record: ToolAuditRecord) -> None:
+    row = ToolAuditLog(
+        audit_key=record.audit_key,
+        tool_call_id=record.tool_call_id,
+        conversation_id=record.conversation_id,
+        tool_name=record.tool_name,
+        source=record.source,
+        server=record.server,
+        status=record.status,
+        duration_ms=record.duration_ms,
+        retry_count=record.retry_count,
+        argument_fields=list(record.argument_fields),
+        result_chars=record.result_chars,
+        created_at=record.created_at,
+    )
+
+    try:
+        async with SessionLocal() as session, session.begin():
+            session.add(row)
+    except IntegrityError:
+        if record.audit_key is None:
+            raise
+
+        # 只把“相同审计键已经存在”当作幂等重放。
+        # 若是其他数据库约束失败，仍交给外层审计边界记录。
+        async with SessionLocal() as session:
+            existing_id = await session.scalar(
+                select(ToolAuditLog.id).where(
+                    ToolAuditLog.audit_key == record.audit_key,
+                )
+            )
+        if existing_id is None:
+            raise

@@ -1,4 +1,5 @@
 import logging
+import time
 
 from collections.abc import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
@@ -10,6 +11,10 @@ from app.core.conversation_lock import conversation_lock
 from app.db import repository
 from app.graph.runtime import Runtime
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
+from app.tools.audit import (
+    build_ticket_decision_audit,
+    emit_tool_audit,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/actions", tags=["actions"])
@@ -47,10 +52,33 @@ async def stream_ticket_decision(
             is_graph = bool(snapshot and snapshot.values)
             if is_graph and saved is None and not pending:
                 raise ValueError("没有待恢复的工单中断")
+            started = time.monotonic()
             result = await repository.decide_ticket(
-                request.conversation_id, request.user_id, call_id,
-                request.confirmed, graph=is_graph,
+                request.conversation_id,
+                request.user_id,
+                call_id,
+                request.confirmed,
+                graph=is_graph,
             )
+            duration_ms = int((time.monotonic() - started) * 1000)
+
+            try:
+                audit_record = build_ticket_decision_audit(
+                    tool_call,
+                    request.conversation_id,
+                    result,
+                    duration_ms,
+                )
+            except Exception as error:
+                logger.warning(
+                    "工单审计记录构造失败：error_type=%s",
+                    type(error).__name__,
+                )
+            else:
+                await emit_tool_audit(
+                    repository.insert_tool_audit,
+                    audit_record,
+                )
             if pending and pending.get("tool_call_id") == call_id:
                 graph_result = await runtime.run_turn(
                     "", request.user_id, str(request.conversation_id),

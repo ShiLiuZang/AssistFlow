@@ -30,6 +30,8 @@ from app.core.intent import (
     model_predictor,
 )
 from functools import partial
+from app.tools.audit import AuditSink
+
 
 @dataclass
 class Services:
@@ -43,6 +45,8 @@ class Services:
     expand_policy: Callable
     max_steps: int = 3
     registry: Registry | None = None
+    audit_sink: AuditSink | None = None
+
 
 def make_services(registry: Registry | None = None) -> Services:
     if registry is None:

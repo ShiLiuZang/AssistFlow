@@ -12,6 +12,7 @@ from app.api.actions import router as actions_router
 from app.api.knowledge import router as knowledge_router
 from app.config import settings
 from app.core.summarizer import close_persisted_summaries
+from app.db import repository
 from app.graph.adapters import make_services_with_mcp
 from app.graph.checkpoint import persistent_runtime
 from app.tools.mcp_client import StreamableHTTPTransport
@@ -33,6 +34,8 @@ async def lifespan(app: FastAPI):
         StreamableHTTPTransport(server_urls),
         list(server_urls),
     )
+    services.audit_sink = repository.insert_tool_audit
+
     for issue in issues:
         logger.warning("MCP 工具发现异常：%s", issue)
     async with persistent_runtime(

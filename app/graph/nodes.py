@@ -1,4 +1,6 @@
 import json
+from dataclasses import replace
+
 from langgraph.types import interrupt
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
@@ -11,6 +13,8 @@ from app.tools.engine import (
     execute_tool_call,
     make_tool_run,
 )
+from app.tools.audit import build_tool_audit, emit_tool_audit
+
 
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
@@ -199,7 +203,40 @@ def make_nodes(services):
                     call,
                     context,
                     registry,
+                    audit_sink=getattr(services, "audit_sink", None),
                 )
+            if call["name"] == "create_ticket":
+                approved = approvals.get(call["id"])
+                result_from_decision = (
+                    call["id"] not in validation_errors
+                    and isinstance(approved, dict)
+                    and approved.get("tool_call_id") == call["id"]
+                    and isinstance(approved.get("tool_result"), dict)
+                    and type(approved["tool_result"].get("confirmed")) is bool
+                )
+
+                if not result_from_decision:
+                    context = ToolContext(
+                        user_id=state["user_id"],
+                        conversation_id=state["conversation_id"],
+                    )
+                    record = build_tool_audit(
+                        call,
+                        context,
+                        run,
+                        registry.get("create_ticket"),
+                    )
+                    record = replace(
+                        record,
+                        audit_key=(
+                            f"ticket-node:{state['conversation_id']}:"
+                            f"{call['id']}:{run.status}"
+                        ),
+                    )
+                    await emit_tool_audit(
+                        getattr(services, "audit_sink", None),
+                        record,
+                    )
 
             if (
                     call["name"] == "query_order"

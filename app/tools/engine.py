@@ -7,7 +7,11 @@ from jsonschema.exceptions import ValidationError
 
 from app.tools.context import ToolContext
 from app.tools.registry import Registry, ToolSpec, validate_args
-
+from app.tools.audit import (
+    AuditSink,
+    build_tool_audit,
+    emit_tool_audit,
+)
 
 class BusinessError(Exception):
     """处理器明确报告业务条件不满足。"""
@@ -145,6 +149,8 @@ async def execute_tool_call(
     call: object,
     context: ToolContext,
     registry: Registry,
+    *,
+    audit_sink: AuditSink | None = None,
 ) -> ToolRun:
     """执行一次受控工具调用；只读暂态故障可有限重试。"""
     started = time.monotonic()
@@ -165,9 +171,10 @@ async def execute_tool_call(
         ),
     }
 
-    def finish(status: str, data: dict) -> ToolRun:
+    async def finish(status: str, data: dict) -> ToolRun:
         elapsed = int((time.monotonic() - started) * 1000)
-        return make_tool_run(
+
+        run = make_tool_run(
             safe_call,
             status,
             data,
@@ -175,12 +182,25 @@ async def execute_tool_call(
             retry_count=retry_count,
         )
 
+        if audit_sink is not None:
+            registered_spec = registry.get(safe_call["name"])
+
+            record = build_tool_audit(
+                call,
+                context,
+                run,
+                registered_spec,
+            )
+            await emit_tool_audit(audit_sink, record)
+
+        return run
+
     spec, error = check_tool_call(call, registry)
     if error is not None:
-        return finish(error["code"], error)
+        return await finish(error["code"], error)
 
     if spec.permission == "write":
-        return finish(
+        return await finish(
             "permission_denied",
             {
                 "code": "permission_denied",
@@ -215,7 +235,7 @@ async def execute_tool_call(
                 else:
                     message = "连接暂时不可用，请稍后再试"
 
-                return finish(
+                return await finish(
                     status,
                     {
                         "code": status,
@@ -230,7 +250,7 @@ async def execute_tool_call(
             )
             await asyncio.sleep(delay)
         except ToolResultFormatError:
-            return finish(
+            return await finish(
                 "format_error",
                 {
                     "code": "format_error",
@@ -238,7 +258,7 @@ async def execute_tool_call(
                 },
             )
         except BusinessError:
-            return finish(
+            return await finish(
                 "business_error",
                 {
                     "code": "business_error",
@@ -246,7 +266,7 @@ async def execute_tool_call(
                 },
             )
         except Exception:
-            return finish(
+            return await finish(
                 "execution_error",
                 {
                     "code": "execution_error",
@@ -257,7 +277,7 @@ async def execute_tool_call(
             break
 
     if not isinstance(result, dict):
-        return finish(
+        return await finish(
             "format_error",
             {
                 "code": "format_error",
@@ -265,4 +285,4 @@ async def execute_tool_call(
             },
         )
 
-    return finish("success", result)
+    return await finish("success", result)
