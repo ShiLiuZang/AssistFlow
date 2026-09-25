@@ -253,5 +253,6 @@ def make_tool_registry() -> Registry:
         invoke=ticket_tool,
         description=create_ticket.description,
         schema=ticket_schema,
+        permission="write",
     ))
     return registry

@@ -5,10 +5,12 @@ from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
 from app.core.coref import entities, resolve
 from app.core.retrieval import retrieve_policy
-from jsonschema.exceptions import ValidationError
-from app.tools.registry import validate_args
 from app.tools.context import ToolContext
-
+from app.tools.engine import (
+    check_tool_call,
+    execute_tool_call,
+    make_tool_run,
+)
 
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
@@ -107,88 +109,131 @@ def make_nodes(services):
         calls = state["messages"][-1].tool_calls
         messages = []
         approvals = {}
-        verified_order = state.get("last_order_id")
-        current_order = state.get("order")
         validation_errors: dict[str, dict[str, str]] = {}
 
-        # 先收集每个调用的确认，再执行工具；恢复会从节点开头重跑。
+        verified_order = state.get("last_order_id")
+        current_order = state.get("order")
+
+        registry = services.registry
+        if registry is None:
+            raise RuntimeError("工具注册表未配置")
+
+        # 第一轮只准备工单确认。
+        # interrupt 恢复会从节点开头重跑，因此这里不执行业务处理器。
         for call in calls:
-            if not isinstance(call.get("args"), dict):
+            if call["name"] != "create_ticket":
+                continue
+
+            spec, error = check_tool_call(call, registry)
+            if error is not None:
+                validation_errors[call["id"]] = error
+                continue
+
+            if spec.permission != "write":
                 validation_errors[call["id"]] = {
-                    "code": "invalid_call",
-                    "error": "工具调用的 args 必须是对象",
+                    "code": "permission_denied",
+                    "error": "工单工具的权限配置异常",
                 }
                 continue
-            registry = services.registry
-            if registry is None:
-                raise RuntimeError("工具注册表未配置")
 
-            spec = registry.get(call["name"])
-            if spec is not None:
-                try:
-                    validate_args(spec, call["args"])
-                except ValidationError:
-                    validation_errors[call["id"]] = {
-                        "code": "invalid_args",
-                        "error": "工具参数不符合 Schema，请补充后重试",
-                    }
-                    continue
-                except Exception:
-                    validation_errors[call["id"]] = {
-                        "code": "invalid_schema",
-                        "error": "工具参数定义异常",
-                    }
-                    continue
+            approvals[call["id"]] = interrupt({
+                "kind": "confirm_ticket",
+                "tool_call_id": call["id"],
+                "preview": call["args"],
+            })
 
-            if call["name"] == "create_ticket" and call["name"] in services.tools:
-                approvals[call["id"]] = interrupt({
-                    "kind": "confirm_ticket",
-                    "tool_call_id": call["id"],
-                    "preview": call["args"],
-                })
-
+        # 第二轮为每个调用生成对应结果。
         for call in calls:
-            approved = approvals.get(call["id"], False)
-            try:
-                if call["id"] in validation_errors:
-                    result = validation_errors[call["id"]]
-                elif call["name"] not in services.tools:
-                    result = {"error": "未知工具"}
-                elif (
-                    call["name"] == "create_ticket"
-                    and isinstance(approved, dict)
-                    and approved.get("tool_call_id") == call["id"]
-                    and "tool_result" in approved
+            if call["id"] in validation_errors:
+                error = validation_errors[call["id"]]
+                run = make_tool_run(
+                    call,
+                    error["code"],
+                    error,
+                )
+
+            elif call["name"] == "create_ticket":
+                approved = approvals.get(call["id"], False)
+
+                if (
+                        isinstance(approved, dict)
+                        and approved.get("tool_call_id") == call["id"]
+                        and isinstance(approved.get("tool_result"), dict)
                 ):
+                    # 来自服务端确认入口的已保存决定。
+                    # 这里消费结果，不再次建单。
                     result = approved["tool_result"]
-                elif call["name"] == "create_ticket" and approved is not True:
-                    result = {"cancelled": True}
+
+                    if result.get("confirmed") is True:
+                        status = "success"
+                    elif result.get("confirmed") is False:
+                        status = "permission_denied"
+                    else:
+                        status = "execution_error"
+                        result = {
+                            "code": "execution_error",
+                            "error": "工单确认结果格式异常",
+                        }
+
+                    run = make_tool_run(call, status, result)
+
+                elif approved is True:
+                    # 保留现有内部布尔恢复路径：
+                    # ticket_tool 目前仅返回预览，不负责实际建单。
+                    try:
+                        context = ToolContext(
+                            user_id=state["user_id"],
+                            conversation_id=state["conversation_id"],
+                        )
+                        result = await services.tools["create_ticket"](
+                            call["args"],
+                            context,
+                            call["id"],
+                        )
+                        run = make_tool_run(call, "success", result)
+                    except Exception:
+                        run = make_tool_run(
+                            call,
+                            "execution_error",
+                            {
+                                "code": "execution_error",
+                                "error": "工具执行失败，请稍后重试",
+                            },
+                        )
+
                 else:
-                    context = ToolContext(
-                        user_id=state["user_id"],
-                        conversation_id=state["conversation_id"],
-                    )
-                    result = await services.tools[call["name"]](
-                        call["args"],
-                        context,
-                        call["id"],
+                    run = make_tool_run(
+                        call,
+                        "permission_denied",
+                        {"cancelled": True},
                     )
 
-            except Exception:
-                result = {"error": "工具执行失败"}
+            else:
+                context = ToolContext(
+                    user_id=state["user_id"],
+                    conversation_id=state["conversation_id"],
+                )
+                run = await execute_tool_call(
+                    call,
+                    context,
+                    registry,
+                )
+
             if (
-                call["name"] == "query_order"
-                and isinstance(result, dict)
-                and result.get("found") is True
-                and result.get("order_id")
+                    call["name"] == "query_order"
+                    and run.ok
+                    and run.data.get("found") is True
+                    and run.data.get("order_id")
             ):
-                verified_order = result["order_id"]
-                current_order = result
+                verified_order = run.data["order_id"]
+                current_order = run.data
+
             messages.append(
                 ToolMessage(
-                    content=json.dumps(result, ensure_ascii=False),
-                    tool_call_id=call["id"],
-                    name=call["name"],
+                    content=run.content,
+                    tool_call_id=run.tool_call_id,
+                    name=run.name,
+                    status="success" if run.ok else "error",
                 )
             )
 
@@ -199,7 +244,6 @@ def make_nodes(services):
             last_order_id=verified_order,
             order=current_order,
         )
-
     async def classify(state: ConversationState):
         messages = state.get("messages", [])
         covered_count = state.get("covered_count", 0)

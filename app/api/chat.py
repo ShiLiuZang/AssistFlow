@@ -48,7 +48,40 @@ def graph_event_to_sse(
         payload.update(payload.pop("preview"))
 
     return make_sse(payload)
+def restored_tool_status(content: str) -> str:
+    try:
+        result = json.loads(content)
+    except (TypeError, ValueError):
+        return "error"
 
+    if not isinstance(result, dict):
+        return "error"
+
+    error_codes = {
+        "invalid_call",
+        "unknown_tool",
+        "invalid_args",
+        "invalid_schema",
+        "permission_denied",
+        "business_error",
+        "execution_error",
+        "format_error",
+        "order_not_owned",
+    }
+
+    if result.get("code") in error_codes:
+        return "error"
+
+    if result.get("cancelled") is True:
+        return "error"
+
+    if result.get("confirmed") is False:
+        return "error"
+
+    if result.get("error"):
+        return "error"
+
+    return "success"
 
 def restore_messages(records: list) -> list:
     """把数据库消息恢复为 LangChain 消息。"""
@@ -65,14 +98,16 @@ def restore_messages(records: list) -> list:
                 )
             )
         elif record.role == "tool":
+            content = record.content or ""
             messages.append(
                 ToolMessage(
-                    content=record.content or "",
+                    content=content,
                     tool_call_id=record.tool_call_id or "",
+                    status=restored_tool_status(content),
                 )
             )
-
     return messages
+
 async def stream_chat(
     request: ChatRequest,
     conversation_id: int,

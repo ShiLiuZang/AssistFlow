@@ -3,7 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from jsonschema import Draft202012Validator
 from referencing import Registry as RefRegistry
-
+from typing import Literal
 
 @dataclass(frozen=True)
 class ToolSpec:
@@ -11,7 +11,7 @@ class ToolSpec:
     invoke: Callable
     description: str
     schema: dict
-
+    permission: Literal["read", "write"] = "read"
 
 class Registry:
     def __init__(self) -> None:
@@ -29,6 +29,8 @@ class Registry:
             raise ValueError("工具参数 Schema 必须是对象")
         if spec.schema.get("additionalProperties") is not False:
             raise ValueError("工具参数 Schema 必须禁止额外字段")
+        if spec.permission not in {"read", "write"}:
+            raise ValueError("工具权限必须是 read 或 write")
         self._specs[spec.name] = replace(spec, schema=deepcopy(spec.schema))
 
     def get(self, name: str) -> ToolSpec | None:
