@@ -158,15 +158,14 @@ def make_nodes(services):
                 )
 
             elif call["name"] == "create_ticket":
-                approved = approvals.get(call["id"], False)
+                approved = approvals.get(call["id"])
 
                 if (
-                        isinstance(approved, dict)
-                        and approved.get("tool_call_id") == call["id"]
-                        and isinstance(approved.get("tool_result"), dict)
+                    isinstance(approved, dict)
+                    and approved.get("tool_call_id") == call["id"]
+                    and isinstance(approved.get("tool_result"), dict)
                 ):
-                    # 来自服务端确认入口的已保存决定。
-                    # 这里消费结果，不再次建单。
+                    # 只消费服务端确认入口回传的已保存决定，不再次执行工具。
                     result = approved["tool_result"]
 
                     if result.get("confirmed") is True:
@@ -181,36 +180,14 @@ def make_nodes(services):
                         }
 
                     run = make_tool_run(call, status, result)
-
-                elif approved is True:
-                    # 保留现有内部布尔恢复路径：
-                    # ticket_tool 目前仅返回预览，不负责实际建单。
-                    try:
-                        context = ToolContext(
-                            user_id=state["user_id"],
-                            conversation_id=state["conversation_id"],
-                        )
-                        result = await services.tools["create_ticket"](
-                            call["args"],
-                            context,
-                            call["id"],
-                        )
-                        run = make_tool_run(call, "success", result)
-                    except Exception:
-                        run = make_tool_run(
-                            call,
-                            "execution_error",
-                            {
-                                "code": "execution_error",
-                                "error": "工具执行失败，请稍后重试",
-                            },
-                        )
-
                 else:
                     run = make_tool_run(
                         call,
                         "permission_denied",
-                        {"cancelled": True},
+                        {
+                            "code": "permission_denied",
+                            "error": "工单确认结果无效或不匹配",
+                        },
                     )
 
             else:

@@ -7,11 +7,16 @@ from pydantic import (
     model_validator,
 )
 
+
 class ResumeTicketRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     conversation_id: int
     user_id: str
-    confirmed: bool
+    confirmed: StrictBool
     tool_call_id: str | None = None
+
+
 class SelectOrderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
