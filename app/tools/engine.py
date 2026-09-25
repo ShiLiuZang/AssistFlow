@@ -27,6 +27,7 @@ class ToolRun:
     def ok(self) -> bool:
         return self.status == "success"
 
+
 ERROR_STATUSES = frozenset({
     "invalid_call",
     "unknown_tool",
@@ -36,6 +37,8 @@ ERROR_STATUSES = frozenset({
     "business_error",
     "execution_error",
     "format_error",
+    "timeout",
+    "transport_error",
 })
 
 
@@ -65,12 +68,15 @@ def classify_tool_result(data: object) -> str:
         return "business_error"
 
     return "success"
+
+
 def make_tool_run(
     call: dict,
     status: str,
     data: dict,
     *,
     duration_ms: int = 0,
+    retry_count: int = 0,
 ) -> ToolRun:
     """将业务结果或安全错误转换成统一结果。"""
     if status == "success":
@@ -91,7 +97,10 @@ def make_tool_run(
         content=content,
         data=data,
         duration_ms=duration_ms,
+        retry_count=retry_count,
     )
+
+
 def check_tool_call(
     call: object,
     registry: Registry,
@@ -129,24 +138,28 @@ def check_tool_call(
         }
 
     return spec, None
+
+
 async def execute_tool_call(
-        call: object,
-        context: ToolContext,
-        registry: Registry,
-)-> ToolRun:
-    """执行一次只读工具调用，返回统一结果；取消向上传播。"""
+    call: object,
+    context: ToolContext,
+    registry: Registry,
+) -> ToolRun:
+    """执行一次受控工具调用；只读暂态故障可有限重试。"""
     started = time.monotonic()
+    retry_count = 0
+
     safe_call = {
         "id": (
             call.get("id", "")
             if isinstance(call, dict)
-               and isinstance(call.get("id"), str)
+            and isinstance(call.get("id"), str)
             else ""
         ),
         "name": (
             call.get("name", "")
             if isinstance(call, dict)
-               and isinstance(call.get("name"), str)
+            and isinstance(call.get("name"), str)
             else ""
         ),
     }
@@ -158,6 +171,7 @@ async def execute_tool_call(
             status,
             data,
             duration_ms=elapsed,
+            retry_count=retry_count,
         )
 
     spec, error = check_tool_call(call, registry)
@@ -173,30 +187,65 @@ async def execute_tool_call(
             },
         )
 
-    try:
-        result = await spec.invoke(
-            dict(call["args"]),
-            context,
-            call["id"],
-        )
-    except asyncio.CancelledError:
-        raise
-    except BusinessError:
-        return finish(
-            "business_error",
-            {
-                "code": "business_error",
-                "error": "业务条件不满足",
-            },
-        )
-    except Exception:
-        return finish(
-            "execution_error",
-            {
-                "code": "execution_error",
-                "error": "工具执行失败，请稍后重试",
-            },
-        )
+    retry_limit = spec.max_retries if spec.permission == "read" else 0
+
+    while True:
+        try:
+            result = await asyncio.wait_for(
+                spec.invoke(
+                    dict(call["args"]),
+                    context,
+                    call["id"],
+                ),
+                timeout=spec.timeout,
+            )
+        except asyncio.CancelledError:
+            raise
+        except (TimeoutError, ConnectionError) as error:
+            status = (
+                "timeout"
+                if isinstance(error, TimeoutError)
+                else "transport_error"
+            )
+
+            if retry_count >= retry_limit:
+                if status == "timeout":
+                    message = "查询超时，暂时无法确认结果"
+                else:
+                    message = "连接暂时不可用，请稍后再试"
+
+                return finish(
+                    status,
+                    {
+                        "code": status,
+                        "error": message,
+                    },
+                )
+
+            retry_count += 1
+            delay = min(
+                0.1 * (2 ** min(retry_count - 1, 4)),
+                1.0,
+            )
+            await asyncio.sleep(delay)
+        except BusinessError:
+            return finish(
+                "business_error",
+                {
+                    "code": "business_error",
+                    "error": "业务条件不满足",
+                },
+            )
+        except Exception:
+            return finish(
+                "execution_error",
+                {
+                    "code": "execution_error",
+                    "error": "工具执行失败，请稍后重试",
+                },
+            )
+        else:
+            break
 
     if not isinstance(result, dict):
         return finish(
@@ -206,7 +255,5 @@ async def execute_tool_call(
                 "error": "工具已执行，但返回结果格式不符合约定",
             },
         )
-
-
 
     return finish("success", result)

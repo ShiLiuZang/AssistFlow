@@ -247,6 +247,8 @@ def make_tool_registry() -> Registry:
         invoke=order_tool,
         description=query_order.description,
         schema=order_schema,
+        timeout=5.0,
+        max_retries=2,
     ))
     registry.register(ToolSpec(
         name=create_ticket.name,

@@ -1,9 +1,12 @@
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, replace
+import math
+
 from jsonschema import Draft202012Validator
 from referencing import Registry as RefRegistry
 from typing import Literal
+
 
 @dataclass(frozen=True)
 class ToolSpec:
@@ -12,6 +15,9 @@ class ToolSpec:
     description: str
     schema: dict
     permission: Literal["read", "write"] = "read"
+    timeout: float = 5.0
+    max_retries: int = 0
+
 
 class Registry:
     def __init__(self) -> None:
@@ -31,6 +37,15 @@ class Registry:
             raise ValueError("工具参数 Schema 必须禁止额外字段")
         if spec.permission not in {"read", "write"}:
             raise ValueError("工具权限必须是 read 或 write")
+        if (
+            isinstance(spec.timeout, bool)
+            or not isinstance(spec.timeout, (int, float))
+            or not math.isfinite(spec.timeout)
+            or spec.timeout <= 0
+        ):
+            raise ValueError("工具 timeout 必须是有限的正数")
+        if type(spec.max_retries) is not int or spec.max_retries < 0:
+            raise ValueError("工具 max_retries 必须是非负整数")
         self._specs[spec.name] = replace(spec, schema=deepcopy(spec.schema))
 
     def get(self, name: str) -> ToolSpec | None:
