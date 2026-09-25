@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Mapping, Sequence
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -319,6 +320,15 @@ class StreamableHTTPTransport:
             if isinstance(block, TextContent)
         ]
         if text_blocks:
+            text = "\n".join(block["text"] for block in text_blocks)
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                pass
+            else:
+                if not isinstance(parsed, dict):
+                    raise ToolResultFormatError("远端 MCP 工具 JSON 结果必须是对象")
+                return parsed
             return {"content": text_blocks}
 
         raise ToolResultFormatError("远端 MCP 工具没有可处理的结果")
