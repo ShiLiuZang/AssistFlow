@@ -19,6 +19,8 @@ dependencies = [
     "langgraph>=1.0,<2.0",
     "jsonschema==4.26.0",
     "referencing>=0.37.0",
+    "mcp>=2,<3",
+    "httpx2",
 ]
 [dependency-groups]
 dev = [

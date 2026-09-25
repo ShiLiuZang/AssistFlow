@@ -1,10 +1,9 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-
 from app.api.chat import router as chat_router
 from app.api.graph_chat import router as graph_chat_router
 from app.api.extract import router as extract_router
@@ -13,14 +12,31 @@ from app.api.actions import router as actions_router
 from app.api.knowledge import router as knowledge_router
 from app.config import settings
 from app.core.summarizer import close_persisted_summaries
-from app.graph.adapters import make_services
+from app.graph.adapters import make_services_with_mcp
 from app.graph.checkpoint import persistent_runtime
+from app.tools.mcp_client import StreamableHTTPTransport
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    server_urls = {
+        server: url
+        for server, url in {
+            "logistics": settings.mcp_logistics_url,
+            "aftersales": settings.mcp_aftersales_url,
+        }.items()
+        if url.strip()
+    }
+    services, issues = await make_services_with_mcp(
+        StreamableHTTPTransport(server_urls),
+        list(server_urls),
+    )
+    for issue in issues:
+        logger.warning("MCP 工具发现异常：%s", issue)
     async with persistent_runtime(
-        make_services(),
+        services,
         settings.graph_checkpoint_path,
     ) as runtime:
         app.state.graph_runtime = runtime

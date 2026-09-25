@@ -11,7 +11,8 @@ from app.tools.registry import Registry, ToolSpec, validate_args
 
 class BusinessError(Exception):
     """处理器明确报告业务条件不满足。"""
-
+class ToolResultFormatError(Exception):
+    """工具返回了不符合本项目结果约定的数据。"""
 
 @dataclass(frozen=True)
 class ToolRun:
@@ -228,6 +229,14 @@ async def execute_tool_call(
                 1.0,
             )
             await asyncio.sleep(delay)
+        except ToolResultFormatError:
+            return finish(
+                "format_error",
+                {
+                    "code": "format_error",
+                    "error": "工具返回结果格式异常，暂时无法确认结果",
+                },
+            )
         except BusinessError:
             return finish(
                 "business_error",

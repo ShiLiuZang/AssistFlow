@@ -21,6 +21,7 @@ from app.core.memory import Message as ViewMessage, build_window
 from app.core.prompts import CHAT_SYSTEM_PROMPT
 from app.tools.order_tools import query_order
 from app.tools.registry import Registry, ToolSpec
+from app.tools.mcp_client import MCPTransport, discover_mcp_tools
 from app.tools.ticket_tools import create_ticket
 from dataclasses import dataclass
 from typing import Callable
@@ -29,7 +30,6 @@ from app.core.intent import (
     model_predictor,
 )
 from functools import partial
-
 
 @dataclass
 class Services:
@@ -44,8 +44,10 @@ class Services:
     max_steps: int = 3
     registry: Registry | None = None
 
-def make_services() -> Services:
-    registry = make_tool_registry()
+def make_services(registry: Registry | None = None) -> Services:
+    if registry is None:
+        registry = make_tool_registry()
+
     return Services(
         classify=classify_detail,
         retrieve=retrieve,
@@ -57,6 +59,15 @@ def make_services() -> Services:
         tools=registry.execution_tools(),
         registry=registry,
     )
+
+
+async def make_services_with_mcp(
+    transport: MCPTransport,
+    servers: list[str],
+) -> tuple[Services, list[dict[str, str]]]:
+    registry = make_tool_registry()
+    issues = await discover_mcp_tools(registry, transport, servers)
+    return make_services(registry), issues
 
 
 async def order_tool(

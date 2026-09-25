@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     rerank_top_k: int = 10
     rerank_min_score: float = 0.3
     subquery_split: bool = True
-
+    mcp_logistics_url: str = ""
+    mcp_aftersales_url: str = ""
 
 # 模块导入时创建唯一配置对象；缺少必填字段会立即报错。
 settings = Settings()
