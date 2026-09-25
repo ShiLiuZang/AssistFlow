@@ -70,7 +70,9 @@ async def make_services_with_mcp(
     servers: list[str],
 ) -> tuple[Services, list[dict[str, str]]]:
     registry = make_tool_registry()
-    issues = await discover_mcp_tools(registry, transport, servers)
+    issues = await discover_mcp_tools(
+        registry, transport, servers, discovery_timeout=5.0,
+    )
     return make_services(registry), issues
 
 
