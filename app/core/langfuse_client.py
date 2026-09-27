@@ -50,6 +50,7 @@ def start_langfuse_span(
     name: str,
     trace_id: str,
     parent_span_id: str | None = None,
+    generation: bool = False,
 ):
     if client is None:
         return None
@@ -61,7 +62,7 @@ def start_langfuse_span(
     try:
         return client.start_observation(
             name=name,
-            as_type="span",
+            as_type="generation" if generation else "span",
             trace_context=trace_context,
         )
     except Exception as error:
@@ -81,18 +82,42 @@ def end_langfuse_span(observation, record: dict) -> None:
         "error": "ERROR",
         "cancelled": "WARNING",
     }.get(record["status"], "ERROR")
+    metadata = {
+        "local_span_id": record["span_id"],
+        "status": record["status"],
+        "duration_ms": record["duration_ms"],
+    }
 
+    if "intent" in record:
+        metadata["intent"] = record["intent"]
+        metadata["intent_confidence"] = record["intent_confidence"]
+    if "token_usage" in record:
+        metadata["token_usage"] = record["token_usage"]
+    extra = {}
+
+    if record.get("_generation"):
+        model_name = record.get("model")
+
+        if model_name is not None:
+            extra["model"] = model_name
+
+        usage = record.get("token_usage")
+
+        if usage is not None:
+            extra["usage_details"] = {
+                "input": usage["input_tokens"],
+                "output": usage["output_tokens"],
+                "total": usage["total_tokens"],
+            }
     try:
         try:
             observation.update(
                 level=level,
                 status_message=record.get("error_type"),
-                metadata={
-                    "local_span_id": record["span_id"],
-                    "status": record["status"],
-                    "duration_ms": record["duration_ms"],
-                },
+                metadata=metadata,
+                **extra,
             )
+
         finally:
             observation.end()
     except Exception as error:

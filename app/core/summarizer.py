@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from app.core.llm import get_chat_model
 from app.core.memory import turns, build_window
-
+from app.core.observability import (
+    extract_model_name,
+    extract_token_usage,
+    span,
+)
 logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Summary:
@@ -197,8 +201,9 @@ async def summarize_dialog(old_summary: str, delta: tuple) -> str:
     model = get_chat_model().with_structured_output(
         SummaryOutput,
         method="function_calling",
+        include_raw=True,
     )
-    result = await model.ainvoke([
+    messages = [
         (
             "system",
             "你负责更新客服对话摘要。提取后续对话需要的用户诉求、已确认信息和未解决事项。"
@@ -208,5 +213,29 @@ async def summarize_dialog(old_summary: str, delta: tuple) -> str:
             "只返回简洁摘要，不回答用户问题。",
         ),
         ("human", payload),
-    ])
-    return result.summary.strip()
+    ]
+
+    async with span(
+        "summary_model",
+        generation=True,
+    ) as record:
+        response = await model.ainvoke(messages)
+        raw = response["raw"]
+
+        usage = extract_token_usage(raw)
+        if usage is not None:
+            record["token_usage"] = usage
+
+        model_name = extract_model_name(raw)
+        if model_name is not None:
+            record["model"] = model_name
+
+        parsing_error = response["parsing_error"]
+        if parsing_error is not None:
+            raise parsing_error
+
+        result = response["parsed"]
+        if result is None:
+            raise ValueError("摘要模型未返回可解析的结果")
+
+        return result.summary.strip()

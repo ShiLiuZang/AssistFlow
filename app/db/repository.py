@@ -405,6 +405,12 @@ async def insert_trace_span(payload: dict) -> None:
         "status": payload["status"],
         "duration_ms": payload["duration_ms"],
         "error_type": payload.get("error_type"),
+        "kind": payload.get("kind", "span"),
+        "intent": payload.get("intent"),
+        "model": payload.get("model"),
+        "input_tokens": payload.get("input_tokens"),
+        "output_tokens": payload.get("output_tokens"),
+        "total_tokens": payload.get("total_tokens"),
     }
 
     try:

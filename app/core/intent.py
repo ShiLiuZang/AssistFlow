@@ -1,6 +1,11 @@
 from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 import json
+from app.core.observability import (
+    extract_model_name,
+    extract_token_usage,
+    span,
+)
 INTENT_PROMPT = """识别用户当前的主诉求，只选一个标签并输出 confidence（0到1）。
 优先看明确动作：找人工归人工；申请退款退货归退款退货；
 维修换货归售后；表达不满但没有上述明确动作归投诉；
@@ -59,7 +64,9 @@ def model_predictor(
     recent_context: list[dict] | None = None,
 ):
     structured = model.with_structured_output(
-        Prediction, method="function_calling",
+        Prediction,
+        method="function_calling",
+        include_raw=True,
     )
 
     async def predict(query):
@@ -81,7 +88,30 @@ def model_predictor(
                 }, ensure_ascii=False),
             ))
         messages.append(("human", query))
-        return await structured.ainvoke(messages)
+
+        async with span(
+            "classify_model",
+            generation=True,
+        ) as record:
+            result = await structured.ainvoke(messages)
+            raw = result["raw"]
+
+            usage = extract_token_usage(raw)
+            if usage is not None:
+                record["token_usage"] = usage
+
+            model_name = extract_model_name(raw)
+            if model_name is not None:
+                record["model"] = model_name
+
+            parsing_error = result["parsing_error"]
+            if parsing_error is not None:
+                raise parsing_error
+
+            if result["parsed"] is None:
+                raise ValueError("分类模型未返回可解析的结果")
+
+            return result["parsed"]
 
     return predict
 ROUTES = {

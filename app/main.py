@@ -20,8 +20,8 @@ from app.core.langfuse_client import (
     create_langfuse_client,
     close_langfuse_client,
 )
-from app.core.observability import configure_langfuse
-
+from app.core.observability import configure_langfuse, configure_trace_sink
+from app.api.observability import router as observability_router
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
 
     langfuse_client = create_langfuse_client(settings)
     configure_langfuse(langfuse_client)
+    configure_trace_sink(services.trace_sink)
     app.state.langfuse_client = langfuse_client
     app.state.graph_runtime = None
 
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
             finally:
                 await close_persisted_summaries()
     finally:
+        configure_trace_sink(None)
         configure_langfuse(None)
         app.state.graph_runtime = None
         app.state.langfuse_client = None
@@ -83,6 +85,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(conversations_router)
 app.include_router(actions_router)
 app.include_router(knowledge_router)
+app.include_router(observability_router)
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     """返回进程存活状态；不检查模型、数据库或其他外部服务。"""
@@ -97,3 +100,8 @@ async def health() -> dict[str, str]:
 async def chat_page() -> FileResponse:
     """返回聊天首页，页面随后通过 /api/graph-chat 调用后端。"""
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/observability", include_in_schema=False)
+async def observability_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "observability.html")

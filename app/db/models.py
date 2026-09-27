@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    JSON, DateTime, Float, ForeignKey, Integer, String, Text,
+    BigInteger, JSON, DateTime, Float, ForeignKey, Integer, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -139,6 +139,24 @@ class TraceSpan(Base):
         nullable=True,
     )
     name: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(
+        String(16), server_default="span",
+    )
+    intent: Mapped[str | None] = mapped_column(
+        String(64), nullable=True,
+    )
+    model: Mapped[str | None] = mapped_column(
+        String(255), nullable=True,
+    )
+    input_tokens: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True,
+    )
+    output_tokens: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True,
+    )
+    total_tokens: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True,
+    )
     status: Mapped[str] = mapped_column(String(16))
     duration_ms: Mapped[float] = mapped_column(Float(precision=53))
     error_type: Mapped[str | None] = mapped_column(

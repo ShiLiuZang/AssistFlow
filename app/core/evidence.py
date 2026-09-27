@@ -1,8 +1,14 @@
 """Ch04：证据编号与引用校验。"""
+
 import re
 from pydantic import BaseModel, Field
 import json
 from app.core.llm import get_chat_model
+from app.core.observability import (
+    extract_model_name,
+    extract_token_usage,
+    span,
+)
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 class Quote(BaseModel):
     n: int
@@ -146,6 +152,7 @@ async def answer_from_hits(query: str,
     model = get_chat_model().with_structured_output(
         GroundedAnswer,
         method="function_calling",
+        include_raw=True,
     )
     payload = {
         "question": query,
@@ -157,7 +164,7 @@ async def answer_from_hits(query: str,
             "type": "untrusted_conversation_summary",
             "text": summary_text.strip(),
         }
-    result = await model.ainvoke([
+    messages = [
         (
             "system",
             "依据提供的编号政策资料和订单事实回答用户问题。"
@@ -179,7 +186,29 @@ async def answer_from_hits(query: str,
             "human",
             json.dumps(payload, ensure_ascii=False)
         ),
-    ])
+    ]
+    async with span(
+        "answer_model",
+        generation=True,
+    ) as record:
+        response = await model.ainvoke(messages)
+        raw = response["raw"]
+
+        usage = extract_token_usage(raw)
+        if usage is not None:
+            record["token_usage"] = usage
+
+        model_name = extract_model_name(raw)
+        if model_name is not None:
+            record["model"] = model_name
+
+        parsing_error = response["parsing_error"]
+        if parsing_error is not None:
+            raise parsing_error
+
+        result = response["parsed"]
+        if result is None:
+            raise ValueError("回答模型未返回可解析的结果")
 
     if not result.supported:
         return refusal_result()

@@ -1,6 +1,10 @@
 import json
 from dataclasses import replace
-from app.core.observability import span
+from app.core.observability import (
+    extract_model_name,
+    extract_token_usage,
+    span,
+)
 from langgraph.types import interrupt
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
@@ -79,13 +83,23 @@ def make_nodes(services):
                 messages=[message],
                 answer=message.content,
             )
-        async with span("agent_model", trace_sink):
+        async with span(
+            "agent_model",
+            trace_sink,
+            generation=True,
+        ) as record:
             message = await services.agent(
                 state.get("messages", []),
                 summary_text=state.get("summary_text", ""),
                 covered_count=state.get("covered_count", 0),
             )
+            usage = extract_token_usage(message)
+            model_name = extract_model_name(message)
 
+            if model_name is not None:
+                record["model"] = model_name
+            if usage is not None:
+                record["token_usage"] = usage
         if not isinstance(message, AIMessage):
             raise TypeError("Agent 必须返回 AIMessage")
         if (
@@ -278,13 +292,14 @@ def make_nodes(services):
             for message in uncovered[:-1]  # 最后一条是本轮问题，下面单独传
             if message.type in {"human", "ai"} and message.content
         ][-4:]
-        async with span("classify", trace_sink):
+        async with span("classify", trace_sink) as record:
             prediction, route = await services.classify(
                 state.get("resolved_query") or state["query"],
                 summary_text=state.get("summary_text", ""),
                 recent_context=recent_context,
             )
-
+            record["intent"] = prediction.intent.value
+            record["intent_confidence"] = prediction.confidence
         legacy = {
             "knowledge": "knowledge",
             "business": "business",
