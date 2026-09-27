@@ -16,6 +16,11 @@ from app.db import repository
 from app.graph.adapters import make_services_with_mcp
 from app.graph.checkpoint import persistent_runtime
 from app.tools.mcp_client import StreamableHTTPTransport
+from app.core.langfuse_client import (
+    create_langfuse_client,
+    close_langfuse_client,
+)
+from app.core.observability import configure_langfuse
 
 logger = logging.getLogger(__name__)
 
@@ -35,19 +40,32 @@ async def lifespan(app: FastAPI):
         list(server_urls),
     )
     services.audit_sink = repository.insert_tool_audit
+    services.trace_sink = repository.insert_trace_span
 
     for issue in issues:
         logger.warning("MCP 工具发现异常：%s", issue)
-    async with persistent_runtime(
-        services,
-        settings.graph_checkpoint_path,
-    ) as runtime:
-        app.state.graph_runtime = runtime
-        try:
-            yield
-        finally:
-            await close_persisted_summaries()
-            app.state.graph_runtime = None
+
+    langfuse_client = create_langfuse_client(settings)
+    configure_langfuse(langfuse_client)
+    app.state.langfuse_client = langfuse_client
+    app.state.graph_runtime = None
+
+    try:
+        async with persistent_runtime(
+            services,
+            settings.graph_checkpoint_path,
+        ) as runtime:
+            app.state.graph_runtime = runtime
+
+            try:
+                yield
+            finally:
+                await close_persisted_summaries()
+    finally:
+        configure_langfuse(None)
+        app.state.graph_runtime = None
+        app.state.langfuse_client = None
+        await close_langfuse_client(langfuse_client)
 
 
 STATIC_DIR = Path(__file__).parent / "static"

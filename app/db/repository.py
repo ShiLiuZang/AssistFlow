@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import (
     Conversation, KnowledgeChunk, Message, Ticket, ToolAuditLog,
+    TraceSpan,
 )
 from app.tools.audit import ToolAuditRecord
 
@@ -393,3 +394,63 @@ async def insert_tool_audit(record: ToolAuditRecord) -> None:
             )
         if existing_id is None:
             raise
+
+
+async def insert_trace_span(payload: dict) -> None:
+    values = {
+        "span_id": payload["span_id"],
+        "trace_id": payload["trace_id"],
+        "parent_id": payload.get("parent_id"),
+        "name": payload["name"],
+        "status": payload["status"],
+        "duration_ms": payload["duration_ms"],
+        "error_type": payload.get("error_type"),
+    }
+
+    try:
+        async with SessionLocal() as session, session.begin():
+            session.add(TraceSpan(**values))
+    except IntegrityError:
+        async with SessionLocal() as session:
+            existing = await session.get(
+                TraceSpan,
+                values["span_id"],
+            )
+
+            if existing is None:
+                raise
+
+            if any(
+                getattr(existing, key) != value
+                for key, value in values.items()
+            ):
+                raise ValueError(
+                    "相同 span_id 对应不同的观测记录"
+                )
+
+
+async def list_trace_spans(trace_id: str) -> list[dict]:
+    async with SessionLocal() as session:
+        statement = (
+            select(TraceSpan)
+            .where(TraceSpan.trace_id == trace_id)
+            .order_by(
+                TraceSpan.created_at,
+                TraceSpan.span_id,
+            )
+        )
+        rows = list(await session.scalars(statement))
+
+        return [
+            {
+                "trace_id": row.trace_id,
+                "span_id": row.span_id,
+                "parent_id": row.parent_id,
+                "name": row.name,
+                "status": row.status,
+                "duration_ms": row.duration_ms,
+                "error_type": row.error_type,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]

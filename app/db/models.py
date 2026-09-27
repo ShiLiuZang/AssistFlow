@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, Integer, String, Text,
+    JSON, DateTime, Float, ForeignKey, Integer, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -120,4 +120,33 @@ class ToolAuditLog(Base):
     result_chars: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+    )
+
+
+class TraceSpan(Base):
+    __tablename__ = "trace_spans"
+
+    span_id: Mapped[str] = mapped_column(
+        String(32),
+        primary_key=True,
+    )
+    trace_id: Mapped[str] = mapped_column(
+        String(32),
+        index=True,
+    )
+    parent_id: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16))
+    duration_ms: Mapped[float] = mapped_column(Float(precision=53))
+    error_type: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        index=True,
     )

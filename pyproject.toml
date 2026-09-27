@@ -21,6 +21,7 @@ dependencies = [
     "referencing>=0.37.0",
     "mcp>=2,<3",
     "httpx2",
+    "langfuse>=4,<5",
 ]
 [dependency-groups]
 dev = [

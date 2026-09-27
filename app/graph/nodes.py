@@ -1,6 +1,6 @@
 import json
 from dataclasses import replace
-
+from app.core.observability import span
 from langgraph.types import interrupt
 from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
@@ -23,6 +23,7 @@ REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工
 def make_nodes(services):
     if services.max_steps < 1:
         raise ValueError("max_steps 必须为正数")
+    trace_sink = getattr(services, "trace_sink", None)
 
     def update(state: ConversationState,name:str,**values):
         return {
@@ -35,7 +36,8 @@ def make_nodes(services):
         query = state.get("resolved_query") or state["query"]
 
         # 调用检索服务
-        hits = await services.retrieve(query)
+        async with span("retrieve", trace_sink):
+            hits = await services.retrieve(query)
 
         # 返回 evidence 和 trace
         return update(state, "retrieve", evidence=hits)
@@ -45,12 +47,13 @@ def make_nodes(services):
         query = state.get("resolved_query") or state["query"]
         evidence = state["evidence"]
         # 调用 services.answer
-        result = await services.answer(
-            query,
-            evidence,
-            order=state.get("order"),
-            summary_text=state.get("summary_text", ""),
-        )
+        async with span("answer", trace_sink):
+            result = await services.answer(
+                query,
+                evidence,
+                order=state.get("order"),
+                summary_text=state.get("summary_text", ""),
+            )
         # 返回 answer、citations 和 trace
         return update(state, "answer",answer=result["answer"],
         citations=result["citations"])
@@ -76,12 +79,12 @@ def make_nodes(services):
                 messages=[message],
                 answer=message.content,
             )
-
-        message = await services.agent(
-            state.get("messages", []),
-            summary_text=state.get("summary_text", ""),
-            covered_count=state.get("covered_count", 0),
-        )
+        async with span("agent_model", trace_sink):
+            message = await services.agent(
+                state.get("messages", []),
+                summary_text=state.get("summary_text", ""),
+                covered_count=state.get("covered_count", 0),
+            )
 
         if not isinstance(message, AIMessage):
             raise TypeError("Agent 必须返回 AIMessage")
@@ -199,12 +202,15 @@ def make_nodes(services):
                     user_id=state["user_id"],
                     conversation_id=state["conversation_id"],
                 )
-                run = await execute_tool_call(
-                    call,
-                    context,
-                    registry,
-                    audit_sink=getattr(services, "audit_sink", None),
-                )
+                async with span("tool_execute", trace_sink) as tool_span:
+                    run = await execute_tool_call(
+                        call,
+                        context,
+                        registry,
+                        audit_sink=getattr(services, "audit_sink", None),
+                    )
+                    if not run.ok:
+                        tool_span["status"] = "error"
             if call["name"] == "create_ticket":
                 approved = approvals.get(call["id"])
                 result_from_decision = (
@@ -272,11 +278,12 @@ def make_nodes(services):
             for message in uncovered[:-1]  # 最后一条是本轮问题，下面单独传
             if message.type in {"human", "ai"} and message.content
         ][-4:]
-        prediction, route = await services.classify(
-            state.get("resolved_query") or state["query"],
-            summary_text=state.get("summary_text", ""),
-            recent_context=recent_context,
-        )
+        async with span("classify", trace_sink):
+            prediction, route = await services.classify(
+                state.get("resolved_query") or state["query"],
+                summary_text=state.get("summary_text", ""),
+                recent_context=recent_context,
+            )
 
         legacy = {
             "knowledge": "knowledge",
@@ -410,12 +417,14 @@ def make_nodes(services):
         if expand is None:
             async def expand(_query):
                 return []
-        queries, citations = await retrieve_policy(
-            state.get("resolved_query", state["query"]),
-            state.get("order"),
-            expand,
-            services.retrieve,
-        )
+
+        async with span("policy_retrieve", trace_sink):
+            queries, citations = await retrieve_policy(
+                state.get("resolved_query", state["query"]),
+                state.get("order"),
+                expand,
+                services.retrieve,
+            )
         return update(
             state,
             "policy",

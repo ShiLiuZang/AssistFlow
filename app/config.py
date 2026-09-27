@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     subquery_split: bool = True
     mcp_logistics_url: str = ""
     mcp_aftersales_url: str = ""
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = ""
 
+    @property
+    def langfuse_configured(self) -> bool:
+        return all(
+            value.strip()
+            for value in (
+                self.langfuse_public_key,
+                self.langfuse_secret_key,
+                self.langfuse_base_url,
+            )
+        )
 # 模块导入时创建唯一配置对象；缺少必填字段会立即报错。
 settings = Settings()

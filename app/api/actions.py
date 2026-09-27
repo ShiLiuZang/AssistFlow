@@ -1,9 +1,10 @@
 import logging
 import time
-
 from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from app.core.observability import span
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.api.chat import make_sse, graph_event_to_sse
 from app.api.graph_chat import _thread_config, _persist_graph_messages
@@ -36,7 +37,10 @@ async def stream_ticket_decision(
     request: ResumeTicketRequest, tool_call: dict, runtime: Runtime | None = None,
 ) -> AsyncIterator[str]:
     try:
-        async with conversation_lock(request.user_id, request.conversation_id):
+        async with (
+            span("ticket_action", repository.insert_trace_span),
+            conversation_lock(request.user_id, request.conversation_id),
+        ):
             call_id = str(tool_call["id"])
             graph_result = None
             snapshot = None
@@ -52,15 +56,20 @@ async def stream_ticket_decision(
             is_graph = bool(snapshot and snapshot.values)
             if is_graph and saved is None and not pending:
                 raise ValueError("没有待恢复的工单中断")
-            started = time.monotonic()
-            result = await repository.decide_ticket(
-                request.conversation_id,
-                request.user_id,
-                call_id,
-                request.confirmed,
-                graph=is_graph,
-            )
-            duration_ms = int((time.monotonic() - started) * 1000)
+
+            async with span(
+                "ticket_decision",
+                repository.insert_trace_span,
+            ):
+                started = time.monotonic()
+                result = await repository.decide_ticket(
+                    request.conversation_id,
+                    request.user_id,
+                    call_id,
+                    request.confirmed,
+                    graph=is_graph,
+                )
+                duration_ms = int((time.monotonic() - started) * 1000)
 
             try:
                 audit_record = build_ticket_decision_audit(
@@ -86,9 +95,17 @@ async def stream_ticket_decision(
                 )
             elif is_graph and snapshot.next and not pending and _call_in_current_turn(snapshot, call_id):
                 # 确认已入库但后续节点失败：从检查点重试，不再创建工单。
-                graph_result = await runtime.graph.ainvoke(
-                    None, _thread_config(request.user_id, request.conversation_id),
-                )
+                async with span(
+                    "graph_turn",
+                    repository.insert_trace_span,
+                ):
+                    graph_result = await runtime.graph.ainvoke(
+                        None,
+                        _thread_config(
+                            request.user_id,
+                            request.conversation_id,
+                        ),
+                    )
             elif is_graph:
                 # 旧确认卡重放不能确认下一张卡；返回当前等待状态。
                 graph_result = dict(snapshot.values)

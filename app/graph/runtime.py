@@ -3,11 +3,11 @@ from langgraph.types import Command
 from collections.abc import AsyncIterator
 from app.core.conversation_lock import conversation_lock
 from uuid import uuid4
-
+from app.core.observability import span
 class Runtime:
-    def __init__(self, graph):
+    def __init__(self, graph, *, trace_sink=None):
         self.graph = graph
-
+        self.trace_sink = trace_sink
     async def run_turn(
             self,
             query: str,
@@ -19,7 +19,10 @@ class Runtime:
             summary_upto: int = 0,
             covered_count: int = 0,
     ):
-        async with conversation_lock(user_id, conversation_id):
+        async with (
+            span("graph_turn", self.trace_sink),
+            conversation_lock(user_id, conversation_id),
+        ):
             config={
                 "configurable":{
                     "thread_id":f"{user_id}:{conversation_id}",

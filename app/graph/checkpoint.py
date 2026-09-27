@@ -13,4 +13,7 @@ async def persistent_runtime(services, path):
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
     async with AsyncSqliteSaver.from_conn_string(str(database_path)) as saver:
-        yield Runtime(build_graph(services, checkpointer=saver))
+        yield Runtime(
+            build_graph(services, checkpointer=saver),
+            trace_sink=getattr(services, "trace_sink", None),
+        )

@@ -46,7 +46,7 @@ class Services:
     max_steps: int = 3
     registry: Registry | None = None
     audit_sink: AuditSink | None = None
-
+    trace_sink: Callable | None = None
 
 def make_services(registry: Registry | None = None) -> Services:
     if registry is None:
