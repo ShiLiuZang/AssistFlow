@@ -1,9 +1,3 @@
-/*
-  来源：公众号@小林coding
-  后端八股网站：xiaolincoding.com
-  Agent网站：xiaolinnote.com
-  简历模版：jianli.xiaolinnote.com
-*/
 /* 微调 验收页共享脚本:四个页面公用的取数、提示、导航、以及「重跑」按钮那一套。
 
 重跑的交互契约:POST 发起 → 每 1.2s 轮询状态与日志尾 → 收到终态(ok/failed/stopped)
@@ -152,7 +146,19 @@ function jobRow(specs, onFinish, extraNote) {
   const wrap = el("div");
   const row = el("div", "jobrow");
   const logbox = el("pre", "logbox");
-  for (const s of specs) row.appendChild(jobButton(s, logbox, onFinish));
+  for (const s of specs) {
+    row.appendChild(jobButton(s, logbox, onFinish));
+    if (s.name === "classifier-up" && s.status === "running") {
+      const stop = el("button", "btn sm", "停止分类服务");
+      stop.onclick = async () => {
+        try {
+          await api("/api/jobs/classifier-up/stop", { method: "POST" });
+          if (onFinish) onFinish();
+        } catch (e) { toast("停止失败：" + e.message, true); }
+      };
+      row.appendChild(stop);
+    }
+  }
   if (extraNote) row.appendChild(el("span", "needs", extraNote));
   wrap.appendChild(row);
   wrap.appendChild(logbox);
