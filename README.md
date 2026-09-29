@@ -413,27 +413,14 @@ Similar Question Encountered → High Confidence Answer
 ```
 
 ---
-
 ## 🤝 Contributing
-
 This project is primarily for learning and demonstration purposes. External contributions are not currently open. For questions or suggestions, please submit an Issue.
-
----
-
-## 📄 License
-
-This project does not currently include a license file. Please clarify authorization terms before distribution or commercial use.
-
----
-
 ## 🙏 Acknowledgments
-
 - [LangChain](https://github.com/langchain-ai/langchain) / [LangGraph](https://github.com/langchain-ai/langgraph)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Milvus](https://milvus.io/)
 - [OpenAI](https://openai.com/)
 
----
 
 ## 📮 Contact
 
