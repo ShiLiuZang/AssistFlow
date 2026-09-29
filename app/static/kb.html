@@ -61,7 +61,7 @@
       中途挂了重跑捡 pending 就能补齐。
     </div>
 
-    <!-- ① 手工录入 -->
+
     <div class="panel">
       <h2>① 手工录入 <span class="pill info">正文贴这里</span></h2>
       <p class="lede">
@@ -89,7 +89,7 @@
       <div id="previewBox"></div>
     </div>
 
-    <!-- ② 建库材料 -->
+
     <div class="panel">
       <h2>② 建库材料 <span class="pill info" id="srcPill">—</span></h2>
       <p class="lede">
@@ -100,7 +100,7 @@
       <div id="srcJobs"></div>
     </div>
 
-    <!-- ③ 对话挖知识 -->
+
     <div class="panel">
       <h2>③ 对话挖知识 <span class="pill info" id="stgPill">—</span></h2>
       <p class="lede">
@@ -115,7 +115,7 @@
       <div id="stgBox"></div>
     </div>
 
-    <!-- ④ 向量化与双写 -->
+
     <div class="panel">
       <h2>④ 向量化与双写 <span class="pill" id="dwPill">—</span></h2>
       <p class="lede">
@@ -131,7 +131,7 @@
       <div id="dwJobs"></div>
     </div>
 
-    <!-- ⑤ 检索自测 -->
+
     <div class="panel">
       <h2>⑤ 检索自测 <span class="pill info">换个说法问一句</span></h2>
       <p class="lede">
@@ -157,7 +157,7 @@
       <div id="hitBox"></div>
     </div>
 
-    <!-- ⑥ 最近入库 -->
+
     <div class="panel">
       <h2>⑥ 最近入库</h2>
       <p class="lede">按 id 倒序取最近 12 块，看录进去的东西长什么样、状态到哪一步了。</p>
@@ -183,7 +183,7 @@
 
     function pill(cls, text) { return el("span", "pill " + cls, text); }
 
-    /* ---------- 顶部闸条 ---------- */
+
     function renderGatebar(d) {
       const bar = $("gatebar");
       bar.textContent = "";
@@ -208,7 +208,7 @@
       }
     }
 
-    /* ---------- 切块预览 ---------- */
+
     function renderPreview(p) {
       lastPreview = p;
       const box = $("previewBox");
@@ -268,7 +268,7 @@
       }
     }
 
-    /* ---------- 建库材料 ---------- */
+
     function renderSources(d) {
       const tbl = $("srcTbl");
       tbl.textContent = "";
@@ -308,7 +308,7 @@
       $("srcPill").textContent = d.sources.length + " 份材料 / 共切 " + total + " 块";
     }
 
-    /* ---------- 暂存表 ---------- */
+
     function renderStaging(d) {
       const kv = $("stgKv");
       kv.textContent = "";
@@ -385,7 +385,7 @@
       }
     }
 
-    /* 采纳 / 弃用：挖知识唯一的入库口，点了才写 knowledge_chunks */
+
     async function mkReviewAction(kind, id, btn) {
       const label = btn.textContent;
       btn.disabled = true;
@@ -397,7 +397,7 @@
           body: JSON.stringify({ ids: [id] }),
         });
         toast(kind === "approve" ? ("已采纳入库 " + r.approved + " 条") : ("已弃用 " + r.rejected + " 条"));
-        await loadStaging();          // 重拉：这一行会从待审挪到已采纳/已弃用
+        await loadStaging();
         return r;
       } catch (e) {
         btn.disabled = false;
@@ -413,7 +413,7 @@
       return b;
     }
 
-    /* ---------- 双写 ---------- */
+
     function renderDualwrite(d) {
       const kv = $("dwKv");
       kv.textContent = "";
@@ -436,7 +436,7 @@
         : ("Milvus 离线：" + (d.milvus.detail || ""));
     }
 
-    /* ---------- 检索 ---------- */
+
     function renderHits(d) {
       const box = $("hitBox");
       box.textContent = "";
@@ -486,7 +486,7 @@
       }
     }
 
-    /* ---------- 最近入库 ---------- */
+
     function renderRecent(d) {
       const tbl = $("recentTbl");
       tbl.textContent = "";
@@ -517,7 +517,7 @@
       }
     }
 
-    /* ---------- 取数 ---------- */
+
     function renderJobs(d) {
       jobSpecs = Object.fromEntries(d.jobs.map((j) => [j.name, j]));
       const pick = (names) => names.map((n) => jobSpecs[n]).filter(Boolean);
@@ -562,7 +562,7 @@
       $("ctdesc").textContent = o ? o.dataset.desc : "";
     }
 
-    /* ---------- 绑定 ---------- */
+
     mountAdminNav("/kb");
     $("refreshBtn").addEventListener("click", load);
     $("ctype").addEventListener("change", syncCtDesc);

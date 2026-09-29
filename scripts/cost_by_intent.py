@@ -22,9 +22,9 @@ REPORT_PATH = (
     / "cost_by_intent.json"
 )
 
-# DeepSeek-V4.1-Flash，2026-09-10 起的高峰/输入缓存未命中档。
-# 这里是保守参考估算；本地记录尚未保存缓存命中和实际计费时段。
-# 价格来源：https://api-docs.deepseek.com/zh-cn/quick_start/pricing/
+
+
+
 REFERENCE_PRICES = {
     "deepseek-flash": Price(
         input_per_million=Decimal("2"),

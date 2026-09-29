@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect x='2' y='2' width='4' height='4' fill='%232b2632'/><rect x='10' y='2' width='4' height='4' fill='%232b2632'/><rect x='2' y='4' width='12' height='9' fill='%232b2632'/><rect x='3' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='11' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='3' y='5' width='10' height='7' fill='%23ff9f57'/><rect x='5' y='7' width='1' height='2' fill='%232b2632'/><rect x='10' y='7' width='1' height='2' fill='%232b2632'/><rect x='7' y='9' width='2' height='1' fill='%23ff8095'/></svg>" />
   <link rel="stylesheet" href="/static/acceptance.css" />
   <style>
-    /* micro vs macro 对照 */
+
     .avg { display: flex; gap: 14px; flex-wrap: wrap; }
     .avgbox { flex: 1; min-width: 260px; border: 3px solid var(--ink); background: var(--paper); padding: 10px 13px; }
     .avgbox h3 { margin: 0 0 3px; font-size: 13px; }
@@ -15,7 +15,7 @@
     .avgbox .nums { display: flex; gap: 14px; margin-top: 8px; font-size: 13px; }
     .avgbox .nums b { font-size: 17px; display: block; font-variant-numeric: tabular-nums; }
 
-    /* 阈值扫描九候选线 */
+
     .scan { display: flex; flex-direction: column; gap: 5px; }
     .scanrow { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
     .scanrow .t { width: 3.4em; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -26,7 +26,7 @@
     .scanrow .f1 { width: 4.6em; font-variant-numeric: tabular-nums; }
     .scanrow .tag { font-size: 11.5px; color: var(--muted); }
 
-    /* 混淆矩阵 17 宫格 */
+
     .mats { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); }
     .mat { border: 3px solid var(--ink); background: var(--paper); }
     .mat .cap {
@@ -44,7 +44,7 @@
     .mat .c.fp b, .mat .c.fn b { color: var(--error); }
     .mat .c.k { color: var(--muted); }
 
-    /* 单句试分类 */
+
     .tryrow { display: flex; gap: 8px; flex-wrap: wrap; }
     .tryrow input {
       flex: 1; min-width: 240px; font: inherit; font-size: 13px; padding: 7px 10px;
@@ -115,7 +115,7 @@
       const body = $("body");
       body.textContent = "";
 
-      /* ① micro vs macro */
+
       const pAvg = panel("总分：micro 与 macro 一起看",
         "micro 不分科——17 类的所有对错混进一个大桶算总分，量大的类目话语权大。"
         + "macro 分科——先给 17 类各算一个 F1 再简单平均，小类目和大类目一样权重。"
@@ -151,7 +151,7 @@
         "评测集 " + (ev.present ? ev.test_size + " 条" : "test.jsonl")));
       body.appendChild(pAvg);
 
-      /* ② 每类指标 + 容错红线 */
+
       const pCls = panel("每类指标与容错红线",
         "容错红线不是每类一条，而是按档位设闸：17 类按「归错了会不会带偏补知识的优先级」"
         + "分严/中/宽三档，严档 F1 ≥ 0.9、中档 ≥ 0.8，宽档归错影响小、不设线（画 — 而不是 ✅）。"
@@ -189,7 +189,7 @@
       }
       body.appendChild(pCls);
 
-      /* ③ 阈值扫描九候选线 */
+
       const pScan = panel("判定阈值：九候选线扫描重演",
         "模型对每句话给 17 个类各打一个 0~1 的分，过线的类才算命中，这条线就是判定阈值。"
         + "定太低会冤枉、定太高会放跑。验证集打分一次、分数表固定，九个候选线（0.30~0.70 步进 0.05）"
@@ -207,7 +207,7 @@
           row.appendChild(el("span", "t", s.threshold.toFixed(2)));
           const track = el("span", "track");
           const fill = el("span", "fill");
-          // 九条分数挤在小数第三位,按 min~max 拉伸才看得出高低(线性 0~1 会是九条一样长的条)
+
           fill.style.width = (hi > lo ? 8 + 92 * (s.micro_f1 - lo) / (hi - lo) : 100) + "%";
           track.appendChild(fill);
           row.appendChild(track);
@@ -229,7 +229,7 @@
           d.classifier.online ? ":8110 在线" : ":8110 离线，先去总览页拉起服务"));
       body.appendChild(pScan);
 
-      /* ④ 混淆矩阵 */
+
       const pMat = panel("每类混淆矩阵：错题本",
         "P/R/F1 是分数，混淆矩阵是错题本——分数说考得好不好，错题本说错在哪个方向、该回头改什么。"
         + "TP 该打打对了、TN 不该打也没打、FP 冤枉（不该打却打了）、FN 放跑（该打却没打）。"
@@ -270,7 +270,7 @@
       }
       body.appendChild(pMat);
 
-      /* ⑤ 单句试分类 */
+
       const pTry = panel("单句试分类：多标签机制现场看",
         "17 个类各自独立过线，过几个打几个——这就是多标签的机制来源。"
         + "要是 17 个分全都不过线，取分数最高的那个类兜底，保证每道题至少有一个标签。",

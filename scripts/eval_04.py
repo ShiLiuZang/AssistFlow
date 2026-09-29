@@ -36,7 +36,7 @@ async def main():
     args = parser.parse_args()
     if args.top_k < 1:
         parser.error("top-k 必须为正")
-    dataset = ROOT / "tests/data/eval_04.jsonl"
+    dataset = ROOT / "data/eval/04.jsonl"
     cases = [json.loads(line) for line in dataset.read_text(encoding="utf-8").splitlines() if line.strip()]
     validate_cases(cases)
     if args.local:

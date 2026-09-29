@@ -44,7 +44,7 @@ def classify(body: ClassifyIn):
     }
     (logits,) = _sess.run(["logits"], feed)
     probs = 1 / (1 + np.exp(-logits))
-    preds = apply_threshold(probs, _threshold)   # 与 evaluate 共用同一套阈值+兜底,行为不分叉
+    preds = apply_threshold(probs, _threshold)
     results = []
     for row, pred in zip(probs, preds):
         labels = [TOPIC_NAMES[i] for i in range(len(pred)) if pred[i]]

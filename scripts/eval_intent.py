@@ -1,3 +1,8 @@
+"""
+Ch06 意图分类评估脚本
+读取标准样例与预测结果，计算准确率、精确率、召回率和F1分数
+用于验证意图识别模块的性能
+"""
 import argparse
 import json
 import sys

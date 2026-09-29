@@ -1,4 +1,11 @@
+"""
+管理后台总览API路由模块
 
+本模块提供管理后台首页的卡片式总览接口，聚合各子系统的健康状态。
+核心功能包括：知识库状态、RAG评估、飞轮审核队列、可观测性数据、主题分布、分类器验收。
+在系统中充当运维和监控的统一入口，让管理员快速了解系统各模块的运行状况。
+每个卡片包含：状态（ok/attention/missing/error）、指标、提示信息。
+"""
 
 import json
 from pathlib import Path
@@ -18,11 +25,49 @@ router = APIRouter(prefix="/api/admin")
 
 
 def _card(key: str, title: str, page: str, lede: str) -> dict:
+    """
+    创建标准卡片结构
+
+    参数:
+        key: 卡片唯一标识
+        title: 卡片标题
+        page: 跳转页面路径
+        lede: 简短描述
+
+    返回:
+        包含默认字段的卡片字典
+
+    所有卡片函数都基于此模板构建，确保结构一致
+    默认状态为error，各函数根据实际情况修改
+    """
     return {"key": key, "title": title, "page": page, "lede": lede,
             "status": "error", "headline": "读数失败", "metrics": [], "note": None}
 
 
 async def _kb_card() -> dict:
+    """
+    生成知识库状态卡片
+
+    返回:
+        知识库卡片字典
+
+    核心逻辑：
+    1. 从数据库读取知识块统计（总数、待向量化、关键条款）
+    2. 查询Milvus向量库状态和数量
+    3. 比对MySQL与Milvus的数量一致性
+    4. 根据状态设置卡片状态：
+       - 无知识块：missing
+       - Milvus离线：attention
+       - 数量不一致或有待向量化：attention
+       - 数量一致：ok
+
+    边界情况：
+    - 数据库读取失败时返回error状态
+
+    为什么需要双端校验：
+    MySQL存储原文和元数据，Milvus存储向量
+    两端数量一致才能保证检索正常工作
+    """
     card = _card("kb", "知识库", "/kb", "材料切块、录入、向量化与检索自测")
     try:
         stats = await repository.knowledge_stats()
@@ -49,6 +94,26 @@ async def _kb_card() -> dict:
 
 
 def _rag_card() -> dict:
+    """
+    生成RAG评估报告卡片
+
+    返回:
+        RAG评估卡片字典
+
+    核心逻辑：
+    1. 读取评估报告JSON文件
+    2. 提取各策略的MRR（平均倒数排名）指标
+    3. 找出MRR最高的策略
+    4. 展示策略数、评估题数、最佳MRR
+
+    边界情况：
+    - 文件不存在：missing
+    - 文件损坏：error
+    - 报告状态非evaluated：missing
+    - 缺少MRR数据：error
+
+    MRR是检索质量的核心指标，值越接近1越好
+    """
     card = _card("rageval", "RAG 评估", "/rag-eval", "读取主项目已保存的 Ch04 评估报告")
     try:
         report = json.loads(Path(REPORT_PATH).read_text(encoding="utf-8"))
@@ -79,6 +144,25 @@ def _rag_card() -> dict:
 
 
 async def _review_card() -> dict:
+    """
+    生成飞轮审核队列卡片
+
+    返回:
+        审核队列卡片字典
+
+    核心逻辑：
+    1. 按状态分组统计reviews表记录数
+    2. 展示待审、发布中、已通过、已驳回的数量
+    3. 根据待审和发布中的数量设置状态：
+       - 无记录：missing
+       - 有待处理：attention
+       - 无待处理：ok
+
+    边界情况：
+    - 表读取失败：error
+
+    飞轮流程：低置信度问题 -> 待审 -> 发布中 -> 已通过/已驳回
+    """
     card = _card("review", "飞轮待审队列", "/review", "低置信度问题归并、人工审核与定向发布")
     try:
         async with SessionLocal() as session:
@@ -107,6 +191,28 @@ async def _review_card() -> dict:
 
 
 async def _observability_card() -> dict:
+    """
+    生成可观测性数据卡片
+
+    返回:
+        可观测性卡片字典
+
+    核心逻辑：
+    1. 调用observability.overview获取三项数据：
+       - 成本报表：模型调用次数和费用
+       - 评估趋势：固定集复评轮次
+       - 置信度校准：在用阈值
+    2. 统计缺失项
+    3. 根据就绪情况设置状态：
+       - 三项均缺失：missing
+       - 部分缺失：attention
+       - 全部就绪：ok
+
+    边界情况：
+    - 数据读取失败：error
+
+    这三项是系统运行质量的关键指标
+    """
     card = _card("observability", "观测与成本", "/observability",
                  "读取模型成本、固定集复评与置信度校准的真实记录")
     try:
@@ -134,6 +240,24 @@ async def _observability_card() -> dict:
 
 
 async def _topics_card() -> dict:
+    """
+    生成主题分布卡片
+
+    返回:
+        主题分布卡片字典
+
+    核心逻辑：
+    1. 查询topic_classifications表的统计数据
+    2. 统计总问题数和命中的类目数
+    3. 根据是否有数据设置状态
+
+    边界情况：
+    - 表读取失败：error
+    - 无数据：missing
+    - 有数据：ok
+
+    主题分布用于识别知识盲区，决定优先补充哪些领域的知识
+    """
     card = _card("topics", "主题分布", "/topics", "旁路分类结果中的 17 类问题分布")
     try:
         dist = await repository.topic_distribution()
@@ -153,6 +277,25 @@ async def _topics_card() -> dict:
 
 
 async def _classifier_card() -> dict:
+    """
+    生成分类器验收卡片
+
+    返回:
+        分类器验收卡片字典
+
+    核心逻辑：
+    1. 调用acceptance.overview获取九项验收结果
+    2. 统计通过项数和在线状态
+    3. 根据验收情况设置状态：
+       - 全部通过：ok
+       - 有失败项：attention
+       - 缺产物：missing
+
+    边界情况：
+    - 产物读取失败：error
+
+    九项验收包括：语料构建、数据集划分、模型训练、评估指标等
+    """
     card = _card("classifier", "分类器验收", "/acceptance", "Minihelp 微调 九项实证")
     try:
         result = await acceptance.overview()
@@ -178,6 +321,15 @@ async def _classifier_card() -> dict:
 
 @router.get("/overview")
 async def overview() -> dict:
+    """
+    获取管理后台总览数据
+
+    返回:
+        包含modules字段的字典，modules为卡片列表
+
+    聚合六个子系统的状态卡片，供前端渲染仪表板
+    卡片按功能重要性排序：知识库 > 评估 > 审核 > 监控 > 主题 > 分类器
+    """
     return {"modules": [
         await _kb_card(),
         _rag_card(),

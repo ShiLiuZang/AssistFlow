@@ -89,7 +89,7 @@ def apply_sentence_overlap(
         previous = chunks[index - 1]
         current = chunks[index]
 
-        # 从 previous 末尾取完整句子
+
         previous=_trailing_sentences(chunks[index-1], overlap)
         current=chunks[index]
         result.append(previous+current)
@@ -101,7 +101,7 @@ def _find_table_header(lines: list[str]) -> int:
         current = lines[index]
         next_line = lines[index + 1]
 
-        # 判断 current 和 next_line
+
         if (
                 current.lstrip().startswith("|")
                 and _TABLE_SEP_RE.match(next_line)

@@ -1,19 +1,22 @@
+# 模块：主题分类体系定义
+# 定义智能客服的17大主题类目、边界说明、示例、严重性等级
+# 提供类目名称索引、ID映射、术语表生成
+# 核心职责：统一主题分类标准，供训练、预测、评估共享
 
-"""微调 权威归并术语表:全系统唯一一份,17 类主题类目。
-数据处理、预标、训练、推理、评测、前端全部 import 这里,不许各自抄一份。
-类目名与边界说明采用课程 README 归并术语表原文;元组顺序即 label id,训练/推理共用。
-severity 是容错档位:归错会带偏补知识优先级的类目从严。"""
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class TopicClass:
-    name: str
-    boundary: str                 # 一句边界说明:什么算这一类,近邻类目靠它划开
-    examples: tuple[str, ...]     # 用户的说法示例
-    severity: str                 # 容错档位:严 / 中 / 宽
+    """主题类目定义"""
+    name: str  # 类目名称
+    boundary: str  # 边界说明（何时归这个类，何时不归）
+    examples: tuple[str, ...]  # 示例问法
+    severity: str  # 严重性等级（严/中/宽）
 
 
+# 17大主题类目定义
+# 按严重性分级：严档（6类）、中档（7类）、宽档（4类）
 TOPIC_CLASSES: tuple[TopicClass, ...] = (
     TopicClass("退换货", "退货、换货、退款怎么办;修归保修维修,退归这里",
                ("退货", "退款", "退钱", "想退了", "七天无理由还能退不"), "严"),
@@ -51,15 +54,35 @@ TOPIC_CLASSES: tuple[TopicClass, ...] = (
                ("闲聊", "转人工", "客服几点上班"), "宽"),
 )
 
+# 导出类目名称列表（按定义顺序）
 TOPIC_NAMES: tuple[str, ...] = tuple(c.name for c in TOPIC_CLASSES)
+
+# 标签 <-> ID 双向映射
 LABEL2ID: dict[str, int] = {name: i for i, name in enumerate(TOPIC_NAMES)}
 ID2LABEL: dict[int, str] = {i: name for i, name in enumerate(TOPIC_NAMES)}
+
+# 类目总数
 NUM_CLASSES = len(TOPIC_CLASSES)
+
+# 严重性等级索引
 SEVERITY: dict[str, str] = {c.name: c.severity for c in TOPIC_CLASSES}
 
 
 def terminology_table() -> str:
-    """预标/造数 prompt 用的术语表文本:类目:边界说明(示例)。"""
+    """
+    生成术语表文本
+
+    返回:
+        多行文本，每行格式：- 类目名:边界说明(示例:示例1、示例2)
+
+    用途:
+        预标注和造数prompt中的类目参考表
+        让模型理解每个类目的边界和典型问法
+
+    设计说明:
+        边界说明用口语化表述，避免模型过度解读
+        示例用顿号分隔，符合中文习惯
+    """
     return "\n".join(
         f"- {c.name}:{c.boundary}(示例:{'、'.join(c.examples)})" for c in TOPIC_CLASSES
     )

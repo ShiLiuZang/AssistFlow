@@ -11,7 +11,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 创建 reviews 表
+
     op.create_table(
         "reviews",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -29,7 +29,7 @@ def upgrade() -> None:
         comment="Review queue for normalized questions",
     )
 
-    # 为 low_confidence_questions 表添加 review_id 外键
+
     op.add_column(
         "low_confidence_questions",
         sa.Column("review_id", sa.Integer(), nullable=True),
@@ -44,15 +44,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 删除外键
+
     op.drop_constraint(
         "fk_low_confidence_questions_review_id",
         "low_confidence_questions",
         type_="foreignkey",
     )
 
-    # 删除列
+
     op.drop_column("low_confidence_questions", "review_id")
 
-    # 删除表
+
     op.drop_table("reviews")

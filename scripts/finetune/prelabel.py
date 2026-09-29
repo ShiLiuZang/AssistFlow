@@ -34,7 +34,7 @@ async def prelabel_one(text: str) -> list[str]:
         r: _Labeled = await model.ainvoke(
             PRELABEL_PROMPT.format(terminology=terminology_table(), text=text))
     except Exception as e:
-        # 失败要看得见:无声标「其他」会污染语料,还会把黄金样例闸的通过率无声拉低
+
         print(f"[prelabel] 调用失败,兜底标「其他」: {text[:30]}… ({type(e).__name__}: {e})")
         return ["其他"]
     labels = [lb for lb in r.labels if lb in LABEL2ID]

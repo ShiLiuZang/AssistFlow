@@ -4,10 +4,10 @@ import re
 
 from app.core.taxonomy import LABEL2ID
 
-_PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")   # 前后不能还是数字:防止咬掉长单号的子串
+_PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _EMAIL = re.compile(r"(?<![\w.-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w.-])")
 _CN_ID = re.compile(r"(?<!\d)[1-9]\d{16}[\dXx](?!\w)")
-_LONG_DIGITS = re.compile(r"\d{10,}")            # 订单号/运单号一类长数字串
+_LONG_DIGITS = re.compile(r"\d{10,}")
 _WX_QQ = re.compile(r"(微信|weixin|wx|QQ|qq)[号:: ]*[A-Za-z0-9_-]{5,}\s?")
 
 
@@ -49,7 +49,7 @@ def split_dataset(samples: list[dict], seed: int = 42) -> tuple[list, list, list
     train: list[dict] = []
     val: list[dict] = []
     test: list[dict] = []
-    for key in sorted(strata):            # 排序保证确定性
+    for key in sorted(strata):
         items = strata[key]
         rng.shuffle(items)
         n = len(items)

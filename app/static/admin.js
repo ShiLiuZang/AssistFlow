@@ -1,9 +1,9 @@
-/* 后台管理外壳:一份导航挂在所有后台页上(知识库录入 / RAG 评估 / 待审队列 / 观测与成本 /
-   主题分布 / 分类器验收)。
 
-   这些页面分属不同章、样式各自内联,所以导航自带样式、自己注入,不去动宿主页的 CSS;
-   整个文件包在 IIFE 里,只往 window 上挂两个名字,免得和宿主页的 $ / el 撞名。
-   模块入口都是各章原本的路径,导航只是把它们收到一处,不做跳转改写——文档里贴的链接照样能用。 */
+
+
+
+
+
 (function () {
   const NAV = [
     { href: "/admin", label: "后台首页" },
@@ -69,7 +69,7 @@
     return a;
   }
 
-  /** 当前页归属哪个模块:精确命中优先,其次按前缀(/acceptance/eval 归 /acceptance)。 */
+
   function moduleOf(active) {
     return NAV.find((m) => m.href === active)
       || NAV.find((m) => m.href !== "/" && active.startsWith(m.href + "/"));
@@ -102,7 +102,7 @@
     return wrap;
   }
 
-  /** 挂到顶栏底下(顶栏是每页自己的标题条);找不到顶栏就摆在 .wrap 最前面。 */
+
   function mountAdminNav(active) {
     const nav = renderAdminNav(active);
     const bar = document.querySelector(".topbar");

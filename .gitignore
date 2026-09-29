@@ -7,6 +7,11 @@ __pycache__/
 .idea/
 .codex/
 log/
+/docs/
+/teaching-package/
+/tests/
+/reports/
+/data/09/
 data/review/
 data/finetune/
 data/graph-checkpoints.sqlite*

@@ -37,7 +37,7 @@ def main() -> None:
                 elif hit: fp += 1
                 elif g: fn += 1
         f1 = 2 * tp / (2 * tp + fp + fn)
-        if f1 > best_f1:                       # 严格更高才换人:0.50 与 0.45 打平时,先到的 0.45 留任
+        if f1 > best_f1:
             best_t, best_f1 = t, f1
         scan.append({"threshold": round(t, 2), "micro_f1": round(f1, 4),
                      "tp": tp, "fp": fp, "fn": fn})
@@ -51,7 +51,7 @@ def main() -> None:
         "val_size": len(rows), "scan": scan,
         "best_threshold": round(best_t, 2), "best_micro_f1": round(best_f1, 4),
         "in_use_threshold": in_use,
-        # 一致 = 重演选出的线与 threshold.json 里在用的线是同一条(扫描可复算的实证)
+
         "consistent": in_use is not None and abs(in_use - best_t) < 1e-9,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 

@@ -17,7 +17,7 @@ from scripts.finetune.inference_lib import apply_threshold
 MODEL_DIR = pathlib.Path("data/finetune/model")
 TEST = pathlib.Path("data/finetune/dataset/test.jsonl")
 REPORTS = pathlib.Path("data/finetune/reports")
-RED_LINES = {"严": 0.9, "中": 0.8}   # 档位 F1 红线;宽档不设线
+RED_LINES = {"严": 0.9, "中": 0.8}
 
 
 def pick_device() -> str:
@@ -78,7 +78,7 @@ def main() -> None:
              "|---|---|---|---|---|---|---|"]
     for i, name in enumerate(TOPIC_NAMES):
         sev = SEVERITY[name]
-        # 严/中档各设硬红线;宽档不受约束,画 — 而不是 ✅,免得读者以为它也过了某条线
+
         line = RED_LINES.get(sev)
         if line is not None:
             flag = f"{line} {'🔴 不达标,先回头搞数据' if f1[i] < line else '✅'}"
@@ -99,8 +99,8 @@ def main() -> None:
         pred_labels = [TOPIC_NAMES[j] for j in range(NUM_CLASSES) if preds[i][j]]
         if set(pred_labels) != set(s["labels"]):
             err.append(f"- {s['text']}\n  标准: {s['labels']}  预测: {pred_labels}")
-            # 错误方向性:漏打只记放跑、多打只记冤枉、错位两头都记——错例条数与矩阵笔数
-            # 对不上就是从这来的(验收页要把这笔账摊开,别让读者自己减)
+
+
             missed = [lb for lb in s["labels"] if lb not in pred_labels]
             extra = [lb for lb in pred_labels if lb not in s["labels"]]
             kind = "错位" if missed and extra else ("漏打" if missed else "多打")
@@ -125,7 +125,7 @@ def main() -> None:
              "p": round(float(p[i]), 4), "r": round(float(r[i]), 4),
              "f1": round(float(f1[i]), 4), "support": int(support[i]),
              "red_line": RED_LINES.get(SEVERITY[name]),
-             # 宽档不设线 → passed 为 None,页面画 —,不画 ✅,免得读者以为它也过了某条线
+
              "passed": (None if SEVERITY[name] not in RED_LINES
                         else bool(f1[i] >= RED_LINES[SEVERITY[name]])),
              "tn": int(cms[i][0][0]), "fp": int(cms[i][0][1]),

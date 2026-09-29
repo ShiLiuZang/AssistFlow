@@ -47,7 +47,7 @@
     }
     .btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
 
-    /* 统计条 */
+
     .stats {
       margin-top: 16px; display: flex; gap: 14px; flex-wrap: wrap;
     }
@@ -57,7 +57,7 @@
     }
     .stat b { font-size: 20px; display: block; }
 
-    /* 分布条形图 */
+
     .chart {
       margin-top: 16px; background: var(--cream); border: 4px solid var(--ink);
       box-shadow: var(--shadow); padding: 16px 18px;
@@ -69,7 +69,7 @@
     }
     .row summary::-webkit-details-marker { display: none; }
     .row .name { width: 6.5em; flex-shrink: 0; font-size: 13px; font-weight: 700; text-align: right; }
-    /* 类目名是链接:点它跳到这一类的问题列表,展开只看三条样例 */
+
     .row .name a { color: inherit; text-decoration: none; border-bottom: 2px solid var(--fur); }
     .row .name a:hover { background: var(--fur); }
     .row.zero .name a { border-bottom-color: var(--muted); }
@@ -138,7 +138,7 @@
         const r = await fetch('/api/topics/catalog', {cache: 'no-store'});
         if (r.ok) render(await r.json());
       } catch (_) {
-        // 真实分布的错误提示保留在下方；目录只是无数据时的只读预览。
+
       }
     }
 
@@ -169,7 +169,7 @@
           : '数据来自 topic_classifications；多标签问题计入每个命中类目。';
       }
       $('total').textContent = catalog ? '—' : data.total;
-      // classified_at 存的是 UTC(MySQL 容器时区),补 Z 后按本地时区渲染
+
       $('latest').textContent = !catalog && data.latest
         ? new Date(data.latest + 'Z').toLocaleString('zh-CN', {
             year: 'numeric', month: '2-digit', day: '2-digit',

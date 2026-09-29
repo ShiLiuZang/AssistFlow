@@ -15,7 +15,7 @@ from scripts.finetune.prelabel import prelabel_batch
 
 OUT = pathlib.Path("data/finetune")
 TARGET_PER_CLASS = 100
-SIM_BATCH = 20     # 单次造数条数,小批多次控质量
+SIM_BATCH = 20
 
 CLEAN_PROMPT = """修正下面这句用户问题里的错别字和乱格式:不改语义、不改口语风格、不增删诉求,
 没有错误就原样返回。只输出句子本身。
@@ -101,7 +101,7 @@ async def simulate(name: str, need: int) -> list[dict]:
 
 
 async def main() -> None:
-    # 1) 优先捞低置信度池；为空时只读历史用户提问，明确标记来源。
+
     pool = await repository.list_pool_texts()
     origin = "pool"
     if not pool:
@@ -115,16 +115,16 @@ async def main() -> None:
            for p in pool]
     _dump(OUT / "corpus_raw.jsonl", raw)
     print(f"读取 {origin} {len(raw)} 条（落盘前已脱敏）")
-    # 2) 清洗:脱敏 → 去重 → LLM 修错别字 → 再去重
+
     cleaned = dedupe([{**s, "text": desensitize(s["text"])} for s in raw])
     fixed = await clean_texts([s["text"] for s in cleaned])
     cleaned = dedupe([{**s, "text": t} for s, t in zip(cleaned, fixed)])
     _dump(OUT / "corpus_clean.jsonl", cleaned)
     print(f"清洗后 {len(cleaned)} 条")
-    # 3) 预标真实问题
+
     labels = await prelabel_batch([s["text"] for s in cleaned])
     labeled = [{**s, "labels": lb} for s, lb in zip(cleaned, labels)]
-    # 4) 模拟补足:按标签计数补到每类 TARGET_PER_CLASS(多诉求句给命中的每类都记数)
+
     counts = {c.name: 0 for c in TOPIC_CLASSES}
     for s in labeled:
         for lb in s["labels"]:
@@ -142,7 +142,7 @@ async def main() -> None:
     labeled = dedupe(labeled)
     _dump(OUT / "corpus_labeled.jsonl", labeled)
     print(f"语料总量 {len(labeled)} 条;各类:{counts}")
-    # 5) 抽审导出:真实池全量 + 每类模拟抽 5
+
     rng = random.Random(42)
     lines = ["# 微调 语料人工抽审(预标 + 模拟)", "",
              "> 格式:问题 → 标签。看到错标直接指出原句。", "",

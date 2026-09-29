@@ -1,4 +1,4 @@
-/* Visual-only theme: preserve the existing DOM, layout and interaction contracts. */
+
 :root {
   --ink: #263c42;
   --fur: #e2ebe5;
@@ -86,5 +86,5 @@ footer { background: var(--cream); border-top: 1px solid var(--line); }
   .chip, #new-chat, .action-btn { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *, *::before, *::after { animation: none ; transition: none ; }
 }

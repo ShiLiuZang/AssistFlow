@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = REPO_ROOT / "log" / "acceptance"
-TAIL_LINES = 400        # 回显窗口上限:日志文件只读尾部,训练几万行也不撑爆响应
+TAIL_LINES = 400
 
 
 @dataclass(frozen=True)
@@ -27,12 +27,12 @@ class JobSpec:
     name: str
     title: str
     argv: tuple[str, ...]
-    needs: str                    # 前置条件,页面按钮上直接提示,免得点了才发现上游没配好
-    heavy: bool = False           # 分钟级重活:页面二次确认才发起
+    needs: str
+    heavy: bool = False
 
 
-# Minihelp 作业运行器保留；只注册当前项目确实存在的脚本入口。
-# Windows 和 Unix 共用 Python 命令，不依赖 make。
+
+
 JOBS: dict[str, JobSpec] = {
     spec.name: spec for spec in (
         JobSpec("kb-preview", "材料清单与切块预览",
@@ -83,7 +83,7 @@ JOBS: dict[str, JobSpec] = {
 class JobRun:
     """一次运行的状态。进程对象与 watcher 任务留在内存,重启服务后归零——
     但产物里的 ran_at 与日志文件都在盘上,页面照样能说出「上次什么时候跑的、跑成什么样」。"""
-    status: str = "idle"          # idle | running | ok | failed | stopped
+    status: str = "idle"
     pid: int | None = None
     started_at: str | None = None
     finished_at: str | None = None
@@ -130,14 +130,14 @@ async def start(name: str) -> JobRun:
     path = log_path(name)
     header = (f"$ {' '.join(spec.argv)}\n"
               f"# {dt.datetime.now().isoformat(timespec='seconds')} 由后台页发起\n\n")
-    path.write_text(header, encoding="utf-8")          # 每次覆盖:窗口里只看本次
+    path.write_text(header, encoding="utf-8")
     fh = path.open("a", encoding="utf-8", buffering=1)
     try:
         proc = await asyncio.create_subprocess_exec(
             *spec.argv, cwd=REPO_ROOT, stdout=fh, stderr=asyncio.subprocess.STDOUT,
             env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONUTF8": "1",
                  "UV_CACHE_DIR": str(REPO_ROOT / ".uv-cache")},
-            # 独立会话:kill 时能连 make → uv → python 整条链一起收,不留孤儿进程
+
             **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt"
                else {"start_new_session": True}),
         )
@@ -162,7 +162,7 @@ async def _watch(name: str, run: JobRun, proc: asyncio.subprocess.Process, fh) -
             fh.close()
     run.returncode = rc
     run.finished_at = dt.datetime.now().isoformat(timespec="seconds")
-    # stopped 保留:人为 kill 的退出码也是非 0,别报成「作业失败」冤枉它
+
     if run.status != "stopped":
         run.status = "ok" if rc == 0 else "failed"
     run.proc = None
@@ -211,7 +211,7 @@ def status(name: str, with_log: bool = False) -> dict:
         "status": run.status, "pid": run.pid,
         "started_at": run.started_at, "finished_at": run.finished_at,
         "returncode": run.returncode,
-        # 服务重启后内存状态归零,但日志文件的 mtime 还在:据此告知「上次跑过,时间是…」
+
         "log_mtime": (dt.datetime.fromtimestamp(path.stat().st_mtime)
                       .isoformat(timespec="seconds") if path.exists() else None),
     }

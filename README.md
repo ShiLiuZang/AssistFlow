@@ -1,90 +1,87 @@
+# 智能客服
+
+这是一个用于学习和验证的电商智能客服项目。它用 FastAPI 提供聊天与管理接口，用 LangGraph 组织对话流程，用 MySQL 保存业务数据，用 Milvus 检索知识，并提供观测、知识审核和主题分类页面。仓库中的模型权重、真实会话数据和运行数据库不随源码分发。
+
+当前实现面向本地开发与验收。
+## 主要功能
+- 聊天：流式回复、会话历史、意图判断、政策检索、订单工具、工单确认与失败恢复。
+- 知识库：将固定材料切块、写入 MySQL、向量化到 Milvus；管理页支持预览、录入、审核和检索自测。
+- 观测与飞轮：记录执行追踪和可用的模型用量，收集低置信度问题与反馈，审核后再发布知识。
+- 主题分类：使用 17 类多标签分类器，展示问题分布、错例和验收指标。ONNX 推理服务独立运行在 8110 端口。
+请求主链路为：浏览器 → FastAPI 路由 → 对话图或业务服务 → MySQL / Milvus / 模型与 MCP 服务。
+## 代码结构
+| 路径 | 用途 |
+| --- | --- |
+| app/api/ | 聊天、会话、知识库、审核、观测、主题和验收接口 |
+| app/graph/ | LangGraph 状态、节点、路由及检查点 |
+| app/core/ | 检索、模型、置信度、观测、分类和作业逻辑 |
+| app/db/ | SQLAlchemy 模型及数据库访问 |
+| app/kb/ | 文档切块、建库、向量化和审核发布 |
+| app/tools/ | 订单、工单及 MCP 工具 |
+| app/static/ | 聊天页与管理后台页面 |
+| migrations/ | Alembic 数据库迁移 |
+| scripts/ | 建库、验证和主题分类作业；scripts/tasks.py 是统一入口 |
+| data/kb/ | 随仓库提供的示例知识材料 |
+
+## 本地启动
+
+需要 Python 3.12 或更新版本、uv、Docker，以及可用的聊天和嵌入模型接口。以下命令在项目根目录执行，示例使用 PowerShell；其他系统可将虚拟环境与复制文件的命令替换为本机等价命令。
+
+### 1. 配置环境
+
+    Copy-Item .env.example .env
+    uv sync --group dev
+
+编辑 .env，至少填写 CHAT_MODEL、CHAT_BASE_URL、CHAT_API_KEY、EMBED_MODEL、EMBED_BASE_URL 和 EMBED_API_KEY。可选的重排、MCP 和 Langfuse 配置见 .env.example。
+
+本仓库的 docker-compose.yml 会创建名为 minihelp_complete 的本地 MySQL 数据库，监听 127.0.0.1:3308；Milvus 监听 127.0.0.1:19531。若使用这份 compose，请将 HANDWRITTEN_DATABASE_URL 的数据库名设为 minihelp_complete，并将用户名、密码改成 compose 中的本地开发值。若连接已有独立数据库，以实际连接参数为准。不要把填写了真实密钥的 .env 提交到 Git。
+
+### 2. 启动依赖并初始化空库
+
+    docker compose up -d mysql etcd minio milvus
+    docker compose ps
+    uv run alembic upgrade head
+
+迁移命令只应对新建的、可处置的项目数据库运行；不要直接拿现有业务库做初始化试验。
+
+### 3. 建立示例知识库
+
+    uv run python -m scripts.tasks kb-preview
+    uv run python -m scripts.tasks kb-build
+    uv run python -m scripts.tasks kb-vectorize
+
+预览不写库；建库将 data/kb/ 中的材料写入 MySQL 待向量化队列；向量化调用嵌入服务并写入 Milvus。后两步需要正确的数据库、模型与 Milvus 配置。
+
+### 4. 启动网页
+
+    uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+| 地址 | 页面 |
+| --- | --- |
+| http://127.0.0.1:8000/ | 聊天 |
+| http://127.0.0.1:8000/admin | 管理后台 |
+| http://127.0.0.1:8000/kb | 知识库 |
+| http://127.0.0.1:8000/review | 审核队列 |
+| http://127.0.0.1:8000/observability | 观测 |
+| http://127.0.0.1:8000/topics | 主题分布 |
+| http://127.0.0.1:8000/acceptance | 分类器验收 |
+| http://127.0.0.1:8000/docs | FastAPI 接口文档 |
 
 
-Ch01：FastAPI、请求校验、SSE 增量输出、结构化提取。
-Ch02：订单工具、会话历史、工单预览确认、工具消息配对。
-Ch03：Markdown 分块、原文建库恢复、Embedding、Milvus Dense 检索与聊天接入。
-Ch04：在原项目手写检索、引用和评测；验收见 [记录](docs/CH04_ACCEPTANCE.md)。
-Ch05：Workflow + Agent 混合架构及网页接入已完成，真实模型、MySQL、Milvus 验收见 [验收记录](docs/CH05_LIVE_ACCEPTANCE.md)，流程说明见 [学习进度](docs/CH05_PROGRESS.md)。完整参考代码独立保存。
+## 可选：主题分类器
 
-Ch05 链路和架构见 [架构文档](docs/CH05_ARCHITECTURE.md)，包含普通请求、图节点、工单确认、检查点、消息同步和 SSE 事件。
+训练和导出还需要机器学习依赖及本地基础模型。先安装 ml 依赖，并将兼容的中文 RoBERTa-wwm-ext 基础权重放在 data/finetune/pretrained/；
 
-Ch06：退款、选单恢复、政策检索和网页接入已完成本地真实联调；当前结果和限制见 [学习进度](docs/CH06_PROGRESS.md) 与 [审查报告](docs/CH06_REVIEW.md)。教学课时见 [课时安排](teaching-package/ch06/docs/LESSONS.md)。
+    uv sync --group dev --group ml
+    uv run --group ml python -m scripts.tasks finetune-golden
+    uv run --group ml python -m scripts.tasks finetune-corpus
+    uv run --group ml python -m scripts.tasks finetune-dataset
+    uv run --group ml python -m scripts.tasks finetune-train
+    uv run --group ml python -m scripts.tasks finetune-eval
+    uv run --group ml python -m scripts.tasks finetune-export
 
-Ch07：长对话上下文管理独立教学包已生成，包含源码快照、参考实现和六课文档。入口见 [教学包](teaching-package/ch07/docs/README.md)、[每课内容](teaching-package/ch07/docs/LESSONS.md)；主项目接入状态见 [学习进度](docs/CH07_PROGRESS.md)。
+语料作业需要聊天模型和数据库；训练需要前一步生成的数据。导出 ONNX 后，可在验收页启动分类服务，也可运行：
 
-约束见 [教学约束](docs/TEACHING_RULES.md)，实际修复和验证边界见 [修复记录](docs/REPAIR_STATUS.md)。
+    uv run --group ml python -m scripts.tasks classifier-up
 
-## 启动项目
-
-在项目根目录配置 `.env`（参考 `.env.example`）。当前 compose 会在本机启动 MySQL、Milvus 及其依赖，端口固定为 MySQL `3308`、Milvus `19531`。
-
-### 1. 启动基础服务
-
-```powershell
-# 在项目根目录运行
-docker compose up -d mysql etcd minio milvus
-docker compose ps
-```
-
-### 2. 初始化数据库和知识库
-
-首次启动或迁移表结构时运行：
-
-```powershell
-.venv\Scripts\python.exe -B -m alembic upgrade head
-```
-
-固定材料建库和向量化：
-
-```powershell
-.venv\Scripts\python.exe -B -m scripts.preview_kb  # 只读预览，可选
-.venv\Scripts\python.exe -B -m scripts.build_kb
-.venv\Scripts\python.exe -B -m scripts.vectorize_kb
-```
-
-`build_kb` 写入 MySQL，`vectorize_kb` 调用 Embedding 服务并写入 Milvus。失败后可重跑这两个命令；它们只针对当前版本的固定材料，不负责旧材料迁移。
-
-### 3. 启动网页服务
-
-```powershell
-.venv\Scripts\python.exe -B -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-打开 <http://127.0.0.1:8000/>，健康检查地址为 <http://127.0.0.1:8000/api/health>。
-
-### 4. 验证知识检索和网页链路
-
-```powershell
-.venv\Scripts\python.exe -B -m scripts.verify_03
-```
-
-Ch06 的真实联调结果、退款选单恢复和验收边界记录在 [CH06_PROGRESS.md](docs/CH06_PROGRESS.md)。旧 `scripts.verify_05` 仍包含 Ch05 路径断言，不能直接作为 Ch06 的最终验收入口。
-
-### 停止服务
-
-停止容器：
-
-```powershell
-docker compose stop
-```
-
-停止网页服务：在运行 Uvicorn 的终端按 `Ctrl+C`。
-
-## 测试
-
-离线测试明确指定 tests，避免收集独立教学副本：
-
-```powershell
-.venv\Scripts\python.exe -B -m pytest tests -q -p no:cacheprovider
-```
-
-历史知识审核（输入为自行脱敏的对话 JSON 数组）：
-
-```powershell
-uv run python -m scripts.kb_review mine --input dialogue.json
-uv run python -m scripts.kb_review list
-uv run python -m scripts.kb_review approve --index 0 --reviewer teacher
-uv run python -m scripts.vectorize_kb
-```
-
-mine 仅生成暂存候选；approve 才将白名单材料支持的候选写为 pending。未审核候选不进入正式知识库。审核队列不提交 Git。
+分类服务监听 127.0.0.1:8110。验收页读取本地评测产物，按严档 F1 ≥ 0.9、中档 F1 ≥ 0.8 判断红线。未通过会显示错例和修复方向。

@@ -53,7 +53,7 @@
       }
     }
 
-    /* ---------- ch07:会话侧栏(多会话切换,验收长对话记忆用) ---------- */
+
     #sidebar {
       flex: none;
       width: 224px;
@@ -97,7 +97,7 @@
     }
     .sb-empty { font-size: 11.5px; color: var(--muted); text-align: center; padding: 18px 6px; }
 
-    /* ---------- header ---------- */
+
     header {
       display: flex;
       align-items: center;
@@ -135,7 +135,7 @@
     #new-chat:hover { background: #fff; }
     #new-chat:active { transform: translate(3px, 3px); box-shadow: none; }
 
-    /* ---------- messages ---------- */
+
     #messages {
       flex: 1;
       overflow-y: auto;
@@ -177,7 +177,7 @@
       padding: 1px 7px;
       border-radius: 999px;
     }
-    /* markdown 渲染(仅 bot 气泡文本区) */
+
     .bubble-text { white-space: normal; }
     .bubble-text > *:first-child { margin-top: 0; }
     .bubble-text > *:last-child { margin-bottom: 0; }
@@ -209,7 +209,7 @@
       margin: 6px 0; padding: 2px 10px; border-left: 3px solid var(--muted); color: var(--muted);
     }
 
-    /* ---------- ch04:可点引用角标 + 来源浮层 ---------- */
+
     .cite {
       cursor: pointer;
       color: var(--coral);
@@ -243,7 +243,7 @@
     .cite-pop-a { color: var(--ink); white-space: pre-wrap; word-break: break-word; }
     .cite-pop-meta { margin-top: 7px; font-size: 11px; color: var(--muted); }
 
-    /* ---------- ch04:每段回答满意度反馈(👍/👎) ---------- */
+
     .feedback { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
     .fb-btn {
       border: 2px solid var(--ink);
@@ -265,7 +265,7 @@
     .fb-btn svg { width: 18px; height: 18px; display: block; image-rendering: auto; }
     .fb-done { font-size: 11px; color: var(--muted); letter-spacing: .3px; }
 
-    /* typing indicator (blocky) */
+
     .typing { display: inline-flex; gap: 5px; padding: 3px 1px; }
     .typing span {
       width: 8px; height: 8px; background: var(--coral);
@@ -275,7 +275,7 @@
     .typing span:nth-child(3) { animation-delay: .4s; }
     @keyframes blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: .25; } }
 
-    /* ---------- empty state ---------- */
+
     .empty {
       margin: auto;
       text-align: center;
@@ -311,7 +311,7 @@
     .chip:hover { background: #ffedd6; }
     .chip:active { transform: translate(3px, 3px); box-shadow: none; }
 
-    /* ---------- ch05:actions 帧 - 转人工/建工单两独立按钮 ---------- */
+
     .action-bar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
     .action-btn {
       border: 3px solid var(--ink);
@@ -328,7 +328,7 @@
     .action-btn:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
     .action-btn:disabled { background: #e8dcc8; color: var(--muted); cursor: not-allowed; }
 
-    /* ---------- ch05:建工单表单弹窗 ---------- */
+
     .modal-mask {
       position: fixed; inset: 0; z-index: 50;
       background: rgba(43, 38, 50, .45);
@@ -369,13 +369,13 @@
     .modal-actions .submit:hover:not(:disabled) { background: #ff6a45; }
     .modal-actions button:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
     .modal-actions .submit:disabled { background: #e8dcc8; color: var(--muted); cursor: not-allowed; }
-    /* ch06:退款表单只读订单号输入框 */
+
     .ticket-field input {
       width: 100%; font-family: inherit; font-size: 13px; color: var(--muted);
       border: 3px solid var(--ink); background: #efe6d4;
       padding: 9px 10px; box-shadow: var(--shadow-sm);
     }
-    /* ch06:订单选择器卡片(interrupt 缺订单号时聊天流里点选) */
+
     .order-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .order-card {
       text-align: left; border: 3px solid var(--ink); background: var(--cream);
@@ -390,7 +390,7 @@
     .order-card .oc-mid { font-size: 12.5px; margin-top: 2px; }
     .order-card .oc-bot { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 
-    /* ---------- ch08:工单预览确认卡(interrupt confirm_ticket) ---------- */
+
     .ticket-confirm {
       border: 3px solid var(--ink); background: var(--cream);
       padding: 10px 12px; margin-top: 10px; box-shadow: var(--shadow-sm);
@@ -402,7 +402,7 @@
     .ticket-confirm .tc-cancel { background: var(--paper); }
     .ticket-confirm.decided { opacity: .75; }
 
-    /* ---------- composer ---------- */
+
     footer { padding: 14px 16px 16px; border-top: 4px solid var(--ink); background: var(--cream); }
     .composer {
       display: flex;
@@ -480,10 +480,10 @@
       </div>
       <p class="foot-note">小喵是 AI 助手,涉及具体订单会为你转接人工核实</p>
     </footer>
-    </div><!-- /.main -->
+    </div>
   </div>
 
-  <!-- ch05:建工单表单弹窗(点「建工单」弹出,选类别+填描述再提交) -->
+
   <div class="modal-mask" id="ticketMask">
     <div class="ticket-modal" role="dialog" aria-modal="true" aria-labelledby="ticketTitle">
       <h3 id="ticketTitle">创建工单</h3>
@@ -537,7 +537,7 @@
   </div>
 
   <script>
-    const SESSION_KEY = "minihelp_session_id";      // 与参考项目的浏览器状态隔离
+    const SESSION_KEY = "minihelp_session_id";
     const CONV_KEY = "minihelp_conversation_id";
     const SUGGESTIONS = ["退换货政策是怎样的?", "怎么查我的物流进度?", "猫粮怎么选?", "会员有什么权益?"];
     const CAT_SVG =
@@ -554,7 +554,7 @@
       '<rect x="4" y="10" width="1" height="1" fill="#ffd7a8"/>' +
       '<rect x="11" y="10" width="1" height="1" fill="#ffd7a8"/>' +
       "</svg>";
-    // 点赞/点踩大拇指(矢量填充,fill=currentColor:平时 ink、点亮时随按钮变白)
+
     const THUMB_UP_SVG =
       '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
     const THUMB_DOWN_SVG =
@@ -567,7 +567,7 @@
     for (const el of document.querySelectorAll("[data-cat]")) el.innerHTML = CAT_SVG;
 
     function getUserId() {
-      const id = "u1"; // Ch02 固定演示身份；生产环境必须改为可信登录身份
+      const id = "u1";
       localStorage.setItem(SESSION_KEY, id);
       return id;
     }
@@ -637,7 +637,7 @@
       if (!busy) inputEl.focus();
     }
 
-    // ---------- 轻量 markdown 渲染(零依赖,先转义再解析,防注入) ----------
+
     function escapeHtml(s) {
       return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
     }
@@ -646,7 +646,7 @@
       s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
       s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
       s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-      // 仅允许 http(s) 链接,挡 javascript: 等
+
       s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
         '<a href="$2" target="_blank" rel="noopener">$1</a>');
       return s;
@@ -664,17 +664,17 @@
       while (i < lines.length) {
         const line = lines[i];
         let m;
-        if (/^```/.test(line)) {                                   // 代码块
+        if (/^```/.test(line)) {
           const buf = []; i++;
           while (i < lines.length && !/^```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
           i++;
           out.push("<pre><code>" + buf.join("\n") + "</code></pre>"); continue;
         }
-        if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {               // 标题
+        if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
           const n = m[1].length; out.push(`<h${n}>` + renderInline(m[2]) + `</h${n}>`); i++; continue;
         }
-        if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) { out.push("<hr>"); i++; continue; }  // 分隔线
-        if (line.includes("|") && isTableSep(lines[i + 1])) {      // 表格
+        if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+        if (line.includes("|") && isTableSep(lines[i + 1])) {
           const headers = splitRow(line); i += 2; const rows = [];
           while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") {
             rows.push(splitRow(lines[i])); i++;
@@ -683,27 +683,27 @@
           for (const r of rows) t += "<tr>" + r.map((c) => "<td>" + renderInline(c) + "</td>").join("") + "</tr>";
           out.push(t + "</tbody></table>"); continue;
         }
-        if (/^\s*[-*+]\s+/.test(line)) {                           // 无序列表
+        if (/^\s*[-*+]\s+/.test(line)) {
           const items = [];
           while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
             items.push("<li>" + renderInline(lines[i].replace(/^\s*[-*+]\s+/, "")) + "</li>"); i++;
           }
           out.push("<ul>" + items.join("") + "</ul>"); continue;
         }
-        if (/^\s*\d+\.\s+/.test(line)) {                           // 有序列表
+        if (/^\s*\d+\.\s+/.test(line)) {
           const items = [];
           while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
             items.push("<li>" + renderInline(lines[i].replace(/^\s*\d+\.\s+/, "")) + "</li>"); i++;
           }
           out.push("<ol>" + items.join("") + "</ol>"); continue;
         }
-        if (/^\s*>\s?/.test(line)) {                               // 引用
+        if (/^\s*>\s?/.test(line)) {
           const buf = [];
           while (i < lines.length && /^\s*>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
           out.push("<blockquote>" + buf.map(renderInline).join("<br>") + "</blockquote>"); continue;
         }
-        if (line.trim() === "") { i++; continue; }                 // 空行
-        const para = [];                                           // 段落
+        if (line.trim() === "") { i++; continue; }
+        const para = [];
         while (i < lines.length && lines[i].trim() !== "" && !isSpecial(lines[i], lines[i + 1])) {
           para.push(lines[i]); i++;
         }
@@ -712,7 +712,7 @@
       return out.join("");
     }
 
-    // ---------- ch04:引用角标 [n] → 可点,弹来源浮层(section_path + 原文) ----------
+
     let citePop = null;
     function ensureCitePop() {
       if (citePop) return citePop;
@@ -738,7 +738,7 @@
         '<div class="cite-pop-meta">来源编号 [' + c.n + "]" +
         (c.content_type ? " · " + escapeHtml(c.content_type) : "") + "</div>";
       pop.hidden = false;
-      // 定位:角标下方,超出视口右/下边则回收
+
       const r = sup.getBoundingClientRect();
       const pw = Math.min(320, window.innerWidth - 24);
       pop.style.width = pw + "px";
@@ -764,7 +764,7 @@
         let m;
         while ((m = re.exec(textNode.nodeValue))) {
           const c = byN.get(m[1]);
-          if (!c) continue;  // 非有效编号,保留原文
+          if (!c) continue;
           if (m.index > last) frag.appendChild(document.createTextNode(textNode.nodeValue.slice(last, m.index)));
           const sup = document.createElement("sup");
           sup.className = "cite";
@@ -781,9 +781,9 @@
       }
     }
 
-    // ---------- ch04:每段回答满意度反馈(👍/👎,点一次点亮 + 已反馈,一次性)----------
+
     function addFeedbackBar(bubble, messageId) {
-      if (bubble.querySelector(".feedback")) return;   // 防重复挂
+      if (bubble.querySelector(".feedback")) return;
       const bar = document.createElement("div");
       bar.className = "feedback";
       const up = document.createElement("button");
@@ -797,10 +797,10 @@
       bar.append(up, down, done);
 
       async function give(chosen, other) {
-        if (bar.dataset.given) return;   // 一次性,点过不再变
+        if (bar.dataset.given) return;
         bar.dataset.given = "1";
-        chosen.classList.add("active");  // 点亮选中的
-        other.classList.add("dim");      // 另一个淡出
+        chosen.classList.add("active");
+        other.classList.add("dim");
         up.disabled = true; down.disabled = true;
 
         const rating = chosen === down ? "down" : "up";
@@ -830,7 +830,7 @@
           } else {
             done.textContent = "反馈失败,请重试";
             done.hidden = false;
-            bar.dataset.given = "";  // 允许重试
+            bar.dataset.given = "";
             up.disabled = false; down.disabled = false;
             chosen.classList.remove("active");
             other.classList.remove("dim");
@@ -838,7 +838,7 @@
         } catch (error) {
           done.textContent = "网络错误,请重试";
           done.hidden = false;
-          bar.dataset.given = "";  // 允许重试
+          bar.dataset.given = "";
           up.disabled = false; down.disabled = false;
           chosen.classList.remove("active");
           other.classList.remove("dim");
@@ -850,14 +850,14 @@
       bubble.appendChild(bar);
     }
 
-    // ---------- ch05:actions 帧 - 转人工/建工单两按钮交互 ----------
+
     function renderActions(bubble, items) {
       const bar = document.createElement("div");
       bar.className = "action-bar";
       for (const a of items) {
         if (a.type === "select_order") {
-          // ch08:报了不属于自己的订单号被拒,把他名下的单列出来点选。拒绝之后得给条出路,
-          // 否则用户既查不到,也不知道自己的单号是多少
+
+
           renderOrderCards(bubble, a.orders || [], pickThenAsk);
           continue;
         }
@@ -868,7 +868,7 @@
           btn.textContent = "转人工";
           btn.addEventListener("click", () => {
             btn.disabled = true;
-            // 纯前端模拟:显示已转接 + 客服小猫问候(本章不接真人系统)
+
             const sys = addRow("bot"); sys.textContent = "已转接人工客服";
             const greet = addRow("bot");
             greet.textContent = "您好,我是客服小猫,请问有什么可以帮您的";
@@ -876,31 +876,31 @@
           });
         } else if (a.type === "create_ticket") {
           btn.textContent = "建工单";
-          // 点「建工单」不再直接建单,而是弹出工单表单让用户选类别+填描述再提交
+
           btn.addEventListener("click", () => openTicketModal(btn));
         } else if (a.type === "refund_form") {
           btn.textContent = "提交退款工单";
-          // ch06:能退时 Agent 调 submit_refund 被拦成此动作,点开退款表单(订单号只读+原因下拉)
+
           btn.addEventListener("click", () => openRefundModal(btn, a.draft || {}));
         }
         bar.appendChild(btn);
       }
-      if (bar.children.length) bubble.appendChild(bar);   // 只有订单卡时不留一条空按钮栏
+      if (bar.children.length) bubble.appendChild(bar);
     }
 
-    // ---------- ch05:建工单表单弹窗控制 ----------
+
     const ticketMask = document.getElementById("ticketMask");
     const ticketType = document.getElementById("ticketType");
     const ticketDesc = document.getElementById("ticketDesc");
     const ticketErr = document.getElementById("ticketErr");
     const ticketSubmit = document.getElementById("ticketSubmit");
     const ticketCancel = document.getElementById("ticketCancel");
-    let ticketTriggerBtn = null;  // 记住是哪个「建工单」按钮触发的,成功后置灰它
+    let ticketTriggerBtn = null;
 
     function openTicketModal(triggerBtn) {
       ticketTriggerBtn = triggerBtn;
-      ticketType.value = "";          // 不预选,强制用户选
-      ticketDesc.value = "";          // 留空,用户自己写
+      ticketType.value = "";
+      ticketDesc.value = "";
       ticketErr.textContent = "";
       ticketSubmit.disabled = false;
       ticketSubmit.textContent = "提交工单";
@@ -913,7 +913,7 @@
     }
 
     ticketCancel.addEventListener("click", closeTicketModal);
-    // 点遮罩空白处 / Esc 关闭(取消不建单,建工单按钮保持可用可重开)
+
     ticketMask.addEventListener("click", (e) => { if (e.target === ticketMask) closeTicketModal(); });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && ticketMask.classList.contains("open")) closeTicketModal();
@@ -938,7 +938,7 @@
         });
         const data = await resp.json();
         if (resp.ok) {
-          if (ticketTriggerBtn) ticketTriggerBtn.disabled = true;  // 建成后该气泡的按钮置灰
+          if (ticketTriggerBtn) ticketTriggerBtn.disabled = true;
           closeTicketModal();
           addRow("bot").textContent = "工单已创建:" + data.ticket_no;
           messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -954,7 +954,7 @@
       }
     });
 
-    // ---------- ch06:退款表单弹窗控制(订单号只读 + 固定类目原因下拉)----------
+
     const refundMask = document.getElementById("refundMask");
     const refundOrder = document.getElementById("refundOrder");
     const refundReason = document.getElementById("refundReason");
@@ -1008,9 +1008,9 @@
       }
     });
 
-    // ---------- ch06:订单选择器卡片(interrupt 缺订单号 → 聊天流点选 → resume 续跑)----------
-    // onPick 决定点完卡片干什么:ch06 是 resume 把图续跑下去;ch08 归属校验拒绝之后
-    // 没有待续跑的图,点了就当用户重新问一句(见 pickThenAsk)。卡片长相只此一份。
+
+
+
     function renderOrderCards(bubble, orders, onPick, selection) {
       const intro = document.createElement("div");
       intro.className = "bubble-text";
@@ -1052,7 +1052,7 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    // ch06:点完续跑图(有 interrupt 挂着)
+
     async function pickThenResume(o, selection) {
       addRow("user").textContent = o ? "选择订单 " + o.order_id : "取消选择订单";
       const nb = addRow("bot");
@@ -1076,12 +1076,12 @@
       }
     }
 
-    // ch08:归属校验拒绝之后给的出路。这轮已经答完了,没有图等着续跑,所以走正常发消息那条路
+
     async function pickThenAsk(o) {
       await send("查一下订单 " + o.order_id);
     }
 
-    // ---------- ch08:工单预览确认卡(interrupt confirm_ticket → 确认提交/取消 → resume 续跑)----------
+
     function renderTicketConfirm(bubble, preview, toolCallId, decided) {
       const ticketConversationId = getConversationId();
       const ticketUserId = getUserId();
@@ -1131,7 +1131,7 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    // 读一条 SSE 流,按帧分发到 on.{delta,tools,citations,actions,interrupt};done 存 conversation_id;event: error 抛错
+
     async function readSSEStream(resp, on) {
       if (!resp.ok || !resp.body) throw new Error("bad response");
       const reader = resp.body.getReader();
@@ -1153,7 +1153,7 @@
           if (data.event === "tool") on.tool && on.tool(data.name);
           else if (data.event === "citations") on.citations && on.citations(data.items || []);
           else if (data.event === "interrupt") {
-            if (data.conversation_id) setConversationId(data.conversation_id);  // 中断无 done 帧,靠这里记会话号供续跑
+            if (data.conversation_id) setConversationId(data.conversation_id);
             on.interrupt && on.interrupt(data);
           }
           else if (data.event === "actions") on.actions && on.actions(data.items || []);
@@ -1167,9 +1167,9 @@
       }
     }
 
-    // 把一次 SSE 流(/api/graph-chat 首轮 或 /api/actions/resume 续跑)渲染进 bubble;
-    // 遇 interrupt 按 kind 分发:select_order 渲染订单卡点选,confirm_ticket 渲染工单预览卡
-    // (确认提交/取消),两者都在用户操作后开新气泡续跑。
+
+
+
     async function streamInto(bubble, doFetch) {
       showTyping(bubble);
       let structured = false, textStarted = false, interrupted = false, raw = "";
@@ -1209,7 +1209,7 @@
         interrupt: (data) => {
           interrupted = true;
           if (!structured) { bubble.innerHTML = ""; structured = true; }
-          // ch08:中断按 kind 分发——select_order 弹订单卡,confirm_ticket 弹工单预览卡
+
           if (data.kind === "confirm_ticket") renderTicketConfirm(bubble, data.preview || {}, data.tool_call_id);
           else if (data.kind === "select_order") {
             renderOrderCards(
@@ -1250,11 +1250,11 @@
         bubble.textContent = "回复失败,请稍后重试";
       } finally {
         setBusy(false);
-        loadConversations();   // ch07:每轮后刷新侧栏(新会话入列/摘要标记更新)
+        loadConversations();
       }
     }
 
-    // ---------- ch07:会话侧栏(列表 / 切换 / 历史回载) ----------
+
     const convListEl = document.getElementById("conv-list");
 
     async function loadConversations() {
@@ -1263,7 +1263,7 @@
         if (!r.ok) return;
         const payload = await r.json();
         renderConvList(Array.isArray(payload) ? payload : payload.items || []);
-      } catch (e) { /* 侧栏失败不影响聊天 */ }
+      } catch (e) {  }
     }
 
     function renderConvList(items) {
@@ -1290,9 +1290,9 @@
       }
     }
 
-    // 历史回载时补挂按钮:suggested_actions 不落库,但这两句话术是固定文案,
-    // 且转人工/建工单按钮不依赖当轮上下文(转人工纯前端模拟,建工单表单用户现填),
-    // 按文案精确匹配重建即可。话术改了这里要跟着改(单一来源在后端 prompts.py)。
+
+
+
     const REPLAY_ACTIONS = [
       { text: "抱歉,这个问题我暂时没有查到确切信息,不敢乱答。建议您联系人工客服进一步确认,以免给您错误的指引。",
         actions: [{ type: "transfer_human" }] },
@@ -1301,7 +1301,7 @@
     ];
 
     async function switchConversation(cid) {
-      // 已是当前会话且聊天区有内容才跳过;页面刚刷新时聊天区是空的,点当前会话也要回载
+
       if (cid === getConversationId() && messagesEl.querySelector(".row")) return;
       setConversationId(cid);
       const userId = getUserId();
@@ -1341,10 +1341,10 @@
             renderTicketConfirm(addRow("bot"), pending.preview, pending.tool_call_id, pending.confirmed);
           }
         }
-      } catch (e) { /* 历史加载失败仍可继续聊 */ }
+      } catch (e) {  }
       if (!messagesEl.children.length) renderEmptyState();
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      loadConversations();   // 刷新 active 高亮
+      loadConversations();
       inputEl.focus();
     }
 
@@ -1362,9 +1362,9 @@
       }
     });
     newChatBtn.addEventListener("click", () => {
-      clearConversationId();          // 开新会话:丢弃当前 conversation_id(旧会话仍在侧栏可切回)
+      clearConversationId();
       renderEmptyState();
-      loadConversations();            // 清 active 高亮
+      loadConversations();
       inputEl.focus();
     });
 

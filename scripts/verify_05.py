@@ -88,7 +88,7 @@ async def verify(report):
             row["passed"] = True
             REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"PASS {name}: conversation={cid}", flush=True)
-        # 留下一张尚未确认的卡，由真实浏览器刷新后取消。
+
         events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是教学验收的本地工单。"}))
         pending = next(e for e in events if e.get("event") == "interrupt")
         report["browser_conversation_id"] = pending["conversation_id"]

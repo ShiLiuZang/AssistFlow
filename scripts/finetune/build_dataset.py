@@ -10,8 +10,8 @@ from scripts.finetune.corpus_lib import dedupe, split_dataset
 
 SRC = pathlib.Path("data/finetune/corpus_labeled.jsonl")
 OUT = pathlib.Path("data/finetune/dataset")
-# 第一版评估翻车的定向补数:光杆「买大了想退」类短句(无商品名/无「尺码」字眼)
-# 训练覆盖不足,尺码打不出来;只补训练集,考题不动
+
+
 SUPPLEMENT = pathlib.Path(__file__).parent / "supplement_sizefit.jsonl"
 
 AUGMENT_PROMPT = """把下面这句电商客服用户问题改写一个变体:换同义词、微调句式(比如改成「我想问一下……」的口气),
@@ -58,9 +58,9 @@ async def main() -> None:
     samples = [json.loads(l) for l in SRC.read_text(encoding="utf-8").splitlines() if l.strip()]
     train, val, test = split_dataset(samples)
     aug = await augment(train)
-    seen = {s["text"] for s in samples}          # 变体撞上任何原句(含考题)就丢弃
+    seen = {s["text"] for s in samples}
     train = train + [a for a in aug if a["text"] not in seen]
-    if SUPPLEMENT.exists():                       # 定向补数只进训练集
+    if SUPPLEMENT.exists():
         sup = [json.loads(l) for l in SUPPLEMENT.read_text(encoding="utf-8").splitlines()
                if l.strip()]
         train = train + [{**s, "origin": "supplement"} for s in sup

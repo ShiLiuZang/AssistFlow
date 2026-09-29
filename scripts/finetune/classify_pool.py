@@ -42,8 +42,8 @@ async def main(min_batch: int, force: bool) -> None:
                               json={"texts": [x["text"] for x in rows]})
         r.raise_for_status()
         results = r.json()["results"]
-    # strict:question_id ↔ labels 全靠按序等长对应,服务端少回/多回一条都必须炸响,
-    # 否则错位标签写库后会被幂等机制永久固化
+
+
     n = await repository.insert_topic_classifications(
         [{"question_id": x["question_id"], "labels": res["labels"]}
          for x, res in zip(rows, results, strict=True)])

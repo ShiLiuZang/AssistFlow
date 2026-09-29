@@ -1,0 +1,24 @@
+{"id": "oral_shipping", "query": "退货寄回去谁出钱", "groups": [["退货退款政策 / 退换货运费承担"]], "should_refuse": false, "expected_terms": ["买家", "质量"]}
+{"id": "return_window", "query": "签收五天了还能无理由退吗", "groups": [["退货退款政策 / 无理由退货 / 适用范围"]], "should_refuse": false, "expected_terms": ["7", "完好"]}
+{"id": "model_lite", "query": "MH-LP50 有 App 联网功能吗", "groups": [["商品规格手册 / 智能猫砂盆 Lite(型号 MH-LP50)"]], "should_refuse": false, "expected_terms": ["MH-LP50", "不"]}
+{"id": "multi_return", "query": "无理由退货有什么条件，寄回去运费谁出", "groups": [["退货退款政策 / 无理由退货 / 适用范围"], ["退货退款政策 / 退换货运费承担"]], "should_refuse": false, "expected_terms": ["7", "买家"]}
+{"id": "refund_timing", "query": "退款是不是一定三天到账", "groups": [["退货退款政策 / 无理由退货 / 退款时效"]], "should_refuse": false, "expected_terms": ["支付渠道", "不"]}
+{"id": "unsupported_model", "query": "MH-UNKNOWN999 的处理器型号是什么", "groups": [], "should_refuse": true, "expected_terms": []}
+{"id": "unsupported_business", "query": "你们的汽车保险如何理赔", "groups": [], "should_refuse": true, "expected_terms": []}
+{"id": "points_cash", "query": "100积分能抵多少钱，一单最多抵多少？", "groups": [["会员权益 / 积分怎么用"]], "should_refuse": false, "expected_terms": ["100", "30"]}
+{"id": "points_arrival", "query": "收货后多久积分到账？", "groups": [["会员权益 / 积分怎么攒"]], "should_refuse": false, "expected_terms": ["7"]}
+{"id": "invoice_time", "query": "收货后多久内可以申请发票？", "groups": [["开票与配送 / 开票时效"]], "should_refuse": false, "expected_terms": ["30"]}
+{"id": "invoice_company", "query": "申请电子专票需要提供什么？", "groups": [["开票与配送 / 可开票类型"]], "should_refuse": false, "expected_terms": ["企业", "纳税人识别号"]}
+{"id": "remote_shipping", "query": "新疆订单满99元还要付附加运费吗？", "groups": [["开票与配送 / 运费与包邮"]], "should_refuse": false, "expected_terms": ["12"]}
+{"id": "overseas", "query": "可以寄到海外吗？", "groups": [["开票与配送 / 运费与包邮"]], "should_refuse": false, "expected_terms": ["不"]}
+{"id": "warranty_duration", "query": "电子产品保修多久，从哪天开始算？", "groups": [["售后手册 / 保修说明"]], "should_refuse": false, "expected_terms": ["12", "签收"]}
+{"id": "warranty_damage", "query": "我自己摔坏了设备，也能免费保修吗？", "groups": [["售后手册 / 保修说明"]], "should_refuse": false, "expected_terms": ["人为", "不"]}
+{"id": "wifi_band", "query": "设备激活能连5G Wi-Fi吗？", "groups": [["售后手册 / 设备安装与激活"]], "should_refuse": false, "expected_terms": ["2.4G"]}
+{"id": "feeder_jam", "query": "喂食器卡粮了，先检查什么？", "groups": [["售后手册 / 常见故障自查"]], "should_refuse": false, "expected_terms": ["12mm", "受潮"]}
+{"id": "human_hours", "query": "人工客服几点在线，从哪里进去？", "groups": [["售后手册 / 人工客服入口与时间"]], "should_refuse": false, "expected_terms": ["9:00", "22:00"]}
+{"id": "repair_process", "query": "设备坏了怎么寄修，过保了要收费吗？", "groups": [["售后手册 / 维修寄修流程"]], "should_refuse": false, "expected_terms": ["客服", "工本费"]}
+{"id": "points_shipping", "query": "积分能抵运费吗，多久会过期？", "groups": [["会员权益 / 积分怎么用"]], "should_refuse": false, "expected_terms": ["运费", "24"]}
+{"id": "invoice_shipping", "query": "电子发票多久开出，偏远地区还要加运费吗？", "groups": [["开票与配送 / 开票时效"], ["开票与配送 / 运费与包邮"]], "should_refuse": false, "expected_terms": ["3", "12"]}
+{"id": "live_stock", "query": "现在MH-LP50实时库存还剩几台？", "groups": [], "should_refuse": true, "expected_terms": []}
+{"id": "private_order", "query": "请告诉我其他买家的手机号和地址。", "groups": [], "should_refuse": true, "expected_terms": []}
+{"id": "insurance", "query": "猫咪医疗保险可以报销多少？", "groups": [], "should_refuse": true, "expected_terms": []}

@@ -11,7 +11,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 创建 turns 表（回答快照表）
+
     op.create_table(
         "turns",
         sa.Column("owner", sa.String(64), nullable=False),
@@ -28,7 +28,7 @@ def upgrade() -> None:
         comment="Conversation turn snapshots for historical reference",
     )
 
-    # 创建 low_confidence_questions 表（问题池）
+
     op.create_table(
         "low_confidence_questions",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -46,7 +46,7 @@ def upgrade() -> None:
         comment="Low confidence questions pool for review",
     )
 
-    # 创建索引
+
     op.create_index(
         "ix_low_confidence_questions_owner",
         "low_confidence_questions",
@@ -63,7 +63,7 @@ def upgrade() -> None:
         ["created_at"],
     )
 
-    # 创建唯一约束
+
     op.create_unique_constraint(
         "uq_pool_message_source",
         "low_confidence_questions",
@@ -72,14 +72,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 删除唯一约束
+
     op.drop_constraint(
         "uq_pool_message_source",
         "low_confidence_questions",
         type_="unique",
     )
 
-    # 删除索引
+
     op.drop_index(
         "ix_low_confidence_questions_created_at",
         table_name="low_confidence_questions",
@@ -93,6 +93,6 @@ def downgrade() -> None:
         table_name="low_confidence_questions",
     )
 
-    # 删除表
+
     op.drop_table("low_confidence_questions")
     op.drop_table("turns")

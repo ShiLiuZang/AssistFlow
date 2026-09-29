@@ -27,7 +27,7 @@ def encode(samples: list[dict], tokenizer) -> list[dict]:
                     padding="max_length", max_length=128)
     items = []
     for i, s in enumerate(samples):
-        vec = [0.0] * NUM_CLASSES                 # float 向量:BCEWithLogitsLoss 要求
+        vec = [0.0] * NUM_CLASSES
         for lb in s["labels"]:
             vec[LABEL2ID[lb]] = 1.0
         items.append({"input_ids": enc["input_ids"][i],
@@ -70,15 +70,15 @@ def main() -> None:
     train_ds = encode(load_jsonl(DATA / "train.jsonl"), tokenizer)
     val_ds = encode(load_jsonl(DATA / "val.jsonl"), tokenizer)
     args = TrainingArguments(
-        output_dir="data/finetune/checkpoints",       # 只放训练日志,save_strategy=no 不写权重
-        eval_strategy="epoch",                    # v5 参数名,不是 evaluation_strategy
-        save_strategy="no",                       # 零磁盘 checkpoint,最优权重走 BestInMemory
+        output_dir="data/finetune/checkpoints",
+        eval_strategy="epoch",
+        save_strategy="no",
         learning_rate=2e-5,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=64,
         num_train_epochs=8,
-        weight_decay=0.01,                        # 正则化防过拟合
-        metric_for_best_model="micro_f1",         # EarlyStopping 盯它
+        weight_decay=0.01,
+        metric_for_best_model="micro_f1",
         greater_is_better=True,
         logging_steps=20,
         report_to="none",
@@ -87,16 +87,16 @@ def main() -> None:
     trainer = Trainer(
         model=model, args=args,
         train_dataset=train_ds, eval_dataset=val_ds,
-        processing_class=tokenizer,               # v5:tokenizer= 已改名
+        processing_class=tokenizer,
         data_collator=default_data_collator,
         compute_metrics=compute_metrics,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=2), best_cb],
     )
     trainer.train()
-    if best_cb.best_state is not None:            # 回填验证集最优权重(替代 load_best_model_at_end)
+    if best_cb.best_state is not None:
         model.load_state_dict(best_cb.best_state)
         print(f"回填最优权重:验证集 micro-F1 {best_cb.best_metric:.4f}")
-    # 验证集上扫全局最优阈值(0.30~0.70 步进 0.05)
+
     logits = trainer.predict(val_ds).predictions
     probs = 1 / (1 + np.exp(-logits))
     gold = np.array([d["labels"] for d in val_ds])

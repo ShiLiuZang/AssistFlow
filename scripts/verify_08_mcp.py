@@ -80,7 +80,7 @@ async def verify():
         assert run.status == "invalid_args", run
     assert len(transport.calls) == 3, transport.calls
 
-    # 占用一个不监听的本地端口模拟不可达服务，不停止用户启动的进程。
+
     with socket.socket() as unavailable:
         unavailable.bind(("127.0.0.1", 0))
         port = unavailable.getsockname()[1]

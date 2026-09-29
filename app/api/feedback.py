@@ -1,3 +1,11 @@
+"""
+用户反馈API路由模块
+
+本模块提供用户对AI回复进行点赞/点踩的反馈接口。
+核心功能：接收用户评分、校验权限、将差评消息加入问题池供后续改进。
+在系统中充当用户反馈收集的入口，为飞轮优化提供数据源。
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -8,28 +16,57 @@ router = APIRouter(tags=["feedback"])
 
 
 class FeedbackRequest(BaseModel):
-    """反馈请求模型"""
+    """
+    反馈请求模型
+
+    属性:
+        user_id: 用户标识
+        conversation_id: 会话ID
+        message_id: 消息ID（AI消息的turn_message_id）
+        rating: 评分，up（点赞）或down（点踩）
+    """
     user_id: str
     conversation_id: int
     message_id: str
-    rating: str  # "up" 或 "down"
+    rating: str
 
 
 @router.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest) -> dict:
-    """提交用户反馈。
-
-    只有 down 评分会落入问题池，up 评分不处理。
-    会验证消息归属和会话归属，防止越权访问。
     """
-    # 验证 rating 参数
+    提交用户反馈
+
+    参数:
+        request: FeedbackRequest对象
+
+    返回:
+        包含success、message、pool_id的字典
+
+    核心逻辑：
+    1. 校验rating字段只能是up或down
+    2. 校验会话存在性和所属权
+    3. 调用repository.submit_feedback提交反馈
+    4. 如果是down评分，返回问题池ID；up评分不处理
+
+    边界情况：
+    - rating非法时返回400
+    - 会话不存在或无权访问时返回404
+    - 消息不存在或无权访问时返回403（repository抛出PermissionError）
+    - 其他参数错误时返回400
+    - 未知异常时返回500
+
+    为什么只处理down评分：
+    差评代表用户不满意，需要收集到问题池进行分析和改进
+    点赞只作为正向信号记录，不需要进入改进流程
+    """
+    # 校验rating字段
     if request.rating not in {"up", "down"}:
         raise HTTPException(
             status_code=400,
             detail="rating 必须是 up 或 down",
         )
 
-    # 验证会话归属
+    # 校验会话存在性和所属权
     conversation = await repository.get_conversation(
         request.conversation_id,
         request.user_id,
@@ -51,14 +88,14 @@ async def submit_feedback(request: FeedbackRequest) -> dict:
         )
 
         if pool_id is None:
-            # up 评分，不落池
+            # up评分，不加入问题池
             return {
                 "success": True,
                 "message": "感谢您的反馈",
                 "pool_id": None,
             }
         else:
-            # down 评分，已落池
+            # down评分，已加入问题池
             return {
                 "success": True,
                 "message": "感谢您的反馈，我们会尽快改进",
@@ -66,21 +103,21 @@ async def submit_feedback(request: FeedbackRequest) -> dict:
             }
 
     except PermissionError:
-        # 消息不属于该用户/会话
+        # 消息不存在或无权访问
         raise HTTPException(
             status_code=403,
             detail="消息不存在或无权访问",
         )
 
     except ValueError as e:
-        # 其他验证错误
+        # 参数错误
         raise HTTPException(
             status_code=400,
             detail=str(e),
         )
 
     except Exception as e:
-        # 未预期的错误
+        # 未知异常
         raise HTTPException(
             status_code=500,
             detail="反馈提交失败",

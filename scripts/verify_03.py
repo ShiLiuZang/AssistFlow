@@ -1,3 +1,8 @@
+"""
+Ch03 知识库验证脚本
+检查MySQL中的向量化状态统计、Milvus中的记录数量
+并执行一次演示检索，验证向量检索链路是否正常
+"""
 import asyncio
 
 from sqlalchemy import func, select
@@ -9,6 +14,7 @@ from app.kb import milvus_client
 
 
 async def main() -> None:
+    """验证知识库双写状态和检索功能"""
     async with SessionLocal() as session:
         counts = await session.execute(
             select(

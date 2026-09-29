@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect x='2' y='2' width='4' height='4' fill='%232b2632'/><rect x='10' y='2' width='4' height='4' fill='%232b2632'/><rect x='2' y='4' width='12' height='9' fill='%232b2632'/><rect x='3' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='11' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='3' y='5' width='10' height='7' fill='%23ff9f57'/><rect x='5' y='7' width='1' height='2' fill='%232b2632'/><rect x='10' y='7' width='1' height='2' fill='%232b2632'/><rect x='7' y='9' width='2' height='1' fill='%23ff8095'/></svg>" />
   <link rel="stylesheet" href="/static/acceptance.css" />
   <style>
-    /* 一行一条问题:问法在前,来源与频次在后,多标签的把同伴类目也摆出来 */
+
     .qrow {
       border: 3px solid var(--ink); background: var(--paper); box-shadow: var(--shadow-sm);
       padding: 10px 13px; margin-top: 10px;
@@ -60,8 +60,8 @@
   <script src="/static/admin.js"></script>
   <script src="/static/acceptance.js"></script>
   <script>
-    /* 类目与页码都在地址栏里(?label=…&page=…):这一页是可以贴给别人的链接,
-       翻页也走地址栏,刷新回到同一页。数据全来自 /api/topics/questions,不在前端筛。 */
+
+
     const SIZE = 10;
     const SOURCE_LABEL = {
       retrieval_low_conf: "检索置信度低", self_check: "生成自评不够答", user_feedback: "用户反馈没解决",
@@ -102,7 +102,7 @@
       }
       box.appendChild(meta);
 
-      // 归并过的问题,页面上显示的是标准化问法;把用户原话也带一句,免得看不出这条从哪来
+
       if (it.normalized && it.raw_question && it.raw_question !== it.text) {
         const raw = el("div", "raw");
         raw.appendChild(el("span", "k", "用户原话"));
@@ -129,7 +129,7 @@
       return box;
     }
 
-    /** 类目选择条:直接从分布接口拿各类问题量,顺手也是「这一类在全局的位置」。 */
+
     async function renderPicker(label) {
       try {
         const dist = await api("/api/topics/distribution");

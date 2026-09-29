@@ -1,3 +1,11 @@
+"""
+结构化信息提取API路由模块
+
+本模块提供从非结构化文本中提取结构化售后信息的接口。
+核心功能：使用LLM的函数调用能力，将自然语言描述转换为带类型校验的Pydantic模型。
+在系统中充当数据标准化的工具，供工单创建流程使用。
+"""
+
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -14,23 +22,46 @@ router = APIRouter(prefix="/api", tags=["extract"])
 
 @router.post("/extract", response_model=AfterSalesTicket)
 async def extract(request: ExtractRequest) -> AfterSalesTicket:
-    """把一段售后描述提取成经过 Pydantic 校验的固定字段。
-
-    该接口只提取候选信息，不创建工单；上游模型失败时返回 HTTP 502。
     """
+    从售后描述中提取结构化字段
+
+    参数:
+        request: ExtractRequest对象，包含待提取的文本
+
+    返回:
+        AfterSalesTicket对象，包含工单类型、描述等字段
+
+    核心逻辑：
+    1. 获取聊天模型
+    2. 绑定结构化输出（使用function_calling方法）
+    3. 构造系统提示词和用户消息
+    4. 调用模型提取信息
+    5. 返回经过Pydantic校验的结果
+
+    边界情况：
+    - 模型调用失败时返回502错误
+
+    注意：
+    该接口只提取候选信息，不创建工单
+    提取结果需要进一步确认后才能创建工单
+    """
+    # 获取聊天模型
     model = get_chat_model()
-    # 当前供应商不支持默认 response_format，显式使用工具调用生成结构化结果。
+
+    # 绑定结构化输出，使用function_calling方法
     extractor = model.with_structured_output(
         AfterSalesTicket,
         method="function_calling",
     )
 
+    # 构造消息列表
     messages = [
         SystemMessage(content=EXTRACT_SYSTEM_PROMPT),
         HumanMessage(content=request.text),
     ]
 
     try:
+        # 调用模型提取信息
         return await extractor.ainvoke(messages)
     except Exception as exc:
         logger.exception("结构化售后信息提取失败")

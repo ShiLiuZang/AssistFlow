@@ -1,5 +1,4 @@
 <!doctype html>
-
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -8,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect x='2' y='2' width='4' height='4' fill='%232b2632'/><rect x='10' y='2' width='4' height='4' fill='%232b2632'/><rect x='2' y='4' width='12' height='9' fill='%232b2632'/><rect x='3' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='11' y='3' width='2' height='3' fill='%23ff9f57'/><rect x='3' y='5' width='10' height='7' fill='%23ff9f57'/><rect x='5' y='7' width='1' height='2' fill='%232b2632'/><rect x='10' y='7' width='1' height='2' fill='%232b2632'/><rect x='7' y='9' width='2' height='1' fill='%23ff8095'/></svg>" />
   <link rel="stylesheet" href="/static/acceptance.css" />
   <style>
-    /* 语料血缘:四段落差一行摆开 */
+
     .flow { display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap; }
     .step {
       border: 3px solid var(--ink); background: var(--paper); padding: 9px 12px;
@@ -23,8 +22,8 @@
     .splitgrid { display: flex; gap: 6px; flex-wrap: wrap; }
     .step.exam { background: var(--cream); }
 
-    /* 三份考卷各类分布:类目为行,三卷为列 */
-    td.b { padding: 0 !important; }
+
+    td.b { padding: 0 ; }
     .distbar { display: flex; align-items: center; gap: 6px; padding: 3px 8px; }
     .distbar .track { flex: 1; min-width: 40px; height: 9px; border: 2px solid var(--ink); background: var(--cream); }
     .distbar .fill { height: 100%; background: var(--fur); display: block; }
@@ -103,7 +102,7 @@
       body.textContent = "";
       const ds = d.dataset, sp = ds.splits;
 
-      /* ① 语料血缘 */
+
       const pFlow = panel("语料血缘：一条问题从池子走到考卷",
         "每一段都能对上一个产物文件，数不是口述的。捞池拿的是数据飞轮归并阶段产出的标准化问法，"
         + "不是用户原话——分类器接手的必须是一句语义完整的话。");
@@ -138,7 +137,7 @@
         ["finetune-corpus", "finetune-dataset"].map((n) => jobSpecs[n]).filter(Boolean), load));
       body.appendChild(pFlow);
 
-      /* ② 三份考卷 + 泄漏自检 */
+
       const pSplit = panel("三份考卷与泄漏自检",
         "增强只扩训练集——验证/测试是考题，不许照练习题变。重叠必须是 0：考题一旦被训练集见过，"
         + "后面所有分数都不作数，所以这一栏是硬闸，不是提示。",
@@ -194,7 +193,7 @@
         "标签计数按「命中即计」算，多标签句给命中的每类各记一次，所以各列合计会大于条数。"));
       body.appendChild(pSplit);
 
-      /* ③ 训练产物 */
+
       const pModel = panel("训练产物三件套",
         "权重 + tokenizer + threshold.json。阈值和验证集成绩就落在那个几十字节的小文件里，"
         + "评测和服务启动都读它——它才是「上线的完整分类器」的另一半。",
@@ -210,7 +209,7 @@
         "训练是分钟级重活，会覆盖现有权重"));
       body.appendChild(pModel);
 
-      /* ④ ONNX 产物 */
+
       const ex = d.onnx.report;
       const pOnnx = panel("ONNX 导出产物与一致性校验",
         "导出后拿测试集全量逐条对齐 torch，过线标签必须完全一致才放行；"

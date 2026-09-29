@@ -1,7 +1,7 @@
-/* 微调 验收页共享脚本:四个页面公用的取数、提示、导航、以及「重跑」按钮那一套。
 
-重跑的交互契约:POST 发起 → 每 1.2s 轮询状态与日志尾 → 收到终态(ok/failed/stopped)
-停止轮询、回调页面重新取数。作业名是后端白名单里的常量,前端只传名字。 */
+
+
+
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,7 +29,7 @@ async function api(path, opts) {
   return body;
 }
 
-/* 页间导航在 admin.js 的 mountAdminNav:后台各页共用一份,知识库录入与飞轮那几页也在里头。 */
+
 
 const fmtTime = (iso) => {
   if (!iso) return "—";
@@ -44,8 +44,8 @@ const fmtBytes = (n) => {
   return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
 };
 
-/** 三位小数 + 一条横条:F1 这类 0~1 的分数统一这样画,能扫出高低。
-    hi/lo 只在给了红线时才上色——没有线就不该有"及格/不及格"的暗示。 */
+
+
 function scoreCell(v, redLine) {
   const td = el("td", "num");
   const box = el("div", "cell-bar");
@@ -65,16 +65,16 @@ const STATUS_LABEL = {
   idle: "未跑过", running: "运行中", ok: "已完成", failed: "失败", stopped: "已停止",
 };
 
-/* 日志尾缓存:作业跑完会回调页面重新取数,取数把按钮和日志窗口整个重建。
-   缓存按作业名留着,重建时贴回去——不然日志恰好在跑完那一刻消失,结论就读不到了。 */
+
+
 const JOB_LOGS = {};
 
-/**
- * 一个「重跑」按钮 + 共用日志窗口。
- * @param spec 后端 /api/jobs 里的一项(含 name/title/cmd/needs/heavy/status)
- * @param logbox 日志显示的 <pre>
- * @param onFinish 作业进终态后的回调(通常是页面重新取数)
- */
+
+
+
+
+
+
 function jobButton(spec, logbox, onFinish) {
   const btn = el("button", "btn sm go", "重跑 " + spec.title);
   btn.title = spec.cmd + (spec.needs && spec.needs !== "—" ? "(" + spec.needs + ")" : "");
@@ -135,13 +135,13 @@ function jobButton(spec, logbox, onFinish) {
   });
 
   paint(spec);
-  if (JOB_LOGS[spec.name]) showLog(JOB_LOGS[spec.name]);   // 重建后把日志贴回去
-  // 页面打开时作业正在跑(上一个标签页发起的):直接接上轮询,别让它看着像卡住
+  if (JOB_LOGS[spec.name]) showLog(JOB_LOGS[spec.name]);
+
   if (spec.status === "running") timer = setInterval(poll, 1200);
   return btn;
 }
 
-/** 一排作业按钮 + 它们共用的一个日志窗口。 */
+
 function jobRow(specs, onFinish, extraNote) {
   const wrap = el("div");
   const row = el("div", "jobrow");
@@ -165,18 +165,18 @@ function jobRow(specs, onFinish, extraNote) {
   return wrap;
 }
 
-/** 读图小注:产物里带着模型看这一轮数写的那句就用它,数字自动加粗;没有才用页面写死的兜底句。
- *  注是脚本落盘时生成并校过数的(app/core/read_notes.py),页面这边只负责显示,不再自己下结论。 */
+
+
 function readNoteHtml(note, fallbackHtml) {
   if (!note) return fallbackHtml;
   const esc = String(note).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-  // 只加粗真正的数,名字里的数字不算(BM25 的 25、Recall@10 的 10、bge-m3 的 3),
-  // 与 read_notes.py 里那条校验用的边界规则保持一致
+
+
   return esc.replace(/(?<![A-Za-z@_.\-\d])\d+(?:,\d{3})*(?:\.\d+)?%?(?![A-Za-z_])/g,
     (n) => "<b>" + n + "</b>");
 }
 
-/** 产物缺失时的统一占位:说清楚缺什么、该跑哪个目标。 */
+
 function missingBox(hint) {
   return el("div", "miss", hint || "产物还没生成，先跑对应的 make 目标");
 }

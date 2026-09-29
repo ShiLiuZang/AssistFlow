@@ -63,12 +63,12 @@ def main() -> None:
         dynamo=False,
         opset_version=17,
     )
-    tokenizer.save_pretrained(OUT)          # 带出 tokenizer.json 给轻运行时用
+    tokenizer.save_pretrained(OUT)
     shutil.copy(MODEL_DIR / "threshold.json", OUT / "threshold.json")
 
-    # 一致性校验:测试集全量,ONNX 与 torch 的过线标签必须完全一致。
-    # 参照模型必须重新加载:tracing 会把 transformers v5 masking_utils 的分支
-    # 打成常量、污染进程内已有模型(实测被污染的参照 logits 差到 1.88,而文件本身没问题)
+
+
+
     ref = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
     ref.eval()
     threshold = json.loads((OUT / "threshold.json").read_text())["threshold"]
