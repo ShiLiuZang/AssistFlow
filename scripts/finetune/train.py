@@ -1,4 +1,4 @@
-"""微调 训练:RoBERTa-wwm-ext 全参微调,17 类多标签(BCEWithLogitsLoss)。
+"""训练:RoBERTa-wwm-ext 全参微调,17 类多标签(BCEWithLogitsLoss)。
 运行:python -m scripts.tasks finetune-train。设备自适应 cuda→mps→cpu(Trainer 自动挑);
 基础权重从 data/finetune/pretrained 本地读取。"""
 import json

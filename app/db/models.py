@@ -153,7 +153,7 @@ class QaExtractionStaging(Base):
     知识挖掘暂存表
 
     存储从对话中挖掘的 QA 对，等待人工审核后才进入正式知识库。
-    这是知识飞轮的一部分：对话 → 挖掘 → 审核 → 知识库（参考 git commit test_ch09_flywheel）。
+    这是知识飞轮的一部分：对话 → 挖掘 → 审核 → 知识库。
     """
 
     __tablename__ = "qa_extraction_staging"
@@ -174,7 +174,6 @@ class TopicClassification(Base):
     存储低置信度问题的话题分类结果。
     每条低置信度问题最多保存一次分类，用于统计意图分布和改进模型。
 
-    参考 git commit 8f03245 (微调: add classifier fine-tuning and acceptance workflow)
     """
 
     __tablename__ = "topic_classifications"
@@ -422,7 +421,6 @@ class EvalRun(Base):
     - 追踪知识库更新后的性能变化
     - A/B 测试不同检索策略
 
-    参考 git commit test_ch04_evaluation（评估相关测试）
     """
     __tablename__ = "eval_runs"
 
