@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
+from pydantic import Field
 class Settings(BaseSettings):
     """从 .env 读取并校验模型与数据库配置。"""
 
@@ -28,12 +28,19 @@ class Settings(BaseSettings):
     recall_top_k: int = 50
     rerank_top_k: int = 10
     rerank_min_score: float = 0.3
+    evidence_min_confidence: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+    )
     subquery_split: bool = True
     mcp_logistics_url: str = ""
     mcp_aftersales_url: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_base_url: str = ""
+    review_admin_name: str = "local-reviewer"
 
     @property
     def langfuse_configured(self) -> bool:

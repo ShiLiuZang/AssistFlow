@@ -115,12 +115,13 @@ def answer_is_grounded(
     return model_codes(answer).issubset(
         model_codes(source_text)
     )
-def refusal_result() -> dict:
-    """生成统一的证据不足结果。"""
+def refusal_result(reason: str) -> dict:
+    """生成带有原因的拒答结果。"""
     return {
         "answer": REFUSAL,
         "refused": True,
         "citations": [],
+        "reason": reason,
     }
 
 
@@ -131,12 +132,13 @@ def grounded_result(
 ) -> dict:
     """验证通过返回回答，否则返回拒答。"""
     if not answer_is_grounded(answer, quotes, citations):
-        return refusal_result()
+        return refusal_result("grounding_failed")
 
     return {
         "answer": answer,
         "refused": False,
         "citations": citations,
+        "reason": None,
     }
 async def answer_from_hits(query: str,
     hits: list[dict],
@@ -147,7 +149,7 @@ async def answer_from_hits(query: str,
     citations = number_evidence(hits)
 
     if not citations:
-        return refusal_result()
+        return refusal_result("no_evidence")
 
     model = get_chat_model().with_structured_output(
         GroundedAnswer,
@@ -211,7 +213,7 @@ async def answer_from_hits(query: str,
             raise ValueError("回答模型未返回可解析的结果")
 
     if not result.supported:
-        return refusal_result()
+        return refusal_result("unsupported_answer")
 
     quotes = [
         quote.model_dump()
@@ -222,6 +224,7 @@ async def answer_from_hits(query: str,
         result.answer,
         quotes,
         citations,
+
     )
 def arrange_head_tail(items: list[dict]) -> list[dict]:
     """将前两条资料放在首尾，保留原引用编号。"""

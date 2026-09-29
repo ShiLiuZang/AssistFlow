@@ -94,6 +94,7 @@ class Runtime:
                 payload = {
                     "query": query,
                     "request_id": uuid4().hex,
+                    "message_id": None,
                     "user_id": user_id,
                     "conversation_id": conversation_id,
                     "messages": [HumanMessage(content=query)],
@@ -106,6 +107,12 @@ class Runtime:
                     "order": None,
                     "queries": [],
                     "evidence": [],
+                    "evidence_confidence": None,
+                    "confidence_signals": None,
+                    "retrieved_snapshot": None,
+                    "evidence_allowed": False,
+                    "fallback_source": None,
+                    "fallback_reason": None,
                     "citations": [],
                     "answer": "",
                     "steps": 0,
@@ -163,6 +170,8 @@ class Runtime:
 
             yield {
                 "event": "done",
+                "request_id": result.get("request_id"),
+                "message_id": result.get("message_id"),
             }
 
         except Exception:

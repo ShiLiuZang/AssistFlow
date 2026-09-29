@@ -10,7 +10,7 @@ from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
 from app.core.coref import entities, resolve
-from app.core.retrieval import retrieve_policy
+from app.core.retrieval import retrieve_policy_detailed
 from app.tools.context import ToolContext
 from app.tools.engine import (
     check_tool_call,
@@ -18,8 +18,9 @@ from app.tools.engine import (
     make_tool_run,
 )
 from app.tools.audit import build_tool_audit, emit_tool_audit
-
-
+from app.config import settings
+from app.core.confidence import evidence_gate
+from app.db import repository
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
 
@@ -34,23 +35,69 @@ def make_nodes(services):
             "trace":[*state.get("trace",[]),name],
             **values,
         }
+    async def assess_evidence(query: str, result: dict) -> dict:
+        if not isinstance(result, dict):
+            raise ValueError("详细检索结果必须是字典")
 
+        candidates = result.get("candidates")
+        evidence = result.get("evidence")
+
+        if not isinstance(candidates, list):
+            raise ValueError("证据检查需要精排候选列表")
+
+        if not isinstance(evidence, list):
+            raise ValueError("回答证据必须是列表")
+
+        check = getattr(services, "check_sufficient", None)
+        if not callable(check):
+            raise ValueError("未配置证据充分性检查服务")
+
+        async with span("evidence_check", trace_sink):
+            decision = await evidence_gate(
+                query,
+                candidates,
+                settings.evidence_min_confidence,
+                check,
+                evidence=evidence,
+            )
+
+        return {
+            "evidence": evidence if decision.allow else [],
+            "evidence_confidence": decision.confidence["score"],
+            "confidence_signals": decision.confidence["signals"],
+            "retrieved_snapshot": decision.snapshot,
+            "evidence_allowed": decision.allow,
+            "fallback_source": decision.source,
+            "fallback_reason": (
+                decision.reason if not decision.allow else None
+            ),
+        }
     async def retrieve(state: ConversationState):
-        # 读取 query
         query = state.get("resolved_query") or state["query"]
 
-        # 调用检索服务
-        async with span("retrieve", trace_sink):
-            hits = await services.retrieve(query)
+        retrieve_detailed = getattr(
+            services,
+            "retrieve_detailed",
+            None,
+        )
+        if not callable(retrieve_detailed):
+            raise ValueError("未配置详细检索服务")
 
-        # 返回 evidence 和 trace
-        return update(state, "retrieve", evidence=hits)
+        async with span("retrieve", trace_sink):
+            result = await retrieve_detailed(query)
+
+        values = await assess_evidence(query, result)
+
+        return update(
+            state,
+            "retrieve",
+            **values,
+        )
 
     async def answer(state: ConversationState):
-        # 读取 query、evidence
         query = state.get("resolved_query") or state["query"]
         evidence = state["evidence"]
-        # 调用 services.answer
+
         async with span("answer", trace_sink):
             result = await services.answer(
                 query,
@@ -58,16 +105,132 @@ def make_nodes(services):
                 order=state.get("order"),
                 summary_text=state.get("summary_text", ""),
             )
-        # 返回 answer、citations 和 trace
-        return update(state, "answer",answer=result["answer"],
-        citations=result["citations"])
 
+            if not isinstance(result, dict):
+                raise ValueError("回答服务必须返回字典")
 
+            refused = result.get("refused")
+            if not isinstance(refused, bool):
+                raise ValueError("回答服务必须返回布尔值 refused")
 
+            if "reason" not in result:
+                raise ValueError("回答服务缺少 reason 字段")
+
+            reason = result["reason"]
+
+            if refused:
+                allowed_reasons = {
+                    "no_evidence",
+                    "unsupported_answer",
+                    "grounding_failed",
+                }
+                if (
+                        not isinstance(reason, str)
+                        or reason not in allowed_reasons
+                ):
+                    raise ValueError("回答服务返回了无效的拒答原因")
+
+                source = (
+                    "retrieval_low_conf"
+                    if reason == "no_evidence"
+                    else "self_check"
+                )
+            else:
+                if reason is not None:
+                    raise ValueError("正常回答的 reason 必须为 None")
+
+                source = None
+
+                # 保存快照
+            message_id = f"msg_{state['conversation_id']}_{state['request_id']}"
+            snapshot = state.get("retrieved_snapshot")
+            turn_saved = False
+
+            try:
+                await repository.save_turn(
+                    owner=state["user_id"],
+                    conversation=str(state["conversation_id"]),
+                    message_id=message_id,
+                    turn_id=state["request_id"],
+                    question=query,
+                    snapshot=snapshot,
+                )
+                turn_saved = True
+            except Exception as e:
+                # 快照保存失败不影响回答返回
+                # 但应该记录日志（这里简化处理）
+                pass
+
+            # 如果拒答，自动落池
+            if refused and source and turn_saved:
+                try:
+                    await repository.capture_low_confidence(
+                        owner=state["user_id"],
+                        conversation=str(state["conversation_id"]),
+                        message_id=message_id,
+                        source=source,
+                        reason=reason,
+                    )
+                except Exception as e:
+                    # 落池失败不影响回答返回
+                    pass
+
+            return update(
+                state,
+                "answer",
+                answer=REFUSAL if refused else result["answer"],
+                citations=[] if refused else result["citations"],
+                fallback_source=source,
+                fallback_reason=reason,
+                message_id=message_id if turn_saved else None,
+            )
     async def fallback(state: ConversationState):
-        # 不调用服务
-        # 返回固定拒答、空 citations 和 trace
-        return update(state, "fallback", answer=REFUSAL,citations=[])
+        if state.get("fallback_reason") == "check_error":
+            answer = "暂时无法完成资料核对，请稍后重试或联系人工客服。"
+            source = "self_check"
+            reason = "check_error"
+        else:
+            answer = REFUSAL
+            source = state.get("fallback_source", "retrieval_low_conf")
+            reason = state.get("fallback_reason", "unknown")
+        query = state.get("resolved_query") or state["query"]
+        message_id = f"msg_{state['conversation_id']}_{state['request_id']}"
+        snapshot = state.get("retrieved_snapshot")
+        turn_saved = False
+
+        try:
+            await repository.save_turn(
+                owner=state["user_id"],
+                conversation=str(state["conversation_id"]),
+                message_id=message_id,
+                turn_id=state["request_id"],
+                question=query,
+                snapshot=snapshot,
+            )
+            turn_saved = True
+        except Exception as e:
+            pass
+
+        # 自动落池
+        if turn_saved:
+            try:
+                await repository.capture_low_confidence(
+                    owner=state["user_id"],
+                    conversation=str(state["conversation_id"]),
+                    message_id=message_id,
+                    source=source,
+                    reason=reason,
+                )
+            except Exception as e:
+                pass
+
+        return update(
+            state,
+            "fallback",
+            answer=answer,
+            citations=[],
+            message_id=message_id if turn_saved else None,
+        )
 
     async def agent(state: ConversationState):
         steps = state.get("steps", 0)
@@ -427,25 +590,41 @@ def make_nodes(services):
             last_order_id=selected,
             route="policy",
         )
+
     async def policy(state: ConversationState):
+        query = state.get("resolved_query") or state["query"]
+
         expand = getattr(services, "expand_policy", None)
         if expand is None:
             async def expand(_query):
                 return []
 
+        search = getattr(services, "retrieve_detailed", None)
+        rerank_all = getattr(services, "rerank_policy", None)
+
+        if not callable(search):
+            raise ValueError("未配置详细检索服务")
+
+        if not callable(rerank_all):
+            raise ValueError("未配置政策统一精排服务")
+
         async with span("policy_retrieve", trace_sink):
-            queries, citations = await retrieve_policy(
-                state.get("resolved_query", state["query"]),
+            queries, result = await retrieve_policy_detailed(
+                query,
                 state.get("order"),
                 expand,
-                services.retrieve,
+                search,
+                rerank_all,
             )
+
+        values = await assess_evidence(query, result)
+
         return update(
             state,
             "policy",
             queries=queries,
-            citations=citations,
-            evidence=citations,
+            citations=[],
+            **values,
         )
     async def clarify_reference(state: ConversationState):
         return update(
@@ -517,10 +696,18 @@ def make_nodes(services):
                 and str(last_message.content)==answer
             )
             if answer and not answer_already_present:
-                messages = [AIMessage(content=answer)]
+                messages = [
+                    AIMessage(
+                        content=answer,
+                        id=state.get("message_id"),
+                    )
+                ]
         else:
             messages = [
-                AIMessage(content=state["answer"])
+                AIMessage(
+                    content=state["answer"],
+                    id=state.get("message_id"),
+                )
             ]
 
         return update(

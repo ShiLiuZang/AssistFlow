@@ -1,10 +1,14 @@
 import json
 from typing import Literal
-from app.tools.orders import get_order, list_user_orders
+from app.core.rerank import rerank_hits
 from app.core.llm import get_chat_model
 from app.tools.context import ToolContext
 from pydantic import BaseModel
-from app.core.retrieval import search_knowledge
+from app.core.retrieval import (
+    search_knowledge,
+    search_knowledge_detailed,
+)
+from app.core.sufficiency import check_sufficient
 from app.core.observability import (
     extract_model_name,
     extract_token_usage,
@@ -52,7 +56,9 @@ class Services:
     registry: Registry | None = None
     audit_sink: AuditSink | None = None
     trace_sink: Callable | None = None
-
+    retrieve_detailed: Callable | None = None
+    check_sufficient: Callable | None = None
+    rerank_policy: Callable | None = None
 def make_services(registry: Registry | None = None) -> Services:
     if registry is None:
         registry = make_tool_registry()
@@ -67,6 +73,9 @@ def make_services(registry: Registry | None = None) -> Services:
         expand_policy=expand_policy,
         tools=registry.execution_tools(),
         registry=registry,
+        retrieve_detailed=retrieve_detailed,
+        check_sufficient=check_sufficient,
+        rerank_policy=rerank_hits,
     )
 
 
@@ -123,7 +132,14 @@ async def retrieve(query: str) -> list[dict]:
         top_k=5,
     )
 
-
+async def retrieve_detailed(
+    query: str,
+) -> dict[str, list[dict] | None]:
+    return await search_knowledge_detailed(
+        query,
+        strategy="hybrid_rerank",
+        top_k=5,
+    )
 
 async def answer(
     query: str,

@@ -43,7 +43,11 @@ class Message(Base):
         DateTime,
         server_default=func.now(),
     )
-
+    turn_message_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        unique=True,
+    )
 
 class Ticket(Base):
     __tablename__ = "tickets"
@@ -73,6 +77,9 @@ class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reviews.id"), unique=True, nullable=True,
+    )
     category: Mapped[str] = mapped_column(String(255))
     questions: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
@@ -88,6 +95,36 @@ class KnowledgeChunk(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
+    )
+
+
+class QaExtractionStaging(Base):
+    """Minihelp 对话挖知识的暂存队列，人工采纳后才进入正式知识库。"""
+
+    __tablename__ = "qa_extraction_staging"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_no: Mapped[str] = mapped_column(String(64))
+    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="extracted", server_default="extracted")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class TopicClassification(Base):
+    """微调 旁路分类结果；每条低置信度问题最多保存一次分类。"""
+
+    __tablename__ = "topic_classifications"
+    __table_args__ = (UniqueConstraint("question_id", name="uq_topic_classifications_question_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("low_confidence_questions.id"), nullable=False,
+    )
+    labels: Mapped[list] = mapped_column(JSON, nullable=False)
+    classified_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
     )
 
 
@@ -167,4 +204,99 @@ class TraceSpan(Base):
         DateTime,
         server_default=func.now(),
         index=True,
+    )
+class Turn(Base):
+    """回答快照表 - 记录每次回答时的原始问题和检索结果"""
+    __tablename__ = "turns"
+    __table_args__ = (
+        {"comment": "Conversation turn snapshots for historical reference"},
+    )
+
+    owner: Mapped[str] = mapped_column(String(64), primary_key=True)
+    conversation: Mapped[str] = mapped_column(String(64), primary_key=True)
+    message_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    turn_id: Mapped[str] = mapped_column(String(64))
+    question: Mapped[str] = mapped_column(Text)
+    snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+    )
+
+
+class LowConfidenceQuestion(Base):
+    """低置信度问题池 - 收集需要人工审核的问题"""
+    __tablename__ = "low_confidence_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner",
+            "conversation",
+            "message_id",
+            "source",
+            name="uq_pool_message_source",
+        ),
+        {"comment": "Low confidence questions pool for review"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), index=True)
+    conversation: Mapped[str] = mapped_column(String(64), index=True)
+    message_id: Mapped[str] = mapped_column(String(64))
+    question: Mapped[str] = mapped_column(Text)
+    snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("reviews.id"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        index=True,
+    )
+
+
+class Review(Base):
+    """待审核队列 - 标准化后的问题和归并频次"""
+    __tablename__ = "reviews"
+    __table_args__ = (
+        {"comment": "Review queue for normalized questions"},
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question: Mapped[str] = mapped_column(Text)
+    suggestion: Mapped[str] = mapped_column(Text)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    reviewer: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    publish_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+    )
+
+
+class EvalRun(Base):
+    """固定集的一次完整评测记录。"""
+    __tablename__ = "eval_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dataset_version: Mapped[str] = mapped_column(String(128))
+    case_ids: Mapped[list] = mapped_column(JSON)
+    config_version: Mapped[str] = mapped_column(String(128))
+    kb_revision: Mapped[str] = mapped_column(String(128))
+    strategy: Mapped[str] = mapped_column(String(32))
+    top_k: Mapped[int] = mapped_column(Integer)
+    triggered_by: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16))
+    metrics: Mapped[dict] = mapped_column(JSON)
+    details: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
     )

@@ -1,10 +1,4 @@
 <!doctype html>
-<!--
-  来源：公众号@小林coding
-  后端八股网站：xiaolincoding.com
-  Agent网站：xiaolinnote.com
-  简历模版：jianli.xiaolinnote.com
--->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -93,12 +87,12 @@
   <script src="/static/admin.js"></script>
   <script src="/static/acceptance.js"></script>
   <script>
-    /* 只渲染 /api/observability/overview 已接入的数据；
-       成本读本地报表，趋势与校准在后端接入前显示未接入状态。 */
+    /* 只渲染 /api/observability/overview 已保存的运行结果。 */
     const NS = "http://www.w3.org/2000/svg";
     const METRIC_LABEL = {
       recall_at_5: "Recall@5", recall_at_10: "Recall@10", mrr: "MRR",
-      faithfulness: "Faithfulness", refusal_rate: "拒答率",
+      recall_at_k: "Recall@K", faithfulness: "Faithfulness",
+      refusal_accuracy: "拒答正确率", refusal_rate: "拒答率",
     };
     const DELTA_EPS = 0.005;      // 和终端趋势表同一条判定线:动静小于它算持平
     const fmt3 = (v) => (v === null || v === undefined ? "—" : Number(v).toFixed(3));
@@ -239,8 +233,7 @@
     function trendPanel(d) {
       const p = el("div", "panel");
       panelHead(p, "评估趋势", ["数据源 eval_runs 表", "info"],
-        "飞轮持续往知识库写东西,评估流水线就是拿来防劣化的。每轮复用 ch04 那套评估集,"
-        + "分数落一行,连起来就是趋势。哪天审核放进脏知识把忠实度拉下来,这张表第一时间标出来。");
+        "只比较相同题目、配置、策略和 K 的运行；失败留在分母，未运行裁判显示为空。");
       if (d.status === "error") {
         p.appendChild(missingBox("趋势读不到:" + (d.note || "")));
         jobFoot(p, d);
@@ -253,16 +246,14 @@
       }
       const runs = d.runs, latest = runs[0], prev = runs[1];
       const drops = prev
-        ? d.metric_names.filter((n) => (latest.metrics[n] ?? 0) < (prev.metrics[n] ?? 0) - DELTA_EPS)
+        ? d.metric_names.filter((n) => latest.metrics[n] != null && prev.metrics[n] != null
+            && latest.metrics[n] < prev.metrics[n] - DELTA_EPS)
         : [];
       p.appendChild(kpis([
-        { label: "已跑轮次", val: String(runs.length), sub: "最多留最近十轮" },
-        { label: "最近一轮", val: fmt3(latest.metrics.faithfulness), sub: "Faithfulness · 生成段有没有编" },
-        { label: "检索 MRR", val: fmt3(latest.metrics.mrr), sub: (latest.metrics.recall_at_5 !== undefined
-              ? "Recall@5 " + fmt3(latest.metrics.recall_at_5)
-              : "Recall@10 " + fmt3(latest.metrics.recall_at_10)) },
-        { label: "对比上轮", val: drops.length ? String(drops.length) : "0", unit: " 项下滑",
-          sub: drops.length ? drops.map((n) => METRIC_LABEL[n]).join("、") + " 掉了" : "持平或上涨" },
+        { label: "可比较轮次", val: String(runs.length), sub: "最多展示最近十轮" },
+        { label: "最近一轮", val: fmt3(latest.metrics.faithfulness), sub: "忠实度需独立裁判；未裁判为空" },
+        { label: "检索 MRR", val: fmt3(latest.metrics.mrr), sub: "Recall@" + latest.top_k + " " + fmt3(latest.metrics.recall_at_k) },
+        { label: "失败数", val: String(latest.metrics.failures), sub: "本轮 " + latest.metrics.cases + " 题；" + latest.status },
       ]));
 
       const rows = runs.map((r, i) => {
@@ -271,7 +262,7 @@
         tr.appendChild(el("td", null, "#" + r.id));
         tr.appendChild(el("td", null, fmtTime(r.created_at).slice(5, 16)));
         tr.appendChild(el("td", null, r.triggered_by));
-        tr.appendChild(el("td", "num", String(r.dataset_size)));
+        tr.appendChild(el("td", "num", String(r.metrics.cases)));
         for (const n of d.metric_names) {
           const v = r.metrics[n], o = older ? older.metrics[n] : undefined;
           let cls = "num", arrow = "";
@@ -291,11 +282,10 @@
         .concat(d.metric_names.map((n) => METRIC_LABEL[n])), rows));
 
       const read = el("div", "read");
-      read.innerHTML = readNoteHtml(d.read_note, drops.length
-        ? "对比上一轮,<b>" + drops.map((n) => METRIC_LABEL[n]).join("、")
-          + "</b> 在下滑。先去待审队列翻最近通过的那几条,脏知识进库最常见的表现就是忠实度掉。"
-        : "四个指标对上一轮都没退步。趋势的价值不在单轮的绝对分,而在<b>下一轮别掉</b>——"
-          + "定时跑起来(cron 每天一轮),劣化才有人看见。");
+      read.textContent = drops.length
+        ? "可比较的上一轮中，" + drops.map((n) => METRIC_LABEL[n]).join("、") + " 下滑；需要检查本轮明细。"
+        : (prev ? "可比较指标未见明显下滑。" : "目前只有一轮可比较的评测。")
+          + (d.omitted_incomparable ? "另有 " + d.omitted_incomparable + " 轮配置不同，未参与比较。" : "");
       p.appendChild(read);
       jobFoot(p, d);
       return p;
@@ -320,7 +310,7 @@
       }
       svg.appendChild(svgEl("text", { x: M.l + plotW / 2, y: y0 + 38, "text-anchor": "middle", class: "glabel" }, "阈值 t"));
       const line = (key, color) => {
-        const pts = scan.map((r) => xs(r.t).toFixed(1) + "," + ys(r[key]).toFixed(1)).join(" ");
+        const pts = scan.map((r) => xs(r.threshold).toFixed(1) + "," + ys(r[key]).toFixed(1)).join(" ");
         svg.appendChild(svgEl("polyline", { points: pts, class: "ln", stroke: color }));
       };
       line("pass_rate", "var(--online)");
@@ -336,9 +326,8 @@
 
     function calibrationPanel(d) {
       const p = el("div", "panel");
-      panelHead(p, "置信度阈值校准", ["ch04 评估集实跑", "info"],
-        "兜底那道闸卡在什么分上,不是拍脑袋定的。拿评估集里可答的和该拒的两拨题各算一遍"
-        + "证据置信度,再扫一遍阈值,看哪条线把两拨分得最开。");
+      panelHead(p, "置信度阈值校准", ["独立校准集", "info"],
+        "用独立 calibration 集的真实检索分数扫描阈值；推荐值不会自动改动在线配置。");
       const w = d.weights;
       const wnote = el("div", "note");
       wnote.appendChild(el("h3", null, "置信度怎么算出来的"));
@@ -396,11 +385,9 @@
       scanChart(svg, d.scan, rec.threshold, d.in_use);
 
       const read = el("div", "read");
-      read.innerHTML = readNoteHtml(d.read_note,
-        "红线先陡降后贴地:阈值抬到 <b>" + rec.threshold.toFixed(2)
-        + "</b> 时应拒放行率归零,库外问题一条都进不来,代价是 <b>"
-        + pct(1 - rec.pass_rate) + "</b> 的可答被误拦。误拦的那些走兜底进问题池,"
-        + "恰好是飞轮的燃料,所以这笔账划得来。要更宽松就把线往左挪,得先接受有库外问题被硬答。");
+      read.textContent = "当前校准集推荐阈值 " + rec.threshold.toFixed(2)
+        + "：可答通过率 " + pct(rec.pass_rate) + "，应拒放行率 " + pct(rec.leak_rate)
+        + "。样本集以外的效果仍需 holdout 复评。";
       p.appendChild(read);
 
       const split = el("div", "split");

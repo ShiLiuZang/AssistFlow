@@ -782,7 +782,7 @@
     }
 
     // ---------- ch04:每段回答满意度反馈(👍/👎,点一次点亮 + 已反馈,一次性)----------
-    function addFeedbackBar(bubble) {
+    function addFeedbackBar(bubble, messageId) {
       if (bubble.querySelector(".feedback")) return;   // 防重复挂
       const bar = document.createElement("div");
       bar.className = "feedback";
@@ -795,32 +795,56 @@
       const done = document.createElement("span");
       done.className = "fb-done"; done.hidden = true; done.textContent = "已反馈,谢谢~";
       bar.append(up, down, done);
-      // ch09:向上找这条回答之前最近的用户气泡,把该轮用户原话带给后端(👎 落池要用)
-      function userQuestionBefore() {
-        let row = bubble.closest(".row");
-        while (row && (row = row.previousElementSibling)) {
-          if (row.classList && row.classList.contains("user")) {
-            const b = row.querySelector(".bubble");
-            return (b ? b.textContent : row.textContent).trim();
-          }
-        }
-        return "";
-      }
-      function give(chosen, other) {
+
+      async function give(chosen, other) {
         if (bar.dataset.given) return;   // 一次性,点过不再变
         bar.dataset.given = "1";
         chosen.classList.add("active");  // 点亮选中的
         other.classList.add("dim");      // 另一个淡出
         up.disabled = true; down.disabled = true;
-        done.hidden = false;             // 显示"已反馈"
-        // ch09:反馈接后端——👎 落低置信度问题池进飞轮,👍 后端只记日志;失败静默,UI 行为不变
-        fetch("/api/feedback", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: getConversationId(),
-                                 rating: chosen === down ? "down" : "up",
-                                 question: userQuestionBefore() }),
-        }).catch(() => {});
+
+        const rating = chosen === down ? "down" : "up";
+        const conversationId = getConversationId();
+        const userId = getUserId();
+
+        if (!messageId) {
+          done.textContent = "反馈失败"; done.hidden = false;
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              conversation_id: conversationId,
+              message_id: messageId,
+              rating: rating
+            }),
+          });
+
+          if (response.ok) {
+            done.textContent = "已反馈,谢谢~";
+            done.hidden = false;
+          } else {
+            done.textContent = "反馈失败,请重试";
+            done.hidden = false;
+            bar.dataset.given = "";  // 允许重试
+            up.disabled = false; down.disabled = false;
+            chosen.classList.remove("active");
+            other.classList.remove("dim");
+          }
+        } catch (error) {
+          done.textContent = "网络错误,请重试";
+          done.hidden = false;
+          bar.dataset.given = "";  // 允许重试
+          up.disabled = false; down.disabled = false;
+          chosen.classList.remove("active");
+          other.classList.remove("dim");
+        }
       }
+
       up.addEventListener("click", () => give(up, down));
       down.addEventListener("click", () => give(down, up));
       bubble.appendChild(bar);
@@ -987,7 +1011,7 @@
     // ---------- ch06:订单选择器卡片(interrupt 缺订单号 → 聊天流点选 → resume 续跑)----------
     // onPick 决定点完卡片干什么:ch06 是 resume 把图续跑下去;ch08 归属校验拒绝之后
     // 没有待续跑的图,点了就当用户重新问一句(见 pickThenAsk)。卡片长相只此一份。
-    function renderOrderCards(bubble, orders, onPick) {
+    function renderOrderCards(bubble, orders, onPick, selection) {
       const intro = document.createElement("div");
       intro.className = "bubble-text";
       intro.textContent = orders.length ? "请选择您要处理的订单:" : "没有查到可选订单,请直接提供订单号。";
@@ -1003,29 +1027,50 @@
           '<div class="oc-mid">' + (o.product || "") + '</div>' +
           '<div class="oc-bot">' + (o.status || "") + ' · ¥' + (o.amount ?? "") + '</div>';
         card.addEventListener("click", async () => {
-          wrap.querySelectorAll(".order-card").forEach((c) => (c.disabled = true));
+          wrap.querySelectorAll("button").forEach((c) => (c.disabled = true));
           card.classList.add("picked");
-          await (onPick || pickThenResume)(o);
+          if (onPick) {
+            await onPick(o);
+          } else {
+            await pickThenResume(o, selection);
+          }
         });
         wrap.appendChild(card);
+      }
+      if (selection && !onPick) {
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "action-btn";
+        cancel.textContent = "取消选择";
+        cancel.addEventListener("click", async () => {
+          wrap.querySelectorAll("button").forEach((button) => (button.disabled = true));
+          await pickThenResume(null, selection);
+        });
+        wrap.appendChild(cancel);
       }
       bubble.appendChild(wrap);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
     // ch06:点完续跑图(有 interrupt 挂着)
-    async function pickThenResume(o) {
-      addRow("user").textContent = "选择订单 " + o.order_id;
+    async function pickThenResume(o, selection) {
+      addRow("user").textContent = o ? "选择订单 " + o.order_id : "取消选择订单";
       const nb = addRow("bot");
       setBusy(true);
       try {
-        await streamInto(nb, () => fetch("/api/actions/resume", {
+        await streamInto(nb, () => fetch("/api/actions/select-order", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: getConversationId(), order_id: o.order_id }),
+          body: JSON.stringify({
+            conversation_id: selection.conversationId,
+            user_id: selection.userId,
+            kind: "select_order",
+            request_id: selection.requestId,
+            ...(o ? { order_id: o.order_id } : { cancelled: true }),
+          }),
         }));
       } catch (e) {
         nb.className = "bubble error";
-        nb.textContent = "续跑失败,请稍后重试";
+        nb.textContent = "续跑失败，请刷新后重试当前操作";
       } finally {
         setBusy(false);
       }
@@ -1112,7 +1157,11 @@
             on.interrupt && on.interrupt(data);
           }
           else if (data.event === "actions") on.actions && on.actions(data.items || []);
-          else if (data.event === "done" || data.event === "conversation") setConversationId(data.conversation_id);
+          else if (data.event === "done") {
+            if (data.conversation_id) setConversationId(data.conversation_id);
+            on.done && on.done(data);
+          }
+          else if (data.event === "conversation") setConversationId(data.conversation_id);
           else if (data.delta !== undefined) on.delta && on.delta(data.delta);
         }
       }
@@ -1124,7 +1173,7 @@
     async function streamInto(bubble, doFetch) {
       showTyping(bubble);
       let structured = false, textStarted = false, interrupted = false, raw = "";
-      let badgesEl = null, textEl = null, citations = [], actions = [];
+      let badgesEl = null, textEl = null, citations = [], actions = [], messageId = null;
       function ensureStructure() {
         if (structured) return;
         bubble.innerHTML = "";
@@ -1156,19 +1205,31 @@
         },
         citations: (items) => { citations = items; },
         actions: (items) => { actions = items; },
+        done: (data) => { messageId = data.message_id; },
         interrupt: (data) => {
           interrupted = true;
           if (!structured) { bubble.innerHTML = ""; structured = true; }
           // ch08:中断按 kind 分发——select_order 弹订单卡,confirm_ticket 弹工单预览卡
           if (data.kind === "confirm_ticket") renderTicketConfirm(bubble, data.preview || {}, data.tool_call_id);
-          else renderOrderCards(bubble, data.orders || []);
+          else if (data.kind === "select_order") {
+            renderOrderCards(
+              bubble,
+              data.orders || [],
+              null,
+              {
+                conversationId: data.conversation_id,
+                userId: getUserId(),
+                requestId: data.request_id,
+              },
+            );
+          }
         },
       });
       if (interrupted) return;
       if (!textStarted) { ensureStructure(); textEl.innerHTML = ""; textEl.textContent = "(无回复)"; }
       if (textStarted && citations.length) decorateCitations(textEl, citations);
       if (actions.length) renderActions(bubble, actions);
-      if (textStarted) addFeedbackBar(bubble);
+      if (textStarted && messageId) addFeedbackBar(bubble, messageId);
     }
 
     async function send(preset) {
@@ -1243,11 +1304,13 @@
       // 已是当前会话且聊天区有内容才跳过;页面刚刷新时聊天区是空的,点当前会话也要回载
       if (cid === getConversationId() && messagesEl.querySelector(".row")) return;
       setConversationId(cid);
+      const userId = getUserId();
       messagesEl.innerHTML = "";
       try {
-        const r = await fetch("/api/conversations/" + cid + "/messages?user_id=" + encodeURIComponent(getUserId()));
+        const r = await fetch("/api/conversations/" + cid + "/messages?user_id=" + encodeURIComponent(userId));
         if (r.ok) {
           const payload = await r.json();
+          if (getConversationId() !== cid || getUserId() !== userId) return;
           for (const m of (Array.isArray(payload) ? payload : payload.items || [])) {
             if (!m.content) continue;
             if (m.role === "user") {
@@ -1260,14 +1323,23 @@
               bubble.appendChild(textEl);
               const hit = REPLAY_ACTIONS.find((ra) => m.content.trim() === ra.text);
               if (hit) renderActions(bubble, hit.actions);
-              addFeedbackBar(bubble);   // 反馈条(👍/👎)回载也要有,和直播轮一致
+              if (m.message_id) addFeedbackBar(bubble, m.message_id);
             }
           }
         }
-        const pendingResponse = await fetch("/api/actions/pending?conversation_id=" + cid + "&user_id=" + encodeURIComponent(getUserId()));
+        const pendingResponse = await fetch("/api/actions/pending?conversation_id=" + cid + "&user_id=" + encodeURIComponent(userId));
         if (pendingResponse.ok) {
           const pending = await pendingResponse.json();
-          if (pending) renderTicketConfirm(addRow("bot"), pending.preview, pending.tool_call_id, pending.confirmed);
+          if (getConversationId() !== cid || getUserId() !== userId) return;
+          if (pending?.kind === "select_order") {
+            renderOrderCards(addRow("bot"), pending.orders || [], null, {
+              conversationId: pending.conversation_id,
+              userId,
+              requestId: pending.request_id,
+            });
+          } else if (pending?.kind === "confirm_ticket") {
+            renderTicketConfirm(addRow("bot"), pending.preview, pending.tool_call_id, pending.confirmed);
+          }
         }
       } catch (e) { /* 历史加载失败仍可继续聊 */ }
       if (!messagesEl.children.length) renderEmptyState();

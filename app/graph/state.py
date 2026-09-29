@@ -24,6 +24,12 @@ class ConversationState(
     # 当前轮意图，例如 knowledge、business、chat
 
     evidence: list[dict]
+    evidence_confidence: float | None
+    confidence_signals: dict | None
+    retrieved_snapshot: list[dict] | None
+    evidence_allowed: bool
+    fallback_source: str | None
+    fallback_reason: str | None
     # 当前轮检索到的证据
 
     answer: str
@@ -50,3 +56,4 @@ class ConversationState(
     summary_text: str
     summary_upto: int
     covered_count: int
+    message_id: str | None

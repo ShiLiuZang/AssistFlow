@@ -6,12 +6,39 @@ from app.core import embeddings, rerank
 import re
 import math
 from app.core.coref import entities
+from copy import deepcopy
+from app.core.confidence import ranked_hits
 STRATEGIES = {
     "vector",
     "bm25",
     "hybrid",
     "hybrid_rerank",
 }
+def split_ranked_hits(
+    hits: list[dict],
+    min_score: float,
+) -> dict[str, list[dict]]:
+    """保留精排候选，同时筛选可用于回答的证据。"""
+    if (
+        isinstance(min_score, bool)
+        or not isinstance(min_score, (int, float))
+        or not math.isfinite(min_score)
+        or not 0 <= min_score <= 1
+    ):
+        raise ValueError("最低精排分数必须是 0 到 1 之间的有限数值")
+
+    candidates = ranked_hits(hits)
+
+    evidence = [
+        deepcopy(hit)
+        for hit in candidates
+        if hit["rerank_score"] >= min_score
+    ]
+
+    return {
+        "candidates": candidates,
+        "evidence": evidence,
+    }
 def split_clauses(query: str) -> list[str]:
     """按标点拆分问题，无法有效拆分时保留原问题。"""
     parts = [
@@ -42,19 +69,19 @@ def merge_round_robin(groups: list[list[dict]]) -> list[dict]:
             seen.add(hit_id)
     return result
 
-async def search_knowledge(
-    query:str,
-    strategy:str="vector",
-    top_k:int=5,
+async def search_knowledge_detailed(
+    query: str,
+    strategy: str = "vector",
+    top_k: int = 5,
     category: str | None = None,
     *,
     client=None,
     collection: str = milvus_client.COLLECTION,
     rewrite: bool = False,
     split: bool = False,
+) -> dict[str, list[dict] | None]:
+    """返回可用于回答的证据，以及可用时的精排诊断候选。"""
 
-)->list[dict]:
-    """根据策略检索知识，返回统一的命中结果。"""
     if strategy not in STRATEGIES:
         raise ValueError(f"不支持的检索策略：{strategy}")
     if top_k < 1:
@@ -144,14 +171,41 @@ async def search_knowledge(
             top_k,
         )
 
-        return [
-            hit
-            for hit in ranked
-            if hit["rerank_score"] >= settings.rerank_min_score
-        ]
+        return split_ranked_hits(
+            ranked,
+            min_score=settings.rerank_min_score,
+        )
 
-    return hits
-async def retrieve_policy(query, order, expand, search):
+    return {
+        "candidates": None,
+        "evidence": hits,
+    }
+
+async def search_knowledge(
+    query: str,
+    strategy: str = "vector",
+    top_k: int = 5,
+    category: str | None = None,
+    *,
+    client=None,
+    collection: str = milvus_client.COLLECTION,
+    rewrite: bool = False,
+    split: bool = False,
+) -> list[dict]:
+    """保留原接口，只返回可用于回答的证据列表。"""
+    result = await search_knowledge_detailed(
+        query,
+        strategy=strategy,
+        top_k=top_k,
+        category=category,
+        client=client,
+        collection=collection,
+        rewrite=rewrite,
+        split=split,
+    )
+
+    return result["evidence"]
+async def build_policy_queries(query, order, expand):
     proposed = await expand(query)
 
     if not isinstance(proposed, list):
@@ -183,8 +237,12 @@ async def retrieve_policy(query, order, expand, search):
         if len(queries) == 3:
             break
 
-    merged = {}
+    return queries
 
+async def retrieve_policy(query, order, expand, search):
+    queries = await build_policy_queries(query, order, expand)
+
+    merged = {}
     for current_query in queries:
         hits = await search(current_query)
 
@@ -229,3 +287,66 @@ async def retrieve_policy(query, order, expand, search):
     ]
 
     return queries, citations
+async def retrieve_policy_detailed(
+    query,
+    order,
+    expand,
+    search,
+    rerank_all,
+):
+    queries = await build_policy_queries(query, order, expand)
+    merged = {}
+
+    for current_query in queries:
+        result = await search(current_query)
+
+        if not isinstance(result, dict):
+            raise ValueError("详细政策检索结果必须是字典")
+
+        candidates = result.get("candidates")
+        if not isinstance(candidates, list):
+            raise ValueError("政策检索需要精排候选列表")
+
+        for hit in ranked_hits(candidates):
+            question = hit.get("question", "")
+            answer = hit.get("answer")
+            section_path = hit.get("section_path")
+
+            if (
+                not isinstance(question, str)
+                or not isinstance(answer, str)
+                or not answer.strip()
+                or not isinstance(section_path, str)
+                or not section_path.strip()
+            ):
+                raise ValueError("政策候选缺少有效正文或来源")
+
+            candidate = {
+                "id": hit["id"],
+                "question": question,
+                "answer": answer,
+                "section_path": section_path,
+            }
+
+            previous = merged.get(hit["id"])
+            if previous is not None and previous != candidate:
+                raise ValueError("同一知识块 ID 对应不同内容")
+
+            merged[hit["id"]] = candidate
+
+    if not merged:
+        return queries, {
+            "candidates": [],
+            "evidence": [],
+        }
+
+    ranked = await rerank_all(
+        query,
+        list(merged.values()),
+        5,
+    )
+
+    return queries, split_ranked_hits(
+        ranked,
+        min_score=settings.rerank_min_score,
+    )

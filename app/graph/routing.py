@@ -31,9 +31,13 @@ def route_by_intent(
 
     return "clarify"
 
-def confidence_gate(state:ConversationState)->Literal["answer", "fallback"]:
-    evidence = state.get("evidence")
-    if evidence:
+def confidence_gate(
+    state: ConversationState,
+) -> Literal["answer", "fallback"]:
+    if (
+        state.get("evidence_allowed") is True
+        and state.get("evidence")
+    ):
         return "answer"
 
     return "fallback"

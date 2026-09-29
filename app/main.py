@@ -20,6 +20,13 @@ from app.core.langfuse_client import (
     create_langfuse_client,
     close_langfuse_client,
 )
+from app.api.feedback import router as feedback_router
+from app.api.review import router as review_router
+from app.api.kb import router as kb_router
+from app.api.jobs import router as jobs_router
+from app.api.admin import router as admin_router
+from app.api.acceptance import router as acceptance_router
+from app.api.topics import router as topics_router
 from app.core.observability import configure_langfuse, configure_trace_sink
 from app.api.observability import router as observability_router
 logger = logging.getLogger(__name__)
@@ -86,6 +93,13 @@ app.include_router(conversations_router)
 app.include_router(actions_router)
 app.include_router(knowledge_router)
 app.include_router(observability_router)
+app.include_router(feedback_router)
+app.include_router(review_router)
+app.include_router(kb_router)
+app.include_router(jobs_router)
+app.include_router(admin_router)
+app.include_router(acceptance_router)
+app.include_router(topics_router)
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     """返回进程存活状态；不检查模型、数据库或其他外部服务。"""
@@ -105,3 +119,43 @@ async def chat_page() -> FileResponse:
 @app.get("/observability", include_in_schema=False)
 async def observability_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "observability.html")
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "admin.html")
+
+
+# 管理后台的 HTML 不会因为放在 static 目录中自动获得页面路由，
+# 统一在这里声明入口，避免文档入口和实际服务路径不一致。
+ADMIN_PAGES = {
+    "/kb": "kb.html",
+    "/rag-eval": "rageval.html",
+    "/review": "review.html",
+    "/topics": "topics.html",
+    "/topic-questions": "topic-questions.html",
+    "/topics/questions": "topic-questions.html",
+    "/acceptance": "acceptance.html",
+    "/acceptance-eval": "acceptance-eval.html",
+    "/acceptance-data": "acceptance-data.html",
+    "/acceptance-errors": "acceptance-errors.html",
+    "/acceptance/eval": "acceptance-eval.html",
+    "/acceptance/data": "acceptance-data.html",
+    "/acceptance/errors": "acceptance-errors.html",
+}
+
+
+def _admin_page(path: str) -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / ADMIN_PAGES[path],
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+for _path in ADMIN_PAGES:
+    app.add_api_route(
+        _path,
+        lambda path=_path: _admin_page(path),
+        methods=["GET"],
+        include_in_schema=False,
+    )

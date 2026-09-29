@@ -41,6 +41,7 @@ async def list_messages(
         {
             "role": item.role,
             "content": item.content,
+            "message_id": item.turn_message_id,
         }
         for item in messages
     ]

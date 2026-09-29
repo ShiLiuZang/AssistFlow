@@ -4,6 +4,9 @@ __pycache__/
 .uv-cache/
 .pytest_cache/
 .env
+.idea/
+.codex/
 log/
 data/review/
 data/finetune/
+data/graph-checkpoints.sqlite*

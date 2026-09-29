@@ -16,7 +16,7 @@
 .admin-home .src-retrieval_low_conf { background: #f2ead5; }
 .admin-home .src-self_check { background: #e5e3ed; }
 .admin-home .src-user_feedback { background: #f2e2e4; }
-.admin-home :is(input[type="text"], input[type="number"], select, textarea) {
+.admin-home :is(input[type="text"], input[type="password"], input[type="number"], select, textarea) {
   border: 1px solid #cdd6cc; border-radius: 8px; background: var(--paper);
   color: var(--ink); font-family: inherit; box-shadow: none; padding: 8px 10px;
 }

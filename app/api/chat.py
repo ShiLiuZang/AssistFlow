@@ -70,6 +70,7 @@ def restore_messages(records: list) -> list:
                 AIMessage(
                     content=record.content or "",
                     tool_calls=record.tool_calls or [],
+                    id=record.turn_message_id,
                 )
             )
         elif record.role == "tool":
