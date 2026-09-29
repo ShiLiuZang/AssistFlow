@@ -416,22 +416,12 @@ Markdown 文档
 
 本项目主要用于学习和演示，暂未开放外部贡献。如有疑问或建议，欢迎提交 Issue。
 
----
-
-## 📄 许可证
-
-本项目暂未包含许可证文件。如需对外分发或商业使用，请先明确授权条款。
-
----
-
 ## 🙏 致谢
 
 - [LangChain](https://github.com/langchain-ai/langchain) / [LangGraph](https://github.com/langchain-ai/langgraph)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Milvus](https://milvus.io/)
 - [OpenAI](https://openai.com/)
-
----
 
 ## 📮 联系方式
 
