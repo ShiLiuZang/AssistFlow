@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Minihelp · V2 产品体验原型</title>
+  <link rel="icon" href="assets/minihelp-cat.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="prototype.css">
+  <link rel="stylesheet" href="admin-panels.css">
+  <link rel="stylesheet" href="service-panels.css">
+</head>
+<body data-palette="forest">
+  <header class="preview-bar">
+    <div class="preview-label"><span class="v0">V2</span><span>Minihelp <span class="muted">/ 产品预览</span></span></div>
+    <nav class="surface-switch" aria-label="切换产品视角">
+      <button data-surface="client">客户咨询页</button>
+      <button data-surface="workbench">客服工作台</button>
+      <button data-surface="admin" class="active">管理后台</button>
+    </nav>
+    <div class="preview-options"><span class="demo-label">演示数据</span><button class="text-button" id="plan-open">页面规划 <span aria-hidden="true">↗</span></button><button class="palette-button" id="palette-open" aria-label="切换配色，当前森绿" title="切换配色：森绿 / 纯白 / 暖纸"><span></span><span></span><span></span></button></div>
+  </header>
+  <div id="app"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="modal" aria-labelledby="modal-title"><div id="modal-content"></div></dialog>
+  <script src="admin-panels.js"></script>
+  <script src="service-panels.js"></script>
+  <script src="prototype.js"></script>
+</body>
+</html>
