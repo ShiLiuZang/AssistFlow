@@ -69,6 +69,13 @@ class EvaluationRequest(BaseModel):
     generate: bool = False
 
 
+@router.get("/api/knowledge/evaluation-state")
+async def evaluation_state():
+    """返回现有评测锁与报告版本，供页面核对长请求；不启动评测。"""
+    return {"running": EVAL_LOCK.locked(),
+            "report_mtime": REPORT_PATH.stat().st_mtime if REPORT_PATH.exists() else None}
+
+
 @router.post("/api/knowledge/evaluate")
 async def run_evaluation(request: EvaluationRequest):
     """

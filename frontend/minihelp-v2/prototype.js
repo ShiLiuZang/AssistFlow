@@ -118,7 +118,13 @@
   }
   function render() {
     document.querySelectorAll('[data-surface]').forEach(button=>{button.classList.toggle('active',button.dataset.surface===state.surface);button.setAttribute('aria-pressed',String(button.dataset.surface===state.surface));});
-    $('#app').innerHTML = state.surface==='client' ? client() : servicePanels.hasPage(state.page)?shell(servicePanels.renderPage(state.page),servicePanels.title(state.page)):panels.hasPage(state.page)?shell(panels.renderPage(state.page),panels.title(state.page)):state.page==='tickets'?ticketPage():workbench();
+    $('#app').innerHTML = state.surface==='client' ? client() : dataPanels.hasPage(state.page)?shell(dataPanels.renderPage(state.page),dataPanels.title(state.page)):servicePanels.hasPage(state.page)?shell(servicePanels.renderPage(state.page),servicePanels.title(state.page)):panels.hasPage(state.page)?shell(panels.renderPage(state.page),panels.title(state.page)):state.page==='tickets'?ticketPage():workbench();
+    if(state.surface==='admin'&&dataPanels.hasPage(state.page)) {
+      const badge=$('.top-tools .pill');if(badge)badge.textContent=dataPanels.label();
+      const context=$('.top-tools .small');if(context)context.textContent=['quality','observability','models'].includes(state.page)?'报告与评估状态':state.page==='topics'?'主题归类状态':'库存与运行状态';
+      const marker=$('.demo-label');if(marker)marker.textContent=dataPanels.label();
+      const reviewCount=$('[data-page="review"] .nav-count');if(reviewCount){const value=dataPanels.pendingReviews();reviewCount.textContent=value;reviewCount.hidden=!value;}
+    } else {const marker=$('.demo-label');if(marker)marker.textContent='演示数据';}
     const route = '#/' + (state.surface==='client'?'client':state.page);
     if(location.hash!==route) history.pushState(null,'',route);
   }
@@ -126,6 +132,7 @@
   let toastTimer;
   function toast(message) { const el=$('#toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),3300); }
   function modal(title, body, footer = '<button class="btn" data-action="modal-close">知道了</button>') {
+    $('#modal').classList.remove('workflow-dialog','report-dialog','classification-dialog','knowledge-dialog');delete $('#modal').dataset.workflowKey;delete $('#modal').dataset.knowledgeKey;
     $('#modal-content').innerHTML=`<div class="modal-head"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="modal-close" aria-label="关闭对话框">${icon('close')}</button></div><div class="modal-body">${body}</div><div class="modal-foot">${footer}</div>`;
     if(!$('#modal').open) $('#modal').showModal();
   }
@@ -151,7 +158,7 @@
   };
   function pagePlan(page) {
     const items=page&&pagePlans[page] ? [[page,pagePlans[page]]] : Object.entries(pagePlans);
-    modal(page&&pagePlans[page]?`${pagePlans[page].name} · 页面规划`:'Minihelp · 页面规划',`<div class="notice">首版先确认信息架构、页面风格与主要操作。所有交互使用当前浏览器内的演示数据，刷新后重置。</div><div class="page-map">${items.map(([id,p])=>`<section class="map-row"><h3>${icon(p.icon)}${p.name}<span class="map-tag">${pill(p.stage,p.stage==='本轮可体验'?'':'neutral')}</span></h3><p>${p.text}</p>${p.stage==='本轮可体验'?`<button class="table-actions" data-open-view="${id}">打开页面 ${icon('arrow')}</button>`:''}</section>`).join('')}</div>`);
+    modal(page&&pagePlans[page]?`${pagePlans[page].name} · 页面规划`:'Minihelp · 页面规划',`<div class="notice">这里说明页面结构与接入范围。页面会区分展示样例、实时只读和原型演示；展示样例刷新后重置。</div><div class="page-map">${items.map(([id,p])=>`<section class="map-row"><h3>${icon(p.icon)}${p.name}<span class="map-tag">${pill(p.stage,p.stage==='本轮可体验'?'':'neutral')}</span></h3><p>${p.text}</p>${p.stage==='本轮可体验'?`<button class="table-actions" data-open-view="${id}">打开页面 ${icon('arrow')}</button>`:''}</section>`).join('')}</div>`);
   }
   function showOrder(id) {
     servicePanels.showOrder(id);
@@ -234,7 +241,7 @@
   };
   document.addEventListener('click', event=>{
     const el=event.target.closest('button');if(!el||el.disabled)return;
-    if(servicePanels.onClick(el)||panels.onClick(el))return;
+    if(dataPanels.onClick(el)||servicePanels.onClick(el)||panels.onClick(el))return;
     if(el.dataset.feedback){const [cid,index,rating]=el.dataset.feedback.split(':');const c=conversations.find(c=>c.id===Number(cid)),m=c?.messages[Number(index)];if(!m||m.feedback)return;m.feedback=rating;if(rating==='down'){const question=c.messages.slice(0,Number(index)).filter(m=>m.role==='customer').at(-1)?.text||'客户反馈未解决';panels.addFeedback(question);}render();toast(rating==='down'?'已反馈，可在管理后台的知识缺口查看':'感谢反馈（演示）');return;}
     if(el.dataset.action) {actions[el.dataset.action]?.(el);return;}
     if(el.dataset.surface) {state.surface=el.dataset.surface;state.page=state.surface==='admin'?'overview':'workbench';render();return;}
@@ -264,6 +271,7 @@
   });
   document.addEventListener('input', event=>{
     const el=event.target;
+    dataPanels.onInput(el);
     panels.onInput(el);
     servicePanels.onInput(el);
     if(el.id==='staff-draft')state.drafts[`${state.selected}-${state.mode}`]=el.value;
@@ -277,7 +285,7 @@
     if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&(event.target.id==='staff-draft'||event.target.id==='client-draft')){event.preventDefault();event.target.id==='staff-draft'?sendStaff():sendClient();}
   });
   document.addEventListener('submit', event=>{
-    if(servicePanels.onSubmit(event)||panels.onSubmit(event))return;
+    if(dataPanels.onSubmit(event)||servicePanels.onSubmit(event)||panels.onSubmit(event))return;
     const form=event.target;if(!['ticket-form','doc-form','doc-edit-form','test-form'].includes(form.id))return;
     event.preventDefault();const data=new FormData(form);
     if(form.id==='ticket-form') {
@@ -298,7 +306,9 @@
   });
   const panels = window.createMinihelpPanels({esc,icon,pill,stat,docs,tickets,conversations,modal,toast,render,go,knowledgeRows,state});
   const servicePanels = window.createMinihelpServicePanels({esc,icon,pill,avatar,docs,tickets,conversations,modal,toast,render,go,state});
-  Object.assign(pagePlans,panels.pagePlans,servicePanels.pagePlans);
+  const dataPanels = window.createMinihelpDataPanels({esc,icon,pill,stat,modal,toast,render,go,state});
+  document.addEventListener('change',event=>dataPanels.onChange(event.target));
+  Object.assign(pagePlans,panels.pagePlans,servicePanels.pagePlans,dataPanels.pagePlans);
   window.addEventListener('popstate',restoreRoute);
   restoreRoute();
 })();

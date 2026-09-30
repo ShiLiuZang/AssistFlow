@@ -5,8 +5,9 @@
 
 import datetime as dt
 import logging
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from app.core import jobs, retrieval
@@ -245,6 +246,48 @@ async def overview() -> dict:
         "content_types": [{"key": k, "desc": CONTENT_TYPE_DESC[k]} for k in CONTENT_TYPES],
         "jobs": [jobs.status(n) for n in KB_JOBS],
     }
+
+
+def _stored_chunk_view(row, *, full: bool = False) -> dict:
+    result = {
+        "id": row.id, "questions": row.questions,
+        "answer": row.answer if full else row.answer[:160],
+        "answer_chars": len(row.answer), "category": row.category,
+        "section_path": row.section_path, "content_type": row.content_type,
+        "is_key_clause": bool(row.is_key_clause), "status": row.vectorize_status,
+        "created_at": row.created_at.isoformat(timespec="seconds") if row.created_at else None,
+    }
+    if full:
+        result.update(vector_id=row.vector_id, review_id=row.review_id,
+                      prev_chunk_id=row.prev_chunk_id, next_chunk_id=row.next_chunk_id)
+    return result
+
+
+@router.get("/chunks")
+async def chunks(
+    page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=100),
+    q: str = Query("", max_length=200),
+    status: Literal["pending", "done", "failed"] | None = None,
+    content_type: Literal["faq", "policy", "manual", "spec", "mined", "unmarked"] | None = None,
+) -> dict:
+    try:
+        result = await repository.list_knowledge_chunks(
+            page=page, size=size, q=q, status=status, content_type=content_type,
+        )
+    except Exception as exc:
+        raise HTTPException(503, "知识库存暂时无法读取") from exc
+    return {**result, "items": [_stored_chunk_view(row) for row in result["items"]]}
+
+
+@router.get("/chunks/{chunk_id}")
+async def chunk_detail(chunk_id: int = Path(ge=1)) -> dict:
+    try:
+        row = await repository.get_knowledge_chunk(chunk_id)
+    except Exception as exc:
+        raise HTTPException(503, "知识块暂时无法读取") from exc
+    if row is None:
+        raise HTTPException(404, "知识块不存在或已移除，请刷新列表")
+    return _stored_chunk_view(row, full=True)
 
 
 class PreviewIn(BaseModel):
@@ -491,7 +534,7 @@ async def search(body: SearchIn) -> dict:
 
 
 @router.get("/staging")
-async def staging(limit: int = 30) -> dict:
+async def staging(limit: int = Query(30, ge=1, le=100)) -> dict:
     """
     QA暂存表查询接口
 
@@ -516,15 +559,54 @@ async def staging(limit: int = 30) -> dict:
     """
     try:
         stats = await repository.staging_stats()
+        rows = {}
+        for st in ("extracted", "kept", "discarded", "approved", "rejected"):
+            rows[st] = [{"id": r.id, "batch_no": r.batch_no, "source_ref": r.source_ref,
+                         "question": r.question, "answer": r.answer[:160]}
+                        for r in await repository.list_staging_by_status(st, limit=limit)]
     except Exception as exc:
         raise HTTPException(status_code=503, detail="对话暂存表尚未迁移或无法读取") from exc
+    return {"stats": stats, "rows": rows, "limit": limit}
 
-    rows = {}
-    for st in ("extracted", "kept", "discarded", "approved", "rejected"):
-        rows[st] = [{"id": r.id, "batch_no": r.batch_no, "source_ref": r.source_ref,
-                     "question": r.question, "answer": r.answer[:160]}
-                    for r in (await repository.list_staging_by_status(st))[:limit]]
-    return {"stats": stats, "rows": rows}
+
+def _candidate_material(question: str, answer: str, source_ref: str | None) -> dict:
+    """只读核对当前白名单材料；不将来源标记当成审核结论。"""
+    result = {"file": source_ref, "text": None, "sha256": None,
+              "valid": None, "reason": None}
+    if not source_ref:
+        return {**result, "status": "missing", "reason": "未标注材料来源"}
+    if source_ref not in SOURCE_TYPES:
+        return {**result, "status": "untrusted", "reason": "来源不在材料白名单中"}
+    try:
+        result["text"] = (KB_DIR / source_ref).read_text(encoding="utf-8")
+        result["status"] = "available"
+        try:
+            result["sha256"] = validate_review_source(question, answer, source_ref)
+            result["valid"] = True
+        except ValueError as exc:
+            result.update(valid=False, reason=str(exc))
+    except FileNotFoundError:
+        result.update(status="missing", reason="可信材料文件尚不存在", text=None)
+    except (OSError, UnicodeError):
+        result.update(status="read_error", reason="可信材料暂时无法读取", text=None)
+    return result
+
+
+@router.get("/staging/{candidate_id}")
+async def staging_detail(candidate_id: int = Path(ge=1)) -> dict:
+    try:
+        rows = await repository.list_staging_by_ids([candidate_id])
+    except Exception as exc:
+        raise HTTPException(503, "候选问答暂时无法读取") from exc
+    if not rows:
+        raise HTTPException(404, "候选问答不存在或已移除，请刷新列表")
+    row = rows[0]
+    return {
+        "id": row.id, "question": row.question, "answer": row.answer,
+        "status": row.status, "source_ref": row.source_ref, "batch_no": row.batch_no,
+        "created_at": row.created_at.isoformat(timespec="seconds") if row.created_at else None,
+        "material": _candidate_material(row.question, row.answer, row.source_ref),
+    }
 
 
 class StagingReviewIn(BaseModel):

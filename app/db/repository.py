@@ -6,7 +6,7 @@
 import json
 from uuid import uuid4
 from app.core.conversation_lock import conversation_lock
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from datetime import datetime, timezone
 from app.db.database import SessionLocal
 from sqlalchemy.exc import IntegrityError
@@ -1150,6 +1150,32 @@ async def list_review_queue(status: str | None = None, limit: int = 100) -> list
         return [_review_data(row) for row in rows]
 
 
+async def review_queue_page(status: str | None = None, *, page: int = 1,
+                            size: int = 20, q: str = "") -> dict:
+    """管理查询：全队列分页与字面搜索，不改变审核状态迁移。"""
+    if status not in {None, "pending", "publishing", "approved", "rejected"}:
+        raise ValueError("invalid review status")
+    if page < 1 or not 1 <= size <= 100 or len(q) > 200:
+        raise ValueError("invalid review paging")
+    filters = []
+    if status:
+        filters.append(Review.status == status)
+    if q.strip():
+        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        filters.append(or_(Review.question.like(pattern, escape="\\"),
+                           Review.answer.like(pattern, escape="\\"),
+                           Review.source_ref.like(pattern, escape="\\")))
+    async with SessionLocal() as session:
+        total = await session.scalar(select(func.count()).select_from(Review).where(*filters))
+        pages = max(1, (total + size - 1) // size)
+        page = min(page, pages)
+        rows = await session.scalars(select(Review).where(*filters)
+                                     .order_by(Review.id.desc()).offset((page - 1) * size).limit(size))
+        return {"items": [_review_data(row) for row in rows], "total": total,
+                "page": page, "size": size, "pages": pages}
+
+
 async def get_review_detail(review_id: int) -> dict | None:
     """
     获取审核项详情
@@ -1563,6 +1589,41 @@ async def list_chunk_pairs() -> list[tuple[str, str]]:
         return [(question, answer) for question, answer in rows.all()]
 
 
+async def list_knowledge_chunks(
+    *, page: int = 1, size: int = 20, q: str = "",
+    status: str | None = None, content_type: str | None = None,
+) -> dict:
+    """全库分页；搜索完整正文，通配符按字面匹配，不访问向量服务。"""
+    conditions = []
+    if status:
+        conditions.append(KnowledgeChunk.vectorize_status == status)
+    if content_type == "unmarked":
+        conditions.append(or_(KnowledgeChunk.content_type.is_(None), KnowledgeChunk.content_type == ""))
+    elif content_type:
+        conditions.append(KnowledgeChunk.content_type == content_type)
+    if q.strip():
+        conditions.append(or_(*(column.contains(q.strip(), autoescape=True) for column in (
+            KnowledgeChunk.questions, KnowledgeChunk.answer,
+            KnowledgeChunk.section_path, KnowledgeChunk.category,
+        ))))
+    async with SessionLocal() as session:
+        total = int(await session.scalar(
+            select(func.count()).select_from(KnowledgeChunk).where(*conditions)
+        ) or 0)
+        pages = max(1, (total + size - 1) // size)
+        page = min(page, pages)
+        rows = await session.scalars(
+            select(KnowledgeChunk).where(*conditions)
+            .order_by(KnowledgeChunk.id.desc()).offset((page - 1) * size).limit(size)
+        )
+        return {"items": list(rows), "total": total, "page": page, "size": size, "pages": pages}
+
+
+async def get_knowledge_chunk(chunk_id: int) -> KnowledgeChunk | None:
+    async with SessionLocal() as session:
+        return await session.get(KnowledgeChunk, chunk_id)
+
+
 async def staging_stats() -> dict:
     """
     获取QA提取暂存区统计信息
@@ -1587,14 +1648,14 @@ async def staging_stats() -> dict:
         )
     return {
         "counts": {key: int(counts.get(key, 0))
-                   for key in ("extracted", "kept", "discarded")},
+                   for key in ("extracted", "kept", "discarded", "approved", "rejected")},
         "total": sum(int(value) for value in counts.values()),
         "batches": int(batches or 0),
         "latest_batch": latest,
     }
 
 
-async def list_staging_by_status(status: str) -> list[QaExtractionStaging]:
+async def list_staging_by_status(status: str, *, limit: int | None = None) -> list[QaExtractionStaging]:
     """
     按状态列出暂存区记录
 
@@ -1608,11 +1669,14 @@ async def list_staging_by_status(status: str) -> list[QaExtractionStaging]:
         用于QA提取的人工审核流程
     """
     async with SessionLocal() as session:
-        rows = await session.scalars(
+        query = (
             select(QaExtractionStaging)
             .where(QaExtractionStaging.status == status)
             .order_by(QaExtractionStaging.id)
         )
+        if limit is not None:
+            query = query.limit(limit)
+        rows = await session.scalars(query)
         return list(rows)
 
 

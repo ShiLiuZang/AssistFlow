@@ -11,6 +11,7 @@ from app.core.flywheel import process_pending
 from app.core.trusted_sources import validate_review_source
 from app.db import repository
 from app.kb.review_publish import publish_review
+from app.kb.sources import KB_DIR, SOURCE_TYPES
 
 
 router = APIRouter(prefix="/api/review", tags=["review"])
@@ -57,6 +58,9 @@ def _display(item: dict) -> dict:
 @router.get("/queue")
 async def queue(
     status: str = "",
+    page: int | None = Query(default=None, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+    q: str = Query(default="", max_length=200),
 ) -> dict:
     """
     查询审核队列
@@ -73,8 +77,27 @@ async def queue(
     """
     if status and status not in STATUS_BY_LABEL:
         raise HTTPException(status_code=400, detail="审核状态无效")
+    if page is not None:
+        try:
+            result = await repository.review_queue_page(STATUS_BY_LABEL.get(status), page=page, size=size, q=q)
+        except Exception as exc:
+            raise HTTPException(503, "审核队列暂时无法读取") from exc
+        return {**result, "items": [_display(row) for row in result["items"]]}
     rows = await repository.list_review_queue(STATUS_BY_LABEL.get(status))
     return {"items": [_display(row) for row in rows]}
+
+
+@router.get("/materials/{source_ref}")
+async def material(source_ref: str) -> dict:
+    """只读取审核所用白名单材料，未知名称不读取路径。"""
+    if source_ref not in SOURCE_TYPES:
+        raise HTTPException(404, "材料不在白名单中")
+    try:
+        text = (KB_DIR / source_ref).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise HTTPException(503, "可信材料暂时无法读取") from exc
+    from hashlib import sha256
+    return {"file": source_ref, "text": text, "sha256": sha256(text.encode("utf-8")).hexdigest()}
 
 
 @router.post("/process")

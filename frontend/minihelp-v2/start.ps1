@@ -6,5 +6,5 @@ param(
 $ErrorActionPreference = 'Stop'
 Write-Host "Minihelp V2: http://127.0.0.1:$Port/#/knowledge"
 Write-Host 'Press Ctrl+C to stop.'
-& python -m http.server $Port --bind 127.0.0.1 --directory $PSScriptRoot
+& python (Join-Path $PSScriptRoot 'preview_server.py') --port $Port
 exit $LASTEXITCODE

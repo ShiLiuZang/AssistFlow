@@ -162,6 +162,11 @@ app.include_router(knowledge_router)  # 知识库查询
 # 静态文件服务（CSS、JS、图片等）
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# V2 原型与现有 API 同源运行，文件仍保留在 frontend 目录。
+V2_DIR = Path(__file__).resolve().parents[1] / "frontend" / "minihelp-v2"
+if V2_DIR.is_dir():
+    app.mount("/v2", StaticFiles(directory=V2_DIR, html=True), name="v2")
+
 # 观测和反馈接口
 app.include_router(observability_router)  # 观测数据（token 用量、追踪）
 app.include_router(feedback_router)  # 用户反馈
