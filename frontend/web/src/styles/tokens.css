@@ -1,0 +1,27 @@
+/* 设计变量：从 V2 的 prototype.css 原样搬过来，保证新旧页面配色一致 */
+:root {
+  --ink: #263c42;
+  --muted: #5f6c69;
+  --brand: #39776e;
+  --brand-deep: #285e55;
+  --brand-soft: #eaf2ed;
+  --paper: #fffdf8;
+  --canvas: #f5f6f2;
+  --white: #fff;
+  --line: #e3e7e0;
+  --line-strong: #cdd8d1;
+  --rail: #213941;
+  --rail-text: #e4ede8;
+  --rail-muted: #9eb2b2;
+  --rail-active: #365058;
+  --sand: #f3f0e8;
+  --amber: #986735;
+  --amber-soft: #f7efdf;
+  --red: #af4050;
+  --red-soft: #faecef;
+  --blue: #506e87;
+  --blue-soft: #edf2f6;
+  --shadow: 0 16px 50px rgb(31 54 58 / 10%);
+  --small-shadow: 0 3px 10px rgb(31 54 58 / 4%);
+  --radius: 10px;
+}
