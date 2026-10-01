@@ -25,8 +25,9 @@ window.createMinihelpActions = function(h) {
   async function execute() {
     const spec=pending;
     if(!spec||typeof spec.path!=='string'||typeof spec.valid!=='function'||!available()||dialog().dataset.actionToken!==String(sequence)||!document.getElementById('admin-confirm-check')?.checked)return;
-    pending=null;ui.actionBusy=true;ui.actionNotice='';
-    show(spec.title,'<div class="empty" role="status">正在执行，请等待真实返回结果…</div>');render();
+    const token=sequence;
+    pending=null;ui.actionBusy=true;ui.actionNotice=spec.title+'：请求正在执行，关闭弹窗不会停止后台操作。';
+    show(spec.title,'<div class="empty" role="status">正在执行，请等待真实返回结果…</div><p class="field-hint section-gap">关闭仅收起弹窗，后台操作继续；结果会显示在页面上。</p>');dialog().dataset.actionToken=String(token);render();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),spec.timeout||60000);
     let message,uncertain=false;
     try {
@@ -39,8 +40,10 @@ window.createMinihelpActions = function(h) {
       uncertain=error.uncertain!==false;
       message=(error.name==='AbortError'?'请求超时，结果待核对。':error.message)+(error.status===409?' 状态已变化，请重新读取对象。':uncertain?' 可能已完成部分步骤；请先查询库存、记录或作业状态，勿直接重复提交。':' 请修正输入或重新核对条件。');
     } finally {clearTimeout(timer);ui.actionBusy=false;ui.actionNotice=spec.title+'：'+message;invalidate();}
-    show(uncertain?'结果待核对':'操作结果',`<p role="status">${esc(message)}</p>${spec.after||''}`,`<button class="btn" data-action="modal-close">关闭</button><button class="btn primary" data-admin-action="reopen">查询当前结果</button>`);
-    pending={reopen:spec.reopen};
+    if(token===sequence&&dialog().open&&dialog().dataset.actionToken===String(token)) {
+      show(uncertain?'结果待核对':'操作结果',`<p role="status">${esc(message)}</p>${spec.after||''}`,`<button class="btn" data-action="modal-close">关闭</button><button class="btn primary" data-admin-action="reopen">查询当前结果</button>`);
+      pending={reopen:spec.reopen};
+    }
   }
   function candidate(row,action,reopen) {
     return prepare(async()=>{

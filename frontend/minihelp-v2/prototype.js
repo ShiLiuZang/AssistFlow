@@ -132,7 +132,7 @@
   let toastTimer;
   function toast(message) { const el=$('#toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),3300); }
   function modal(title, body, footer = '<button class="btn" data-action="modal-close">知道了</button>') {
-    $('#modal').classList.remove('workflow-dialog','report-dialog','classification-dialog','knowledge-dialog');delete $('#modal').dataset.workflowKey;delete $('#modal').dataset.knowledgeKey;
+    $('#modal').classList.remove('workflow-dialog','report-dialog','classification-dialog','knowledge-dialog');delete $('#modal').dataset.workflowKey;delete $('#modal').dataset.knowledgeKey;delete $('#modal').dataset.actionToken;
     $('#modal-content').innerHTML=`<div class="modal-head"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="modal-close" aria-label="关闭对话框">${icon('close')}</button></div><div class="modal-body">${body}</div><div class="modal-foot">${footer}</div>`;
     if(!$('#modal').open) $('#modal').showModal();
   }

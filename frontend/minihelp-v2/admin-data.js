@@ -281,8 +281,9 @@ window.createMinihelpDataPanels = function(h) {
   }
   function refresh() {if(operationBusy())return;stopVectorPoll();confirmedVector=false;actions.reset();ui.epoch++;ui.cache={};invalidatePreview();ui.hits=null;ui.searchError='';ui.searchBusy=false;workflows.reset();classification.reset();render();}
   function onClick(el) {
+    if(el.dataset.action==='modal-close'){actions.reset();return false;}
     if(actions.onClick(el))return true;
-    if(operationBusy()&&(el.dataset.dataMode||el.dataset.action==='modal-close'||el.dataset.wfAction||el.dataset.reportAction||el.dataset.candidateAction))return true;
+    if(operationBusy()&&(el.dataset.dataMode||el.dataset.wfAction||el.dataset.reportAction||el.dataset.candidateAction))return true;
     if(el.dataset.candidateAction){if(candidateRow)actions.candidate(candidateRow,el.dataset.candidateAction,()=>showKnowledgeDetail('candidate',String(candidateRow.id)));return true;}
     if(classification.onClick(el))return true;
     if(reports.onClick(el))return true;
