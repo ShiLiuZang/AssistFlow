@@ -33,3 +33,13 @@ dialog.workflow-dialog {width:min(1020px,calc(100vw - 32px));}
 .workflow-guide {padding-left:22px;font-size:13px;}.workflow-guide li {padding:8px 0;}.workflow-guide p {margin-top:8px;color:var(--muted);}
 .workflow-dialog .field textarea {min-height:135px;}.workflow-dialog .field textarea[readonly] {color:var(--muted);background:var(--canvas);}
 @media(max-width:800px) {.workflow-detail-grid,.workflow-job-detail {grid-template-columns:1fr;gap:24px;}.workflow-steps {grid-template-columns:1fr;gap:9px;}.workflow-detail-top h3 {font-size:16px;}.workflow-dialog .modal-body {padding:18px;}.workflow-section-title {align-items:flex-start;}.workflow-scope {align-items:flex-start;}.workflow-evidence>.between {flex-wrap:wrap;gap:8px;}}
+/* Human review guidance; backend decisions remain in the existing review flow. */
+.wf-review-gates { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; padding:20px 24px 0; }
+.wf-review-gates article { padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--paper); }
+.wf-gate-no { color:var(--brand); font-size:11px; font-weight:700; letter-spacing:.1em; }
+.wf-review-gates h3 { margin:8px 0; font-size:14px; }
+.wf-review-gates p,.wf-review-gates small { font-size:12px; line-height:1.7; text-wrap:pretty; }
+.wf-review-gates small { display:block; margin-top:6px; color:var(--muted); }
+.wf-review-guide-note { padding-top:14px; margin:0; }
+@media(max-width:700px) { .wf-review-gates { grid-template-columns:1fr; gap:10px; } }
+.wf-review-guide { margin-bottom:20px; }

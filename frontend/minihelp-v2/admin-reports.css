@@ -24,3 +24,29 @@ dialog.report-dialog {width:min(1000px,calc(100vw - 32px));}
 .report-answer-cell {min-width:190px;max-width:300px;white-space:pre-wrap;overflow-wrap:anywhere;}
 @media(max-width:1000px) {.report-two-col {grid-template-columns:1fr;}.report-detail-grid {grid-template-columns:1fr;gap:24px;}.report-meta {gap:8px 20px;}}
 @media(max-width:700px) {.report-two-col {gap:16px;}.report-meta {flex-direction:column;gap:7px;}.report-two-col .score-row strong {font-size:23px;}.report-trend-chart {padding:18px 12px;}.report-dialog .modal-body {padding:18px;}.report-note {font-size:11px;}.report-hit .between {flex-wrap:wrap;}}
+/* Keep the V2 palette; give numeric comparisons the primary visual weight. */
+.report-trial-controls { display:flex; flex-wrap:wrap; gap:18px; align-items:center; font-size:12px; }
+.report-trial-controls label { display:flex; gap:8px; align-items:center; }
+.report-trial-controls select,.report-trial-controls input[type=number] { padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); }
+.report-trial-controls input[type=number] { width:64px; }
+.report-trial-output { border-top:1px solid var(--line); }
+.report-trial-answer { white-space:pre-wrap; line-height:1.9; font-size:14px; margin-top:14px; overflow-wrap:anywhere; }
+.report-citations details { margin-top:14px; padding:12px 14px; background:var(--paper); border:1px solid var(--line); border-radius:7px; }
+.report-citations summary { cursor:pointer; color:var(--brand-deep); font-size:12px; }
+.report-citations .preview-text { margin-top:12px; line-height:1.9; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.report-cost-metrics .stat-value { font-variant-numeric:tabular-nums; }
+.report-intent-bar + .report-intent-bar { margin-top:20px; }
+.report-intent-bar .between { gap:16px; flex-wrap:wrap; font-size:13px; }
+.report-intent-bar small { font-size:11px; margin-left:12px; color:var(--muted); }
+.report-intent-bar b { font-variant-numeric:tabular-nums; }
+.report-token-track { margin-top:10px; height:14px; background:var(--canvas); border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+.report-token-track i { display:block; height:100%; background:var(--brand); }
+.report-intent-bar:nth-child(n+2) .report-token-track i { opacity:.7; }
+.report-cost-table table { min-width:900px; }
+.report-cost-table td { padding-top:14px; padding-bottom:14px; font-variant-numeric:tabular-nums; }
+.report-cost-table td:nth-child(n+2):nth-child(-n+8),.report-cost-table th:nth-child(n+2):nth-child(-n+8) { text-align:right; }
+.report-cost-notes { margin:18px 24px; padding:14px 16px; background:var(--paper); border:1px solid var(--line); border-radius:7px; font-size:11px; color:var(--muted); line-height:1.9; }
+.report-cost-notes summary { cursor:pointer; color:var(--brand-deep); }
+.report-cost-notes p { margin-top:10px; }
+@media(max-width:700px) { .report-intent-bar small { display:block; margin:5px 0 0; }.report-trial-controls { gap:14px; }.report-trial-controls .btn { width:100%; } }
+.report-cost-view>.panel+.panel { margin-top:22px; }

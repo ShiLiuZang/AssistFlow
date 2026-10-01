@@ -4,6 +4,7 @@ window.createMinihelpReports = function(h) {
   const {esc,icon,pill,metric,panel,table,stamp,listStamp,modal,render,go,ui,resource,loadingOrError}=h;
   const strategyNames={vector:'纯向量',bm25:'BM25',hybrid:'混合检索',hybrid_rerank:'混合 + 重排'};
   const reportUI={qualityTab:'comparison',observationTab:'cost',metric:'mrr',generationStrategy:'hybrid_rerank',strategy:'all',outcome:'all',query:'',trendMetric:'mrr'};
+  const trial={query:'',strategy:'vector',topK:5,rewrite:false,split:false,busy:false,result:null,time:null,error:'',version:0,controller:null,epoch:ui.epoch};
   const sampleCases=[
     {id:'oral_shipping',query:'退货寄回去谁出钱',groups:[['退货退款政策 / 退换货运费承担']],should_refuse:false,expected_terms:['买家','质量']},
     {id:'multi_return',query:'无理由退货有什么条件，寄回去运费谁出',groups:[['退货退款政策 / 无理由退货 / 适用范围'],['退货退款政策 / 退换货运费承担']],should_refuse:false,expected_terms:['7','买家']},
@@ -104,7 +105,8 @@ window.createMinihelpReports = function(h) {
     return panel('运行固定题集评估',`<div class="panel-pad"><p class="small muted">${v.status==='ready'?d.running?'评估正在运行；等待真实报告，不推测进度。':'当前没有评估运行。':v.status==='error'?'评估状态暂不可读取；恢复查询后再启动。':'正在读取评估状态…'}旧报告与本次执行分别核对。</p><form id="report-evaluate-form" class="data-table-tools section-gap"><label>top_k <input name="top_k" type="number" min="1" max="50" value="5" required aria-label="评估 top_k"></label><label><input name="generate" type="checkbox">同时生成回答（调用聊天模型）</label><button class="btn primary" type="submit" ${v.status!=='ready'||d.running||ui.actionBusy?'disabled':''}>核对并运行评估</button></form></div>`);
   }
   function qualityPage() {
-    const nav=subnav('quality',[['comparison','检索与生成评估'],['results','逐题评估结果'],['dataset','固定题集']],reportUI.qualityTab)+evaluationControls();
+    const nav=subnav('quality',[['comparison','检索与生成评估'],['results','逐题评估结果'],['dataset','固定题集'],['trial','单题体验']],reportUI.qualityTab)+(reportUI.qualityTab==='trial'?'':evaluationControls());
+    if(reportUI.qualityTab==='trial')return nav+trialPage();
     if(reportUI.qualityTab==='dataset')return nav+datasetPage();
     const value=resource('rag'), pending=loadingOrError(value);if(pending)return nav+pending;
     const report=value.data, missing=reportReady(report);if(missing)return nav+missing;
@@ -140,8 +142,43 @@ window.createMinihelpReports = function(h) {
   function datasetPage() {
     const value=resource('cases'),pending=loadingOrError(value);if(pending)return pending;
     const cases=value.data.cases;if(!Array.isArray(cases))return empty('固定题集不可读取','接口未返回题目列表，请检查数据文件后重新读取。');
-    const rows=cases.map((row,index)=>`<tr><td class="data-content-cell"><strong>${esc(row.query||'未标注问题')}</strong><span class="table-sub mono">${esc(row.id)}</span></td><td>${row.should_refuse===true?pill('应拒答','amber'):row.should_refuse===false?pill('可回答'):pill('未标注','neutral')}</td><td>${Array.isArray(row.groups)?row.groups.length:'—'} 组</td><td>${esc((row.expected_terms||[]).join('、')||'无预期关键词')}</td><td>${reportAction('查看标准','case',`data-index="${index}"`)}</td></tr>`);
+    const rows=cases.map((row,index)=>`<tr><td class="data-content-cell"><strong>${esc(row.query||'未标注问题')}</strong><span class="table-sub mono">${esc(row.id)}</span></td><td>${row.should_refuse===true?pill('应拒答','amber'):row.should_refuse===false?pill('可回答'):pill('未标注','neutral')}</td><td>${Array.isArray(row.groups)?row.groups.length:'—'} 组</td><td>${esc((row.expected_terms||[]).join('、')||'无预期关键词')}</td><td><div class="form-actions">${reportAction('试问','try-case',`data-index="${index}"`,'soft')}${reportAction('查看标准','case',`data-index="${index}"`)}</div></td></tr>`);
     return note('这里是当前固定题集，可能与旧报告不同。逐题结果中的标准依据仅使用报告保存的题集快照；未保存时显示“未提供”。')+panel('当前固定题集',table(['题目','应答标准','证据组','预期关键词','操作'],rows),pill(cases.length+' 题','neutral'));
+  }
+  function invalidateTrial() {trial.version++;trial.result=null;trial.time=null;trial.error='';}
+  function resetTrial() {invalidateTrial();trial.controller?.abort();trial.controller=null;trial.busy=false;trial.epoch=ui.epoch;}
+  function trialPage() {
+    if(trial.epoch!==ui.epoch)resetTrial();
+    const disabled=trial.busy?'disabled':'';
+    return panel('单题体验',`<form id="report-trial-form" class="panel-pad"><label class="field">输入完整问题<textarea id="report-trial-query" required maxlength="2000" rows="3" placeholder="例如：无理由退货有什么条件，寄回去运费谁出？" ${disabled}>${esc(trial.query)}</textarea></label><div class="report-trial-controls"><label>检索策略<select id="report-trial-strategy" ${disabled}>${Object.entries(strategyNames).map(([key,title])=>`<option value="${key}" ${trial.strategy===key?'selected':''}>${title}</option>`).join('')}</select></label><label>Top K<input id="report-trial-k" type="number" min="1" max="50" value="${trial.topK}" required ${disabled}></label><label><input id="report-trial-rewrite" type="checkbox" ${trial.rewrite?'checked':''} ${disabled}>问题改写</label><label><input id="report-trial-split" type="checkbox" ${trial.split?'checked':''} ${disabled}>多诉求拆分</label><button class="btn primary" type="submit" ${disabled}>${trial.busy?'正在检索和生成…':'生成有据回答'}</button></div><p class="field-hint section-gap">${ui.mode==='live'?'点击后使用当前知识库及模型配置；可能调用嵌入、重排和聊天服务。单题结果不改写固定题集评估报告。':'展示模式只提供固定题目的预设答案，不请求真实模型。'}</p><p class="field-hint">可到“固定题集”点击“试问”，载入问题后再生成。</p></form><div id="report-trial-result" class="panel-pad report-trial-output" aria-live="polite">${trialResultView()}</div>`);
+  }
+  function trialResultView() {
+    if(trial.busy)return '<div class="empty" role="status">正在检索和生成，等待真实返回结果…</div>';
+    if(trial.error)return `<div class="notice data-alert" role="alert">${esc(trial.error)}</div>`;
+    if(!trial.result)return '<div class="empty">等待提问 · 答案与引用会显示在这里</div>';
+    const r=trial.result;
+    return `<div class="between report-answer-heading"><h3>${r.refused?'证据不足 · 拒答':'生成回答'}</h3>${pill(r.demo?'预设展示样例':r.refused?'已拒答':'实时单题结果',r.refused?'amber':r.demo?'neutral':'')}</div><p class="report-trial-answer">${esc(r.answer)}</p><div class="report-citations">${r.citations.map(hit=>`<details><summary>[${esc(hit.n)}] ${esc(hit.section_path||hit.question||'引用资料')}</summary><div class="preview-text">${esc(hit.answer)}</div></details>`).join('')||'<p class="field-hint">本次未返回引用。请结合拒答状态判断，回答文本本身不代表证据充分。</p>'}</div>`;
+  }
+  function syncTrial() {const target=document.getElementById('report-trial-result');if(target)target.innerHTML=trialResultView();}
+  async function answerTrial() {
+    if(trial.busy||ui.actionBusy)return;
+    const query=trial.query.trim(),topK=Number(trial.topK);
+    if(!query||!Number.isInteger(topK)||topK<1||topK>50){trial.error='请填写完整问题，Top K 必须是 1–50 的整数。';syncTrial();return;}
+    invalidateTrial();const version=trial.version,epoch=ui.epoch,mode=ui.mode;
+    if(mode==='sample') {
+      const index=sampleCases.findIndex(row=>row.query===query);
+      if(index<0){trial.error='当前问法没有预设样例。请从固定题集选“试问”，或在实时模式查询。';syncTrial();return;}
+      trial.result={answer:sampleAnswers[index],refused:sampleCases[index].should_refuse,citations:[],demo:true};render();return;
+    }
+    trial.busy=true;const controller=new AbortController();trial.controller=controller;const timer=setTimeout(()=>controller.abort(),90000);render();
+    try {
+      const response=await fetch('/api/knowledge/answer',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({query,strategy:trial.strategy,top_k:topK,rewrite:trial.rewrite,split:trial.split})});
+      if(!response.ok)throw new Error('单题回答调用失败（HTTP '+response.status+'），请核对数据和模型服务后重试。');
+      const result=await response.json();
+      if(typeof result.answer!=='string'||typeof result.refused!=='boolean'||!Array.isArray(result.citations)||result.citations.some(hit=>!hit||typeof hit.answer!=='string'))throw new Error('回答或引用数据不完整，请核对接口返回。');
+      if(version===trial.version&&epoch===ui.epoch&&mode===ui.mode){trial.result=result;trial.time=new Date().toLocaleTimeString('zh-CN');}
+    } catch(error) {if(version===trial.version&&epoch===ui.epoch&&mode===ui.mode)trial.error=error.name==='AbortError'?'等待回答超时，请核对服务后再试；页面没有自动重试。':error.message||'回答请求失败。';}
+    finally {clearTimeout(timer);if(trial.controller===controller){trial.busy=false;trial.controller=null;}if(epoch===ui.epoch)render();}
   }
   function evidenceGroups(item) {
     if(!item)return '<p class="field-hint">报告未保存该题的标准证据与预期关键词。</p>';
@@ -166,13 +203,17 @@ window.createMinihelpReports = function(h) {
     const entries=Object.entries(row.priced_subtotals||{});
     return entries.length?`<div class="report-prices">${entries.map(([currency,amount])=>`<span class="mono">${esc(currency)} ${esc(amount)}</span>`).join('')}</div>`:'<span class="muted">无已定价小计</span>';
   }
+  const count=v=>finite(v)?v.toLocaleString('zh-CN'):'—';
+  const reportTime=value=>{if(typeof value!=='string')return '生成时间未标注';if(!/(Z|[+-]\d{2}:\d{2})$/.test(value))return value.replace('T',' ').slice(0,19);const date=new Date(value);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Singapore',dateStyle:'short',timeStyle:'medium',hour12:false}).format(date)+' (UTC+8)';};
+  const tokens=row=>finite(row.input_tokens)&&finite(row.output_tokens)?row.input_tokens+row.output_tokens:null;
   function costPage(data) {
-    const summary=data.summary||{},meta=data.meta||{};
-    const stats=`<div class="stat-strip data-metrics">${metric('记录内请求',summary.requests,'次','输入记录中的请求数')}${metric('生成调用',summary.generations,'次','一条请求可以多次生成')}${metric('已知输入 Token',summary.known_input_tokens,'',summary.usage_complete===false?'部分调用用量未知':'输入用量累计')}${metric('已知输出 Token',summary.known_output_tokens,'','输出用量累计')}</div>`;
-    const info=reportMeta([['报表生成',meta.generated_at?.replace('T',' ')],['输入来源',meta.source],['用量未知',summary.unknown_usage==null?'—':summary.unknown_usage+' 次'],['未定价',summary.unpriced==null?'—':summary.unpriced+' 次']]);
-    const complete=summary.estimate_complete===true?pill('估算完整'):summary.estimate_complete===false?pill('估算不完整','amber'):pill('完整性未知','neutral');
-    const rows=(data.rows||[]).map((row,index)=>`<tr><td><strong>${esc(row.intent)}</strong></td><td>${esc(row.requests??'—')}</td><td>${esc(row.generations??'—')}</td><td class="mono">${esc(row.input_tokens??'—')}</td><td class="mono">${esc(row.output_tokens??'—')}</td><td>${esc(row.unknown_usage??'—')}</td><td>${esc(row.unpriced??'—')}</td><td>${prices(row)}${row.estimate_complete===false?pill('估算不完整','amber'):''}</td><td class="mono">${finite(row.p95_generation_ms)?Math.round(row.p95_generation_ms)+' ms':'—'}</td><td>${reportAction('查看口径','cost',`data-index="${index}"`)}</td></tr>`);
-    return info+stats+note('只统计输入记录中提供的生成调用，按输入与输出 Token 估算费用。金额按币种分别展示，不能跨币种相加，也不代表实际账单。',summary.estimate_complete===false)+panel('按意图观察调用消耗',`<div class="table-wrap report-cost-table">${table(['意图','请求','生成调用','输入 Token','输出 Token','用量未知','未定价','已定价小计','生成 P95','操作'],rows)}</div><p class="data-table-footer">${esc(data.hint||'生成 P95 来自有耗时记录的生成调用，不是整轮响应时间。')}没有耗时记录时显示 —。</p>`,complete);
+    const summary=data.summary||{},meta=data.meta||{},items=data.rows||[];
+    const total=finite(summary.known_input_tokens)&&finite(summary.known_output_tokens)?summary.known_input_tokens+summary.known_output_tokens:null;
+    const stats=`<div class="stat-strip data-metrics report-cost-metrics">${metric('请求数',count(summary.requests),'次','按 trace 去重')}${metric('模型生成',count(summary.generations),'次','同一请求可多次调用')}${metric('已知 Token',count(total),'',`输入 ${count(summary.known_input_tokens)} · 输出 ${count(summary.known_output_tokens)}`)}${metric('未定价调用',count(summary.unpriced),'次',`用量未知 ${count(summary.unknown_usage)} 次`)}</div>`;
+    const bars=items.map(row=>{const known=tokens(row),share=finite(total)&&total>0&&finite(known)?known/total:null;return `<div class="report-intent-bar"><div class="between"><span><strong>${esc(row.intent)}</strong><small>${count(row.requests)} 次请求 · ${count(row.generations)} 次生成</small></span><b>${share==null?'—':percent(share)} · ${count(known)} Token</b></div><div class="report-token-track" aria-hidden="true"><i style="width:${share==null?0:Math.max(0,Math.min(100,100*share))}%"></i></div></div>`;}).join('')||'<div class="empty">尚无意图用量记录</div>';
+    const rows=items.map((row,index)=>`<tr><td><strong>${esc(row.intent)}</strong></td><td>${count(row.requests)}</td><td>${count(row.generations)}</td><td>${count(row.input_tokens)}</td><td>${count(row.output_tokens)}</td><td>${count(row.unknown_usage)} / ${count(row.unpriced)}</td><td>${prices(row)}${row.estimate_complete===false?pill('估算不完整','amber'):''}</td><td>${finite(row.p95_generation_ms)?count(Math.round(row.p95_generation_ms))+' ms':'—'}</td><td>${reportAction('口径','cost',`data-index="${index}"`)}</td></tr>`);
+    const info=`<details class="report-cost-notes"><summary>数据来源与估算口径 · ${esc(meta.source||'未标注')} · ${esc(reportTime(meta.generated_at))}</summary><p>范围为报表输入中的已保存生成记录。柱条表示各意图已知输入与输出 Token 之和占已知总量的比例，不含未知用量。</p><p>费用按币种分别展示，不跨币种相加；只按已知用量与配置价格估算，不代表实际账单或缓存计费。</p><p>${esc(data.hint||'生成 P95 仅表示有耗时记录的模型生成时间，不是整轮响应时间。')}缺失读数显示 —。</p></details>`;
+    return '<div class="report-cost-view">'+stats+panel('按意图的已知 Token 分布',`<div class="panel-pad">${bars}</div>`,pill(summary.usage_complete===false?'部分用量未知':'已知用量分布',summary.usage_complete===false?'amber':'neutral'))+panel('调用消耗明细',`<div class="report-cost-table">${table(['意图','请求','生成','输入 Token','输出 Token','未知 / 未定价','费用估算','生成 P95','操作'],rows)}</div>${info}`,summary.estimate_complete===true?pill('估算完整'):summary.estimate_complete===false?pill('估算不完整','amber'):pill('完整性未知','neutral'))+'</div>';
   }
   function trendMetricOptions(runs) {
     const options=[['mrr','MRR'],['recall_at_k','召回率'],['refusal_accuracy','拒答准确率'],['keyword_coverage','关键词覆盖率']];
@@ -224,6 +265,7 @@ window.createMinihelpReports = function(h) {
     if(!el.dataset.reportAction)return false;
     const action=el.dataset.reportAction,index=Number(el.dataset.index);
     if(action==='strategy-results'){reportUI.qualityTab='results';reportUI.strategy=el.dataset.strategy;reportUI.outcome='all';reportUI.query='';render();}
+    else if(action==='try-case'){if(!trial.busy){const item=resource('cases').data?.cases?.[index];if(item){trial.query=item.query;invalidateTrial();reportUI.qualityTab='trial';render();}}}
     else if(action==='result')showResult(index);
     else if(action==='case') {const item=resource('cases').data?.cases?.[index];if(item)modal('固定题目标准',`<h3>${esc(item.query)}</h3>${reportMeta([['题目 ID',item.id],['标准判断',item.should_refuse===true?'应拒答':item.should_refuse===false?'可回答':'未标注']])}<h3>期望证据组</h3>${evidenceGroups(item)}<p class="field-hint section-gap">预期关键词：${esc(item.expected_terms?.join('、')||'无')}</p>`);}
     else if(action==='cost') {const data=resource('observation').data?.cost,row=data?.rows?.[index];if(row)modal('调用与估算口径',`<h3>${esc(row.intent)}</h3>${reportMeta([['请求',row.requests],['生成调用',row.generations],['用量未知',row.unknown_usage],['未定价',row.unpriced],['耗时样本',row.duration_samples]])}<h3>已定价小计</h3><div class="section-gap">${prices(row)}</div><p class="field-hint section-gap">价格版本：${esc(row.price_versions?.join('、')||'未提供')}</p><p class="field-hint section-gap">只有已知用量且已定价的调用进入小计。未知用量不等于零，未定价不等于免费。P95 仅覆盖 ${esc(row.duration_samples??'未知数量的')} 条有耗时记录的生成调用。</p>`);}
@@ -234,16 +276,20 @@ window.createMinihelpReports = function(h) {
     return true;
   }
   function onInput(el) {
+    if(el.id==='report-trial-query'){trial.query=el.value;invalidateTrial();syncTrial();return;}
     if(el.id!=='report-query')return;
     reportUI.query=el.value;const report=resource('rag').data;
     document.getElementById('report-result-rows').innerHTML=resultRows(report);
     document.getElementById('report-result-count').textContent=`当前匹配 ${filteredResults(report).length} / ${report.details.length} 条`;
   }
   function onChange(el) {
+    const trialKeys={'report-trial-strategy':'strategy','report-trial-k':'topK','report-trial-rewrite':'rewrite','report-trial-split':'split'};
+    if(trialKeys[el.id]){trial[trialKeys[el.id]]=el.type==='checkbox'?el.checked:el.value;invalidateTrial();syncTrial();return true;}
     const keys={'report-strategy':'strategy','report-outcome':'outcome','report-generation-strategy':'generationStrategy'};
     if(!keys[el.id])return false;reportUI[keys[el.id]]=el.value;render();return true;
   }
   function onSubmit(event) {
+    if(event.target.id==='report-trial-form'){event.preventDefault();answerTrial();return true;}
     if(event.target.id!=='report-evaluate-form')return false;
     event.preventDefault();
     const data=new FormData(event.target);
@@ -253,5 +299,5 @@ window.createMinihelpReports = function(h) {
     return page==='quality'?[['normal','检索与生成报告'],['retrieval','仅检索报告'],['empty','尚未评估'],['partial','部分调用失败'],['error','报告读取失败']]:[['normal','完整观测样例'],['single','只有一次评测'],['empty','尚无记录与产物'],['unpriced','费用估算不完整'],['partial','趋势读取失败'],['error','全部读取失败']];
   }
   const pagePlans={quality:{name:'RAG 质量',icon:'shield',stage:'本轮可体验',text:'读取已保存报告，展示检索策略、生成与拒答指标、逐题依据及当前固定题集。区分未评估、仅检索与调用失败。'},observability:{name:'观测与成本',icon:'chart',stage:'本轮可体验',text:'按输入记录展示调用用量与分币种估算，查看可比较评测、当前阈值和报告推荐；三个报表分别处理空与失败状态。'}};
-  return {hasPage:page=>page==='quality'||page==='observability',hasResource:key=>['rag','cases','observation'].includes(key),paths:{evaluationState:'/api/knowledge/evaluation-state',rag:'/api/rag-eval/report',cases:'/api/knowledge/cases',observation:'/api/observability/overview'},sampleResource,qualityPage,qualityTime:()=>ui.cache[reportUI.qualityTab==='dataset'?'cases':'rag']?.time,observationPage,scenarioOptions,overviewModules,pagePlans,onClick,onInput,onChange,onSubmit};
+  return {hasPage:page=>page==='quality'||page==='observability',hasResource:key=>['rag','cases','observation'].includes(key),paths:{evaluationState:'/api/knowledge/evaluation-state',rag:'/api/rag-eval/report',cases:'/api/knowledge/cases',observation:'/api/observability/overview'},sampleResource,qualityPage,qualityTime:()=>reportUI.qualityTab==='trial'?trial.time:ui.cache[reportUI.qualityTab==='dataset'?'cases':'rag']?.time,observationPage,scenarioOptions,overviewModules,pagePlans,onClick,onInput,onChange,onSubmit,reset:resetTrial};
 };

@@ -76,6 +76,9 @@
 .data-search-hit { padding:18px 0; border-bottom:1px solid var(--line); }.data-search-hit:first-child { padding-top:0; }.data-search-hit:last-child { border-bottom:0; }
 .data-search-hit p { margin:12px 0; font-size:12px; line-height:1.9; white-space:pre-wrap; }
 .data-page .preview-text { white-space:pre-wrap; overflow-wrap:anywhere; }
+.data-file-picker { padding:14px; margin-bottom:18px; background:var(--brand-soft); border:1px solid var(--line); border-radius:7px; }
+.data-file-picker .field-hint { margin:9px 0 0; }
+#data-file-name { font-size:12px; overflow-wrap:anywhere; }
 .data-inventory-search { display:flex; gap:7px; align-items:center; min-width:0; }
 .data-inventory-search .btn { padding:7px 11px; font-size:11px; }
 .data-inventory-footer { flex-wrap:wrap; }.data-inventory-footer small { display:block; margin-top:5px; }

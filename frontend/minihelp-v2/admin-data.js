@@ -28,7 +28,7 @@ window.createMinihelpDataPanels = function(h) {
     }
   };
   sampleChunks[0].answer+='\n\n核对清单\n1. 对照商品说明核对主机、说明书和随机配件，记录缺失项目。\n2. 核对配件数量、外观和包装现状；实际条件需以订单对应的可信政策为准。\n3. 对无法确认的配件，请先联系人工客服，提供商品名称与配件照片。\n\n处理说明\n这段正文用于展示长内容的阅读效果。展示样例中的政策、期限与处理步骤不作为实际售后承诺。完整内容应保留适用范围、限制条件和需要人工核查的事项，避免仅凭列表摘要决定退货资格。';
-  const ui = {mode:location.pathname.startsWith('/v2/')?'live':'sample',scenario:'normal',tab:'content',filter:'all',type:'all',query:'',queryDraft:'',page:1,size:20,candidate:'kept',text:location.pathname.startsWith('/v2/')?'':exampleText,importType:'policy',preview:null,previewError:'',previewBusy:false,previewVersion:0,ingestBusy:false,ingestResult:null,ingestError:null,searchQuery:'拆开外包装后还能退货吗？',strategy:'hybrid',hits:null,searchError:'',searchBusy:false,cache:{},epoch:0};
+  const ui = {mode:location.pathname.startsWith('/v2/')?'live':'sample',scenario:'normal',tab:'content',filter:'all',type:'all',query:'',queryDraft:'',page:1,size:20,candidate:'kept',text:location.pathname.startsWith('/v2/')?'':exampleText,importType:'policy',preview:null,previewError:'',previewBusy:false,previewVersion:0,fileVersion:0,fileReading:false,fileName:'',fileNotice:'',ingestBusy:false,ingestResult:null,ingestError:null,searchQuery:'拆开外包装后还能退货吗？',strategy:'hybrid',hits:null,searchError:'',searchBusy:false,cache:{},epoch:0};
   let confirmedInput=null;
   Object.assign(ui,{vectorChecking:false,vectorStarting:false,vectorReading:false,vectorNotice:'',vectorStartUnknown:false});
   const vectorJobPath='/api/jobs/kb-vectorize';
@@ -111,8 +111,8 @@ window.createMinihelpDataPanels = function(h) {
     return value.status==='loading'?emptyState('正在读取后台数据','库存、报告和列表将使用真实接口返回值。',true):value.status==='error'?emptyState('暂时无法读取数据',value.error):null;
   }
   function header(page) {
-    const desc={knowledge:'维护回复依据，核对原文、审核与向量状态。',overview:'查看知识、质量与模型的当前状态，找到下一件需要处理的事。',review:'从未解决的问题出发，核对依据，再确认可复用的答案。',jobs:'查看执行条件、运行状态与日志，回到业务页核对结果。',quality:'看策略、看逐题证据，分清检索结果与生成判断。',observability:'核对调用消耗、可比较评测与证据阈值。',topics:'看清问题分布，按权威类目核对完整问法与归类依据。',models:'核对数据、评测与产物，分别判断验收结果和服务状态。'};
-    const primary=page==='knowledge'?button('建库材料','materials','','soft')+button(`${icon('plus')}录入内容`,'import','','primary'):page==='review'?`${ui.mode==='live'?'<button class="btn soft" data-wf-action="process-live">生成待审建议</button>':''}<button class="btn primary" data-wf-action="review-next">核对下一条</button>`:page==='jobs'?'<button class="btn soft" data-wf-action="job-guide">查看运行流程</button>':reports.hasPage(page)?'<button class="btn soft" data-report-action="guide">报告运行说明</button>':classification.hasPage(page)?'<button class="btn soft" data-cls-action="guide">查看查询范围</button>':button('打开知识中心','knowledge','','primary');
+    const desc={knowledge:'维护回复依据，核对原文、审核与向量状态。',overview:'查看知识、质量与模型的当前状态，找到下一件需要处理的事。',review:'飞轮待审 · 从未解决的问题出发，核对依据，再确认可复用的答案。',jobs:'查看执行条件、运行状态与日志，回到业务页核对结果。',quality:'看策略、看逐题证据，分清检索结果与生成判断。',observability:'核对调用消耗、可比较评测与证据阈值。',topics:'看清问题分布，按权威类目核对完整问法与归类依据。',models:'核对数据、评测与产物，分别判断验收结果和服务状态。'};
+    const primary=page==='knowledge'?button('建库材料','materials','','soft')+button(`${icon('plus')}录入内容`,'import','','primary'):page==='review'?`${ui.mode==='live'?'<button class="btn soft" data-wf-action="process-live">归并待处理问题</button>':''}<button class="btn primary" data-wf-action="review-next">核对下一条</button>`:page==='jobs'?'<button class="btn soft" data-wf-action="job-guide">查看运行流程</button>':reports.hasPage(page)?'<button class="btn soft" data-report-action="guide">报告运行说明</button>':classification.hasPage(page)?'<button class="btn soft" data-cls-action="guide">查看查询范围</button>':button('打开知识中心','knowledge','','primary');
     return `<div class="page-title between"><div><div class="eyebrow">${page==='knowledge'?'KNOWLEDGE OPERATIONS':page==='review'?'KNOWLEDGE REVIEW':page==='jobs'?'BACKGROUND OPERATIONS':page==='quality'?'RAG QUALITY':page==='observability'?'OBSERVABILITY':page==='topics'?'CONSULTATION TOPICS':page==='models'?'CLASSIFIER MANAGEMENT':'SERVICE OPERATIONS'}</div><h1>${pageNames[page]}</h1><p>${desc[page]}</p></div><div class="page-actions">${button(`${icon('clock')}刷新读数`,'refresh',operationBusy()?'disabled':'')}${primary}</div></div>`;
   }
   function knowledgeMetrics(data) {
@@ -144,7 +144,35 @@ window.createMinihelpDataPanels = function(h) {
     return `${knowledgeMetrics(data)}${data.db_error?'<div class="notice data-alert" role="alert">库存统计暂不可读取，未知值显示为 —；列表单独查询。</div>':''}${panel('知识内容',toolbar+rows+footer,pill(ui.mode==='sample'?'样例库存':'全库查询','neutral'))}`;
   }
   function importPage(data) {
-    return `${ingestResultView()}<div class="data-import-steps" aria-label="录入流程"><span>01 填写原文</span>${icon('arrow')}<span>02 预览与查重</span>${icon('arrow')}<span>03 核对后入库</span></div><div class="data-material-entry"><span>已有源文件？在下方建库材料中查看清单与切块。</span>${button('查看建库材料','materials','','soft')}</div><div class="split-panels data-import-panels">${panel('录入内容',`<form id="data-preview-form" class="panel-pad"><label class="field">内容类型<select id="data-import-type" ${operationBusy()?'disabled':''}>${(data.content_types||[]).map(row=>`<option value="${esc(row.key)}" ${ui.importType===row.key?'selected':''}>${esc(type(row.key))}</option>`).join('')}</select></label><label class="field">Markdown 正文<textarea id="data-import-text" required maxlength="40000" placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…" ${operationBusy()?'disabled':''} class="large-textarea">${esc(ui.text)}</textarea></label><div class="form-actions"><button class="btn primary" type="submit" ${ui.previewBusy||operationBusy()?'disabled':''}>${icon('file')}${ui.previewBusy?'正在预览…':'预览切块'}</button>${button('填入示例材料','reset-text',operationBusy()?'disabled':'')}</div><p class="field-hint" id="data-preview-hint">${ui.mode==='sample'?'展示模式预览内置材料；样例不会写入真实知识库。':'预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。'}</p></form>`)}${panel('切块预览',`<div class="panel-pad" id="data-preview-result" aria-live="polite">${previewView()}</div>`)}</div><div class="section-gap" id="data-source-materials">${materialsPage(data)}</div>`;
+    return `${ingestResultView()}<div class="data-import-steps" aria-label="录入流程"><span>01 填写原文</span>${icon('arrow')}<span>02 预览与查重</span>${icon('arrow')}<span>03 核对后入库</span></div><div class="data-material-entry"><span>已有源文件？在下方建库材料中查看清单与切块。</span>${button('查看建库材料','materials','','soft')}</div><div class="split-panels data-import-panels">${panel('录入内容',`<form id="data-preview-form" class="panel-pad"><label class="field">内容类型<select id="data-import-type" ${operationBusy()?'disabled':''}>${(data.content_types||[]).map(row=>`<option value="${esc(row.key)}" ${ui.importType===row.key?'selected':''}>${esc(type(row.key))}</option>`).join('')}</select></label>${fileInputView()}<label class="field">Markdown / TXT 正文<textarea id="data-import-text" required maxlength="40000" placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…" ${operationBusy()?'disabled':''} class="large-textarea">${esc(ui.text)}</textarea></label><div class="form-actions"><button class="btn primary" type="submit" ${ui.previewBusy||ui.fileReading||operationBusy()?'disabled':''}>${icon('file')}${ui.previewBusy?'正在预览…':'预览切块'}</button>${button('填入示例材料','reset-text',operationBusy()?'disabled':'')}</div><p class="field-hint" id="data-preview-hint">${ui.mode==='sample'?'展示模式预览内置材料；样例不会写入真实知识库。':'预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。'}</p></form>`)}${panel('切块预览',`<div class="panel-pad" id="data-preview-result" aria-live="polite">${previewView()}</div>`)}</div><div class="section-gap" id="data-source-materials">${materialsPage(data)}</div>`;
+  }
+  function fileInputView() {
+    return `<div class="data-file-picker"><div class="form-actions">${button(ui.fileReading?'正在读取文件…':'选择文件','choose-file',operationBusy()?'disabled':'','soft')}<input id="data-import-file" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" hidden ${operationBusy()?'disabled':''}><span id="data-file-name">${esc(ui.fileName||'Markdown / TXT · UTF-8')}</span></div><p class="field-hint" id="data-file-notice" aria-live="polite">${esc(ui.fileNotice||'文件载入下方编辑器，最多 40,000 字符；不会自动保存源文件或入库。PDF / Word 暂不支持。')}</p></div>`;
+  }
+  function syncFileInput() {
+    const note=document.getElementById('data-file-notice');if(note)note.textContent=ui.fileNotice;
+    const name=document.getElementById('data-file-name');if(name)name.textContent=ui.fileName||'Markdown / TXT · UTF-8';
+    const submit=document.querySelector?.('#data-preview-form button[type="submit"]');if(submit)submit.disabled=ui.fileReading||ui.previewBusy||operationBusy();
+  }
+  async function loadFile(file) {
+    if(!file||operationBusy())return;
+    // A newer selection, editor change, type change or mode reset invalidates this read.
+    const token=++ui.fileVersion,epoch=ui.epoch;ui.fileReading=false;
+    if(!/\.(md|markdown|txt)$/i.test(file.name)){ui.fileNotice='请选择 Markdown 或 TXT 文件；原正文已保留。';syncFileInput();return;}
+    if(file.size>1024*1024){ui.fileNotice='文件过大，请选择不超过 1 MB 且正文不超过 40,000 字符的材料；原正文已保留。';syncFileInput();return;}
+    ui.fileReading=true;ui.fileNotice='正在读取 '+file.name+'，读取完成后可编辑并手动预览。';syncFileInput();
+    try {
+      const buffer=await file.arrayBuffer();
+      if(token!==ui.fileVersion||epoch!==ui.epoch)return;
+      const text=new TextDecoder('utf-8',{fatal:true}).decode(buffer).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+      if(!text.trim())throw new Error('文件没有正文');
+      if(text.length>40000)throw new Error('正文超过 40,000 字符');
+      if(text.includes('\u0000'))throw new Error('文件包含非文本内容');
+      ui.text=text;invalidatePreview();ui.fileName=file.name;ui.fileNotice='已载入 '+text.length.toLocaleString('zh-CN')+' 字符，可修改正文后预览；尚未入库。';render();
+    } catch(error) {
+      if(token!==ui.fileVersion||epoch!==ui.epoch)return;
+      ui.fileNotice=(error.name==='TypeError'?'文件不是有效的 UTF-8 文本，请转换编码后重试':error.message||'文件读取失败')+'；原正文已保留。';
+    } finally {if(token===ui.fileVersion&&epoch===ui.epoch){ui.fileReading=false;syncFileInput();}}
   }
   function sourceFeatures(features) {
     if(!features)return '—';
@@ -168,10 +196,10 @@ window.createMinihelpDataPanels = function(h) {
     return `<div class="data-preview-summary"><span>切块 <b>${data.total}</b></span><span>关键条款 <b>${data.key_clause}</b></span><span>${data.dedup_known?`重复 <b>${data.duplicates}</b>`:'查重状态：未知'}</span></div><div class="data-preview-list">${data.chunks.map(row=>`<article class="data-preview-chunk${row.is_key_clause?' is-key-clause':''}">${previewChunkHeader(row)}<p>${esc(row.answer)}</p><div class="small muted">${row.chars} 字</div></article>`).join('')}</div><div class="data-import-next"><p class="field-hint">${ui.mode==='sample'?'这是展示样例，确认入库仅在后端实时页面开放。':note}</p>${button(ui.ingestBusy?'正在入库…':'核对并入库','confirm-ingest',ready?'':'disabled','primary')}${ui.mode==='sample'||!location.pathname.startsWith('/v2/')?'<a class="table-actions" href="http://127.0.0.1:8000/v2/#/knowledge">打开实时页面 →</a>':''}</div>`;
   }
   function canIngest() {
-    return ui.mode==='live'&&location.pathname.startsWith('/v2/')&&!ui.previewBusy&&!operationBusy()&&!ui.ingestResult&&!ui.ingestError&&ui.preview?.dedup_known&&ui.preview.total>ui.preview.duplicates;
+    return ui.mode==='live'&&location.pathname.startsWith('/v2/')&&!ui.previewBusy&&!ui.fileReading&&!operationBusy()&&!ui.ingestResult&&!ui.ingestError&&ui.preview?.dedup_known&&ui.preview.total>ui.preview.duplicates;
   }
   function invalidatePreview() {
-    ui.previewVersion++;ui.preview=null;ui.previewBusy=false;ui.previewError='';confirmedInput=null;
+    if(ui.fileReading)ui.fileNotice='文件读取已取消；当前正文已保留。';ui.fileVersion++;ui.fileReading=false;ui.previewVersion++;ui.preview=null;ui.previewBusy=false;ui.previewError='';confirmedInput=null;
     const target=document.getElementById('data-preview-result');if(target)target.innerHTML=previewView();
   }
   function ingestResultView() {
@@ -211,7 +239,7 @@ window.createMinihelpDataPanels = function(h) {
     const value=vectorJobResource(),job=value.data,s=data.chunks||{};
     if(job?.status==='running'&&ui.mode==='live')scheduleVectorPoll();
     const note=ui.mode==='sample'?'展示模式仅查看作业状态，不启动向量化。':value.status==='error'?'作业状态读取失败，请重新查询；不能据此判断任务已停止。':!job?'正在读取向量化作业状态。':job.status==='running'?'作业正在运行。仅查询真实状态，不按耗时推测进度。':job.status==='failed'?'进程失败，可能已完成部分批次。按当前库存核对剩余原文，修复依赖后再补齐，无需重录。':job.status==='ok'?'进程已执行完成。请核对当前待向量化数量与向量库记录；完成状态不代替检索质量验收。':job.status==='stopped'?'作业已停止，已完成批次仍需按库存核对。':job.status==='idle'&&job.log_mtime?'本次服务没有运行记录，存在既有日志。服务重启会清空运行状态，旧日志不代表本次结果。':s.pending===0?'当前没有待向量化原文，无需启动作业。':'处理全库待向量化原文，需要数据库、嵌入服务与向量库。';
-    return panel('向量补齐作业',`<div class="panel-pad"><div class="data-vector-top"><div><p class="mono muted">kb-vectorize</p><p class="data-vector-note">${esc(note)}</p></div>${pill(job?vectorLabels[job.status]||'状态未知':value.status==='error'?'状态读取失败':'正在读取',job?.status==='failed'?'red':job?.status==='running'?'amber':'neutral')}</div>${ui.mode==='live'&&ui.vectorNotice?`<div class="notice amber" role="status">${esc(ui.vectorNotice)}</div>`:''}<dl class="data-record-fields"><div><dt>全库待向量化</dt><dd>${number(s.pending)} 块</dd></div><div><dt>开始时间</dt><dd>${stamp(job?.started_at)}</dd></div><div><dt>结束时间</dt><dd>${stamp(job?.finished_at)}</dd></div><div><dt>退出码</dt><dd>${number(job?.returncode)}</dd></div><div><dt>日志更新时间</dt><dd>${stamp(job?.log_mtime)}</dd></div></dl><div class="form-actions">${button(ui.vectorStarting?'正在提交启动…':ui.vectorChecking?'正在核对…':'核对并补齐向量','vectorize',canPrepareVector(data,job)?'':'disabled','primary')}${button(ui.vectorReading?'正在查询…':'刷新作业状态','vector-refresh',operationBusy()||ui.vectorReading?'disabled':'','soft')}${button('打开作业中心','vector-jobs')}</div>${job?`<details class="data-vector-log"><summary>查看日志末尾 · 最多 400 行</summary><pre tabindex="0" aria-label="向量补齐作业日志">${esc(job.log||'暂无可读取的日志。')}</pre></details>`:''}<p class="field-hint section-gap">此作业处理启动时全库 pending 原文，包含历史待补块；不会只处理上一次录入的记录。启动需要人工确认，会调用嵌入服务。</p></div>`);
+    return panel('向量补齐作业',`<div class="panel-pad"><div class="data-vector-top"><div><p class="mono muted">kb-vectorize</p><p class="data-vector-note">${esc(note)}</p></div>${pill(job?vectorLabels[job.status]||'状态未知':value.status==='error'?'状态读取失败':'正在读取',job?.status==='failed'?'red':job?.status==='running'?'amber':'neutral')}</div>${ui.mode==='live'&&ui.vectorNotice?`<div class="notice amber" role="status">${esc(ui.vectorNotice)}</div>`:''}<dl class="data-record-fields"><div><dt>全库待向量化</dt><dd>${number(s.pending)} 块</dd></div><div><dt>开始时间</dt><dd>${stamp(job?.started_at)}</dd></div><div><dt>结束时间</dt><dd>${stamp(job?.finished_at)}</dd></div><div><dt>退出码</dt><dd>${number(job?.returncode)}</dd></div><div><dt>日志更新时间</dt><dd>${stamp(job?.log_mtime)}</dd></div></dl><div class="form-actions">${button(ui.vectorStarting?'正在提交启动…':ui.vectorChecking?'正在核对…':'重跑向量化','vectorize',canPrepareVector(data,job)?'':'disabled','primary')}${button(ui.vectorReading?'正在查询…':'刷新作业状态','vector-refresh',operationBusy()||ui.vectorReading?'disabled':'','soft')}${button('打开作业中心','vector-jobs')}</div>${job?`<details class="data-vector-log"><summary>查看日志末尾 · 最多 400 行</summary><pre tabindex="0" aria-label="向量补齐作业日志">${esc(job.log||'暂无可读取的日志。')}</pre></details>`:''}<p class="field-hint section-gap">此作业处理启动时全库 pending 原文，包含历史待补块；不会只处理上一次录入的记录。启动需要人工确认，会调用嵌入服务。</p></div>`);
   }
   function vectorPageActive(){return ui.mode==='live'&&h.state.surface==='admin'&&h.state.page==='knowledge'&&ui.tab==='index';}
   function stopVectorPoll(){if(vectorPollTimer!=null)clearTimeout(vectorPollTimer);vectorPollTimer=null;}
@@ -293,7 +321,7 @@ window.createMinihelpDataPanels = function(h) {
     }
     return `<div class="page admin-page data-page">${header(page)}${sourceBar()}${ui.mode==='live'&&ui.actionNotice?`<div class="notice data-alert" role="status">${esc(ui.actionNotice)}</div>`:''}${body}<p class="source-line">${icon('file')}${ui.mode==='sample'?'V2 数据展示稿 · 样例不代表真实记录或报告':'当前项目接口 · '+(time?'本次读取 '+esc(time):'等待读取')}${page==='knowledge'?' · 文档版本与发布生命周期尚无对应数据':''}</p></div>`;
   }
-  function refresh() {if(operationBusy())return;stopVectorPoll();confirmedVector=false;actions.reset();ui.epoch++;ui.cache={};invalidatePreview();ui.hits=null;ui.searchError='';ui.searchBusy=false;workflows.reset();classification.reset();render();}
+  function refresh() {if(operationBusy())return;stopVectorPoll();confirmedVector=false;actions.reset();ui.epoch++;ui.cache={};invalidatePreview();ui.hits=null;ui.searchError='';ui.searchBusy=false;workflows.reset();classification.reset();reports.reset?.();render();}
   function onClick(el) {
     if(el.dataset.action==='modal-close'){actions.reset();return false;}
     if(actions.onClick(el))return true;
@@ -314,6 +342,7 @@ window.createMinihelpDataPanels = function(h) {
     else if(['import','index','search'].includes(action)){ui.tab=action;render();}
     else if(action==='source-preview')previewMaterial(el.dataset.file);
     else if(action==='source-jobs')go('jobs');
+    else if(action==='choose-file'){if(!operationBusy())document.getElementById('data-import-file')?.click();}
     else if(action==='reset-text'){if(operationBusy())return true;ui.text=exampleText;ui.importType='policy';invalidatePreview();render();}
     else if(action==='confirm-ingest')confirmIngest();
     else if(action==='ingest-inventory'){ui.tab='content';ui.filter=ui.type='all';ui.query=ui.queryDraft='';ui.page=1;refresh();}
@@ -333,17 +362,18 @@ window.createMinihelpDataPanels = function(h) {
     reports.onInput(el);
     workflows.onInput(el);
     if(el.id==='data-query')ui.queryDraft=el.value;
-    if(el.id==='data-import-text'&&!operationBusy()){ui.text=el.value;invalidatePreview();}
+    if(el.id==='data-import-text'&&!operationBusy()){ui.text=el.value;invalidatePreview();if(ui.fileName)ui.fileNotice='已修改正文，入库以编辑器内容为准。';syncFileInput();}
     if(el.id==='data-search-query'){ui.searchQuery=el.value;ui.hits=null;ui.searchError='';document.getElementById('data-search-result').innerHTML='<div class="empty">问法已修改，请重新检索。</div>';}
   }
   function onChange(el) {
     if(classification.onChange(el))return true;
     if(reports.onChange(el))return true;
     if(workflows.onChange(el))return true;
-    if(el.id==='data-scenario'){ui.scenario=el.value;invalidatePreview();ui.hits=null;workflows.reset();classification.reset();render();return true;}
+    if(el.id==='data-scenario'){ui.scenario=el.value;invalidatePreview();ui.hits=null;workflows.reset();classification.reset();reports.reset?.();render();return true;}
     if(el.id==='data-type'){ui.type=el.value;ui.page=1;render();return true;}
     if(el.id==='data-size'){ui.size=Number(el.value);ui.page=1;render();return true;}
-    if(el.id==='data-import-type'){if(operationBusy())return true;ui.importType=el.value;invalidatePreview();return true;}
+    if(el.id==='data-import-file'){loadFile(el.files?.[0]);el.value='';return true;}
+    if(el.id==='data-import-type'){if(operationBusy())return true;ui.importType=el.value;invalidatePreview();syncFileInput();return true;}
     if(el.id==='data-search-strategy'){ui.strategy=el.value;ui.hits=null;ui.searchError='';render();return true;}
     return false;
   }
@@ -458,7 +488,7 @@ window.createMinihelpDataPanels = function(h) {
     if(!['data-preview-form','data-ingest-form','data-vector-form','data-search-form','data-inventory-form'].includes(event.target.id))return false;
     event.preventDefault();
     if(event.target.id==='data-inventory-form'){ui.query=ui.queryDraft.trim();ui.queryDraft=ui.query;ui.page=1;render();}
-    else if(event.target.id==='data-preview-form'){if(!ui.previewBusy&&!operationBusy())preview();}
+    else if(event.target.id==='data-preview-form'){if(!ui.previewBusy&&!ui.fileReading&&!operationBusy())preview();}
     else if(event.target.id==='data-ingest-form')ingest();
     else if(event.target.id==='data-vector-form')startVector();
     else if(!ui.searchBusy)search();
