@@ -30,7 +30,7 @@ window.createMinihelpDataPanels = function(h) {
   sampleChunks[0].answer+='\n\n核对清单\n1. 对照商品说明核对主机、说明书和随机配件，记录缺失项目。\n2. 核对配件数量、外观和包装现状；实际条件需以订单对应的可信政策为准。\n3. 对无法确认的配件，请先联系人工客服，提供商品名称与配件照片。\n\n处理说明\n这段正文用于展示长内容的阅读效果。展示样例中的政策、期限与处理步骤不作为实际售后承诺。完整内容应保留适用范围、限制条件和需要人工核查的事项，避免仅凭列表摘要决定退货资格。';
   const ui = {mode:location.pathname.startsWith('/v2/')?'live':'sample',scenario:'normal',tab:'content',filter:'all',type:'all',query:'',queryDraft:'',page:1,size:20,candidate:'kept',text:location.pathname.startsWith('/v2/')?'':exampleText,importType:'policy',preview:null,previewError:'',previewBusy:false,previewVersion:0,ingestBusy:false,ingestResult:null,ingestError:null,searchQuery:'拆开外包装后还能退货吗？',strategy:'hybrid',hits:null,searchError:'',searchBusy:false,cache:{},epoch:0};
   let confirmedInput=null;
-  Object.assign(ui,{previewFile:null,vectorChecking:false,vectorStarting:false,vectorReading:false,vectorNotice:'',vectorStartUnknown:false});
+  Object.assign(ui,{vectorChecking:false,vectorStarting:false,vectorReading:false,vectorNotice:'',vectorStartUnknown:false});
   const vectorJobPath='/api/jobs/kb-vectorize';
   const vectorLabels={idle:'本次服务未运行',running:'运行中',ok:'进程执行完成',failed:'进程执行失败',stopped:'已停止'};
   let vectorPollTimer=null,confirmedVector=false;
@@ -144,7 +144,7 @@ window.createMinihelpDataPanels = function(h) {
     return `${knowledgeMetrics(data)}${data.db_error?'<div class="notice data-alert" role="alert">库存统计暂不可读取，未知值显示为 —；列表单独查询。</div>':''}${panel('知识内容',toolbar+rows+footer,pill(ui.mode==='sample'?'样例库存':'全库查询','neutral'))}`;
   }
   function importPage(data) {
-    return `${ingestResultView()}<div class="data-import-steps" aria-label="录入流程"><span>01 填写原文</span>${icon('arrow')}<span>02 预览与查重</span>${icon('arrow')}<span>03 核对后入库</span></div><div class="data-material-entry"><span>已有源文件？在下方建库材料中查看清单与切块。</span>${button('查看建库材料','materials','','soft')}</div><div class="split-panels data-import-panels">${panel('录入内容',`<form id="data-preview-form" class="panel-pad"><label class="field">内容类型<select id="data-import-type" ${operationBusy()?'disabled':''}>${(data.content_types||[]).map(row=>`<option value="${esc(row.key)}" ${ui.importType===row.key?'selected':''}>${esc(type(row.key))}</option>`).join('')}</select></label><label class="field">Markdown 正文<textarea id="data-import-text" required maxlength="40000" placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…" ${operationBusy()?'disabled':''} class="large-textarea">${esc(ui.text)}</textarea></label><div class="form-actions"><button class="btn primary" type="submit" ${ui.previewBusy||operationBusy()?'disabled':''}>${icon('file')}${ui.previewBusy?'正在预览…':'预览切块'}</button>${button('填入示例材料','reset-text',operationBusy()?'disabled':'')}</div><p class="field-hint" id="data-preview-hint">${ui.mode==='sample'?'展示模式预览内置材料；样例不会写入真实知识库。':'预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。'}</p></form>`)}${panel('切块预览',`<div class="panel-pad" id="data-preview-result" tabindex="-1" aria-live="polite">${previewView()}</div>`)}</div><div class="section-gap" id="data-source-materials">${materialsPage(data)}</div>`;
+    return `${ingestResultView()}<div class="data-import-steps" aria-label="录入流程"><span>01 填写原文</span>${icon('arrow')}<span>02 预览与查重</span>${icon('arrow')}<span>03 核对后入库</span></div><div class="data-material-entry"><span>已有源文件？在下方建库材料中查看清单与切块。</span>${button('查看建库材料','materials','','soft')}</div><div class="split-panels data-import-panels">${panel('录入内容',`<form id="data-preview-form" class="panel-pad"><label class="field">内容类型<select id="data-import-type" ${operationBusy()?'disabled':''}>${(data.content_types||[]).map(row=>`<option value="${esc(row.key)}" ${ui.importType===row.key?'selected':''}>${esc(type(row.key))}</option>`).join('')}</select></label><label class="field">Markdown 正文<textarea id="data-import-text" required maxlength="40000" placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…" ${operationBusy()?'disabled':''} class="large-textarea">${esc(ui.text)}</textarea></label><div class="form-actions"><button class="btn primary" type="submit" ${ui.previewBusy||operationBusy()?'disabled':''}>${icon('file')}${ui.previewBusy?'正在预览…':'预览切块'}</button>${button('填入示例材料','reset-text',operationBusy()?'disabled':'')}</div><p class="field-hint" id="data-preview-hint">${ui.mode==='sample'?'展示模式预览内置材料；样例不会写入真实知识库。':'预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。'}</p></form>`)}${panel('切块预览',`<div class="panel-pad" id="data-preview-result" aria-live="polite">${previewView()}</div>`)}</div><div class="section-gap" id="data-source-materials">${materialsPage(data)}</div>`;
   }
   function sourceFeatures(features) {
     if(!features)return '—';
@@ -157,19 +157,18 @@ window.createMinihelpDataPanels = function(h) {
     return `${panel('建库材料',`<div class="panel-pad data-material-description"><p><span class="mono">data/kb/</span> 下的源文件是离线建库的输入。点击“看切块”核对章节、正文与关键条款。</p><p class="muted">这里展示当前文件的切块预估，不代表已入库。预览不写库、不执行向量化。</p>${ui.mode==='sample'?'<p class="field-hint">样例只展示文件清单；查看项目文件切块请切换到实时数据。</p>':''}</div><div class="data-source-table">${table(['材料文件','类型 / 状态','字符','行','切出块数','关键条款','特性','操作'],rows)}</div><div class="data-table-footer"><span>源文件已修改时，请刷新读数后重新预览。</span><div class="form-actions">${button('重新读取材料','refresh',operationBusy()?'disabled':'')}${button('查看离线建库作业','source-jobs','','soft')}</div></div>`,pill(summary,'neutral'))}`;
   }
   function previewView() {
-    const source=ui.previewFile?`<p class="field-hint">文件预览：<strong class="mono">data/kb/${esc(ui.previewFile)}</strong></p>`:'';
-    if(ui.previewBusy)return source+'<div class="data-empty-state compact" role="status"><h2>正在切块与查重</h2><p>预览不写入知识库。</p></div>';
-    if(ui.previewError)return `${source}<div class="notice data-alert" role="alert">${esc(ui.previewError)}</div>${ui.previewFile?button('重新预览材料','source-preview',`data-file="${esc(ui.previewFile)}"`):''}`;
+    if(ui.previewBusy)return '<div class="data-empty-state compact" role="status"><h2>正在切块与查重</h2><p>预览不写入知识库。</p></div>';
+    if(ui.previewError)return `<div class="notice data-alert" role="alert">${esc(ui.previewError)}</div>`;
     if(!ui.preview)return `<div class="data-empty-state compact">${icon('file')}<h2>先预览，再核对</h2><p>切块结果会保留章节、关键条款和查重状态。</p></div>`;
     const data=ui.preview;
     const ready=canIngest(),note=ui.ingestBusy?'正在保存原文，请等待返回结果。':ui.ingestResult?'本次录入已返回结果；再次录入前请重新预览。':!data.total?'没有切出正文，请补充内容。':!data.dedup_known?'查重未完成，请恢复数据服务后重新预览。':data.total===data.duplicates?'内容全部重复，本次无需新增。':'预览尚未写入；提交时后端会再次查重，实际新增数量以返回结果为准。';
-    return `${source}<div class="data-preview-summary">${ui.previewFile?`<span>原文字符 <b>${number(data.chars)}</b></span>`:''}<span>切块 <b>${data.total}</b></span><span>关键条款 <b>${data.key_clause}</b></span><span>${data.dedup_known?`重复 <b>${data.duplicates}</b>`:'查重状态：未知'}</span></div>${ui.previewFile&&data.features?sourceFeatures(data.features):''}<div class="data-preview-list">${data.chunks.map(row=>`<article class="data-preview-chunk"><div class="between"><strong>${row.seq}. ${esc(row.section_path)}</strong>${row.duplicate==null?pill('未查重','neutral'):row.duplicate?pill('重复','amber'):pill('未发现重复')}</div>${ui.previewFile&&row.questions?`<p><strong>问法</strong> ${esc(row.questions)}</p>`:''}<p>${esc(row.answer)}</p><div class="small muted">${row.chars} 字${ui.previewFile&&row.category?' · '+esc(row.category):''}${row.is_key_clause?' · 关键条款':''}${row.is_table?' · 表格':''}</div></article>`).join('')}</div><div class="data-import-next">${ui.previewFile?`<p class="field-hint">本次只查看文件切块；需要建库可到作业中心核对启动。手工正文保持原样。</p>${button('查看离线建库作业','source-jobs','','soft')}`:`<p class="field-hint">${ui.mode==='sample'?'这是展示样例，确认入库仅在后端实时页面开放。':note}</p>${button(ui.ingestBusy?'正在入库…':'核对并入库','confirm-ingest',ready?'':'disabled','primary')}${ui.mode==='sample'||!location.pathname.startsWith('/v2/')?'<a class="table-actions" href="http://127.0.0.1:8000/v2/#/knowledge">打开实时页面 →</a>':''}`}</div>`;
+    return `<div class="data-preview-summary"><span>切块 <b>${data.total}</b></span><span>关键条款 <b>${data.key_clause}</b></span><span>${data.dedup_known?`重复 <b>${data.duplicates}</b>`:'查重状态：未知'}</span></div><div class="data-preview-list">${data.chunks.map(row=>`<article class="data-preview-chunk"><div class="between"><strong>${row.seq}. ${esc(row.section_path)}</strong>${row.duplicate==null?pill('未查重','neutral'):row.duplicate?pill('重复','amber'):pill('未发现重复')}</div><p>${esc(row.answer)}</p><div class="small muted">${row.chars} 字${row.is_key_clause?' · 关键条款':''}</div></article>`).join('')}</div><div class="data-import-next"><p class="field-hint">${ui.mode==='sample'?'这是展示样例，确认入库仅在后端实时页面开放。':note}</p>${button(ui.ingestBusy?'正在入库…':'核对并入库','confirm-ingest',ready?'':'disabled','primary')}${ui.mode==='sample'||!location.pathname.startsWith('/v2/')?'<a class="table-actions" href="http://127.0.0.1:8000/v2/#/knowledge">打开实时页面 →</a>':''}</div>`;
   }
   function canIngest() {
-    return ui.mode==='live'&&location.pathname.startsWith('/v2/')&&!ui.previewFile&&!ui.previewBusy&&!operationBusy()&&!ui.ingestResult&&!ui.ingestError&&ui.preview?.dedup_known&&ui.preview.total>ui.preview.duplicates;
+    return ui.mode==='live'&&location.pathname.startsWith('/v2/')&&!ui.previewBusy&&!operationBusy()&&!ui.ingestResult&&!ui.ingestError&&ui.preview?.dedup_known&&ui.preview.total>ui.preview.duplicates;
   }
   function invalidatePreview() {
-    ui.previewVersion++;ui.preview=null;ui.previewFile=null;ui.previewBusy=false;ui.previewError='';confirmedInput=null;
+    ui.previewVersion++;ui.preview=null;ui.previewBusy=false;ui.previewError='';confirmedInput=null;
     const target=document.getElementById('data-preview-result');if(target)target.innerHTML=previewView();
   }
   function ingestResultView() {
@@ -389,25 +388,37 @@ window.createMinihelpDataPanels = function(h) {
       if(epoch===ui.epoch&&dialog.open&&dialog.dataset.knowledgeKey===key)draw(`<div class="data-empty-state compact"><h2>详情暂时无法读取</h2><p>${esc(error.message)}</p>${button('重新读取',kind,`data-id="${esc(id)}"`)}</div>`);
     }
   }
-  function previewMaterial(file) {
+  async function previewMaterial(file) {
     const source=resource('kb').data?.sources?.find(row=>row.file===file);
     if(ui.mode!=='live'||!source?.present||ui.previewBusy||operationBusy())return;
-    ui.tab='import';preview(file);
-    const target=document.getElementById('data-preview-result');target?.scrollIntoView({behavior:'smooth',block:'start'});target?.focus({preventScroll:true});
+    const epoch=ui.epoch,key=String(++detailSequence),dialog=document.getElementById('modal');
+    const draw=body=>{modal('建库材料 · '+file,body,'<button class="btn" data-action="modal-close">关闭</button>');dialog.classList.add('knowledge-dialog');dialog.dataset.knowledgeKey=key;};
+    candidateRow=null;
+    draw('<div class="empty" role="status">正在读取文件并预览切块…</div>');
+    try {
+      const data=await request('/api/kb/preview',{file});
+      if(!Array.isArray(data.chunks)||!Number.isInteger(data.total)||data.total!==data.chunks.length)throw new Error('切块结果不完整，请重新预览。');
+      if(epoch!==ui.epoch||!dialog.open||dialog.dataset.knowledgeKey!==key)return;
+      const summary=`<div class="stat-strip data-metrics">${metric('原文字符',data.chars,'字','当前文件内容')}${metric('切出块数',data.total,'块','预览尚未写入')}${metric('关键条款',data.key_clause,'块','完整保留的约束')}${metric('重复块',data.dedup_known===true?data.duplicates:'未知',data.dedup_known===true?'块':'','与现有库存核对')}</div>`;
+      const chunks=data.chunks.map(row=>`<article class="data-preview-chunk"><div class="between"><strong>${number(row.seq)}. ${esc(row.section_path)}</strong>${row.duplicate==null?pill('未查重','neutral'):row.duplicate?pill('重复','amber'):pill('未发现重复')}</div>${row.questions?`<p><strong>问法</strong> ${esc(row.questions)}</p>`:''}<p>${esc(row.answer)}</p><div class="small muted">${number(row.chars)} 字${row.category?' · '+esc(row.category):''}${row.is_key_clause?' · 关键条款':''}${row.is_table?' · 表格':''}</div></article>`).join('')||'<div class="empty">材料中没有可切块的正文。</div>';
+      draw(`<p class="mono muted">${esc(data.source)} · ${esc(type(data.content_type))}</p><p class="field-hint">本次仅预览与查重，不写入知识库、不执行向量化。</p>${summary}${sourceFeatures(data.features)}${chunks}`);
+    } catch(error) {
+      if(epoch===ui.epoch&&dialog.open&&dialog.dataset.knowledgeKey===key)draw(`<div class="data-empty-state compact"><h2>材料预览暂时不可用</h2><p>${esc(error.message)}</p>${button('重新预览','source-preview',`data-file="${esc(file)}"`)}</div>`);
+    }
   }
-  async function preview(file=null) {
-    const epoch=ui.epoch,text=ui.text,contentType=ui.importType,version=++ui.previewVersion;ui.previewBusy=true;ui.preview=null;ui.previewFile=file;ui.previewError='';confirmedInput=null;render();
+  async function preview() {
+    const epoch=ui.epoch,text=ui.text,contentType=ui.importType,version=++ui.previewVersion;ui.previewBusy=true;ui.preview=null;ui.previewError='';confirmedInput=null;render();
     try {
       let data;
       if(ui.mode==='sample') {
         if(ui.text!==exampleText||ui.importType!=='policy')throw new Error('展示模式使用内置样例，请恢复示例材料；手工文本可从实时接口预览。');
         const rows=[['退换货政策 / 申请条件','签收后 7 天内可申请退货。商品需未使用，配件齐全。'],['退换货政策 / 包装要求','拆开外包装不直接等同于商品已使用，应由客服核对包装现状。']].map(([section_path,answer],index)=>({seq:index+1,section_path,answer,chars:answer.length,is_key_clause:true,duplicate:ui.scenario==='error'?null:false}));
         data={total:rows.length,key_clause:2,duplicates:0,dedup_known:ui.scenario!=='error',chunks:rows};
-      } else data=await request('/api/kb/preview',file?{file}:{text,content_type:contentType});
+      } else data=await request('/api/kb/preview',{text,content_type:contentType});
       if(!Array.isArray(data.chunks)||!Number.isInteger(data.total)||data.total!==data.chunks.length||!Number.isInteger(data.duplicates)||data.duplicates<0||data.duplicates>data.total)throw new Error('切块结果不完整，请重新预览。');
-      if(epoch===ui.epoch&&version===ui.previewVersion){ui.preview=data;if(!file){ui.ingestResult=null;if(data.dedup_known)ui.ingestError=null;}}
+      if(epoch===ui.epoch&&version===ui.previewVersion){ui.preview=data;ui.ingestResult=null;if(data.dedup_known)ui.ingestError=null;}
     } catch(error){if(epoch===ui.epoch&&version===ui.previewVersion)ui.previewError=error.message;}
-    finally {if(epoch===ui.epoch&&version===ui.previewVersion){ui.previewBusy=false;render();if(file)document.getElementById('data-preview-result')?.scrollIntoView({behavior:'smooth',block:'start'});}}
+    finally {if(epoch===ui.epoch&&version===ui.previewVersion){ui.previewBusy=false;render();}}
   }
   async function ingest() {
     const input=confirmedInput;
