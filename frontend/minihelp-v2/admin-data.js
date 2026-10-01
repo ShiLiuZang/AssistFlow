@@ -2,7 +2,7 @@
 window.createMinihelpDataPanels = function(h) {
   'use strict';
   const {esc,icon,pill:basePill,stat,modal,toast,render,go} = h;
-  const pill = (label,color='') => basePill(esc(label),color);
+  const pill = (label,color='') => basePill(label,color);
   const typeNames = {faq:'商品问答',policy:'政策条款',manual:'售后手册',spec:'商品规格',mined:'对话提取'};
   const pageNames = {overview:'管理总览',knowledge:'知识中心',review:'知识缺口',jobs:'作业中心',quality:'RAG 质量',observability:'观测与成本',topics:'咨询主题',models:'分类器管理'};
   const tabs = [['content','知识内容'],['import','录入与切块'],['mining','候选问答'],['index','索引状态'],['search','检索自测']];
