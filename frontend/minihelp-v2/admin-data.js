@@ -5,7 +5,7 @@ window.createMinihelpDataPanels = function(h) {
   const pill = (label,color='') => basePill(esc(label),color);
   const typeNames = {faq:'商品问答',policy:'政策条款',manual:'售后手册',spec:'商品规格',mined:'对话提取'};
   const pageNames = {overview:'管理总览',knowledge:'知识中心',review:'知识缺口',jobs:'作业中心',quality:'RAG 质量',observability:'观测与成本',topics:'咨询主题',models:'分类器管理'};
-  const tabs = [['content','知识内容'],['import','录入与切块'],['mining','候选问答'],['index','索引状态'],['search','检索自测']];
+  const tabs = [['content','知识内容'],['materials','建库材料'],['import','录入与切块'],['mining','候选问答'],['index','索引状态'],['search','检索自测']];
   const exampleText = '# 退换货政策\n\n## 申请条件\n签收后 7 天内可申请退货。商品需未使用，配件齐全。\n\n## 包装要求\n拆开外包装不直接等同于商品已使用，应由客服核对包装现状。';
   const sampleChunks = [
     [108,'退货需要保留哪些配件？','请保留产品主机、说明书及全部配件。','policy','售后政策','退换货 / 配件完整性','pending',true],
@@ -112,7 +112,7 @@ window.createMinihelpDataPanels = function(h) {
   }
   function header(page) {
     const desc={knowledge:'维护回复依据，核对原文、审核与向量状态。',overview:'查看知识、质量与模型的当前状态，找到下一件需要处理的事。',review:'从未解决的问题出发，核对依据，再确认可复用的答案。',jobs:'查看执行条件、运行状态与日志，回到业务页核对结果。',quality:'看策略、看逐题证据，分清检索结果与生成判断。',observability:'核对调用消耗、可比较评测与证据阈值。',topics:'看清问题分布，按权威类目核对完整问法与归类依据。',models:'核对数据、评测与产物，分别判断验收结果和服务状态。'};
-    const primary=page==='knowledge'?button(`${icon('plus')}录入内容`,'import','','primary'):page==='review'?`${ui.mode==='live'?'<button class="btn soft" data-wf-action="process-live">生成待审建议</button>':''}<button class="btn primary" data-wf-action="review-next">核对下一条</button>`:page==='jobs'?'<button class="btn soft" data-wf-action="job-guide">查看运行流程</button>':reports.hasPage(page)?'<button class="btn soft" data-report-action="guide">报告运行说明</button>':classification.hasPage(page)?'<button class="btn soft" data-cls-action="guide">查看查询范围</button>':button('打开知识中心','knowledge','','primary');
+    const primary=page==='knowledge'?button('建库材料','materials','','soft')+button(`${icon('plus')}录入内容`,'import','','primary'):page==='review'?`${ui.mode==='live'?'<button class="btn soft" data-wf-action="process-live">生成待审建议</button>':''}<button class="btn primary" data-wf-action="review-next">核对下一条</button>`:page==='jobs'?'<button class="btn soft" data-wf-action="job-guide">查看运行流程</button>':reports.hasPage(page)?'<button class="btn soft" data-report-action="guide">报告运行说明</button>':classification.hasPage(page)?'<button class="btn soft" data-cls-action="guide">查看查询范围</button>':button('打开知识中心','knowledge','','primary');
     return `<div class="page-title between"><div><div class="eyebrow">${page==='knowledge'?'KNOWLEDGE OPERATIONS':page==='review'?'KNOWLEDGE REVIEW':page==='jobs'?'BACKGROUND OPERATIONS':page==='quality'?'RAG QUALITY':page==='observability'?'OBSERVABILITY':page==='topics'?'CONSULTATION TOPICS':page==='models'?'CLASSIFIER MANAGEMENT':'SERVICE OPERATIONS'}</div><h1>${pageNames[page]}</h1><p>${desc[page]}</p></div><div class="page-actions">${button(`${icon('clock')}刷新读数`,'refresh',operationBusy()?'disabled':'')}${primary}</div></div>`;
   }
   function knowledgeMetrics(data) {
@@ -144,8 +144,17 @@ window.createMinihelpDataPanels = function(h) {
     return `${knowledgeMetrics(data)}${data.db_error?'<div class="notice data-alert" role="alert">库存统计暂不可读取，未知值显示为 —；列表单独查询。</div>':''}${panel('知识内容',toolbar+rows+footer,pill(ui.mode==='sample'?'样例库存':'全库查询','neutral'))}`;
   }
   function importPage(data) {
-    const sources=(data.sources||[]).map(row=>`<tr><td><span class="mono">${esc(row.file)}</span><span class="table-sub">${esc(type(row.content_type))}</span></td><td>${row.present?pill('材料可读'):pill('文件缺失','amber')}</td><td>${number(row.chunks)}</td></tr>`);
-    return `${ingestResultView()}<div class="data-import-steps" aria-label="录入流程"><span>01 填写原文</span>${icon('arrow')}<span>02 预览与查重</span>${icon('arrow')}<span>03 核对后入库</span></div><div class="split-panels data-import-panels">${panel('录入内容',`<form id="data-preview-form" class="panel-pad"><label class="field">内容类型<select id="data-import-type" ${operationBusy()?'disabled':''}>${(data.content_types||[]).map(row=>`<option value="${esc(row.key)}" ${ui.importType===row.key?'selected':''}>${esc(type(row.key))}</option>`).join('')}</select></label><label class="field">Markdown 正文<textarea id="data-import-text" required maxlength="40000" placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…" ${operationBusy()?'disabled':''} class="large-textarea">${esc(ui.text)}</textarea></label><div class="form-actions"><button class="btn primary" type="submit" ${ui.previewBusy||operationBusy()?'disabled':''}>${icon('file')}${ui.previewBusy?'正在预览…':'预览切块'}</button>${button('填入示例材料','reset-text',operationBusy()?'disabled':'')}</div><p class="field-hint" id="data-preview-hint">${ui.mode==='sample'?'展示模式预览内置材料；样例不会写入真实知识库。':'预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。'}</p></form>`)}${panel('切块预览',`<div class="panel-pad" id="data-preview-result" aria-live="polite">${previewView()}</div>`)}</div><div class="section-gap">${panel('建库材料',`${table(['材料文件 / 类型','文件状态','预计切块数'],sources)}<p class="data-table-footer">材料可读表示文件存在，不代表已入库；预计切块数不是库存数。</p>`)}</div>`;
+    return `${ingestResultView()}<div class="data-import-steps" aria-label="录入流程"><span>01 填写原文</span>${icon('arrow')}<span>02 预览与查重</span>${icon('arrow')}<span>03 核对后入库</span></div><div class="data-material-entry"><span>已有源文件？在建库材料中查看清单与切块。</span>${button('查看建库材料','materials','','soft')}</div><div class="split-panels data-import-panels">${panel('录入内容',`<form id="data-preview-form" class="panel-pad"><label class="field">内容类型<select id="data-import-type" ${operationBusy()?'disabled':''}>${(data.content_types||[]).map(row=>`<option value="${esc(row.key)}" ${ui.importType===row.key?'selected':''}>${esc(type(row.key))}</option>`).join('')}</select></label><label class="field">Markdown 正文<textarea id="data-import-text" required maxlength="40000" placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…" ${operationBusy()?'disabled':''} class="large-textarea">${esc(ui.text)}</textarea></label><div class="form-actions"><button class="btn primary" type="submit" ${ui.previewBusy||operationBusy()?'disabled':''}>${icon('file')}${ui.previewBusy?'正在预览…':'预览切块'}</button>${button('填入示例材料','reset-text',operationBusy()?'disabled':'')}</div><p class="field-hint" id="data-preview-hint">${ui.mode==='sample'?'展示模式预览内置材料；样例不会写入真实知识库。':'预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。'}</p></form>`)}${panel('切块预览',`<div class="panel-pad" id="data-preview-result" aria-live="polite">${previewView()}</div>`)}</div>`;
+  }
+  function sourceFeatures(features) {
+    if(!features)return '—';
+    return `<div class="data-source-features">${features.table_split?pill('拆表'):''}${features.overlap?pill('重叠'):''}${pill(number(features.sections)+' 节','neutral')}</div>`;
+  }
+  function materialsPage(data) {
+    const sources=data.sources||[],readable=sources.filter(row=>row.present),known=sources.every(row=>row.present&&Number.isInteger(row.chunks));
+    const summary=`${sources.length} 份材料 · 共切 ${known?readable.reduce((sum,row)=>sum+row.chunks,0):'—'} 块`;
+    const rows=sources.map(row=>`<tr><td class="data-source-file"><strong>${esc(row.file)}</strong><span class="table-sub mono">${esc(row.path)}</span></td><td>${esc(type(row.content_type))}<span class="table-sub">${row.present?pill('可读'):pill('文件缺失','amber')}</span></td><td>${number(row.chars)}</td><td>${number(row.lines)}</td><td>${number(row.chunks)}</td><td>${number(row.key_clause)}</td><td>${sourceFeatures(row.features)}</td><td>${button('看切块','source-preview',`data-file="${esc(row.file)}" ${!row.present||ui.mode!=='live'||operationBusy()?'disabled':''}`,'soft')}</td></tr>`);
+    return `${panel('建库材料',`<div class="panel-pad data-material-description"><p><span class="mono">data/kb/</span> 下的源文件是离线建库的输入。点击“看切块”核对章节、正文与关键条款。</p><p class="muted">这里展示当前文件的切块预估，不代表已入库。预览不写库、不执行向量化。</p>${ui.mode==='sample'?'<p class="field-hint">样例只展示文件清单；查看项目文件切块请切换到实时数据。</p>':''}</div><div class="data-source-table">${table(['材料文件','类型 / 状态','字符','行','切出块数','关键条款','特性','操作'],rows)}</div><div class="data-table-footer"><span>源文件已修改时，请刷新读数后重新预览。</span><div class="form-actions">${button('重新读取材料','refresh',operationBusy()?'disabled':'')}${button('查看离线建库作业','source-jobs','','soft')}</div></div>`,pill(summary,'neutral'))}`;
   }
   function previewView() {
     if(ui.previewBusy)return '<div class="data-empty-state compact" role="status"><h2>正在切块与查重</h2><p>预览不写入知识库。</p></div>';
@@ -274,7 +283,7 @@ window.createMinihelpDataPanels = function(h) {
     else if(classification.hasPage(page)){body=page==='topics'?classification.topicsPage():classification.modelsPage();time=classification.time(page);}
     else {
       const value=resource('kb');time=value.time;
-      body=ui.tab==='mining'?miningPage():ui.tab==='search'?searchPage():ui.tab==='content'?contentPage(value.data||{}):loadingOrError(value)||({import:importPage,index:indexPage})[ui.tab](value.data);
+      body=ui.tab==='mining'?miningPage():ui.tab==='search'?searchPage():ui.tab==='content'?contentPage(value.data||{}):loadingOrError(value)||({materials:materialsPage,import:importPage,index:indexPage})[ui.tab](value.data);
       if(ui.tab==='content')time=inventoryResource().time||time;
       if(ui.tab==='mining')time=ui.cache.staging?.time;
       body=`<nav class="section-tabs" aria-label="知识中心子页面">${tabs.map(([key,label])=>`<button data-data-tab="${key}" class="${ui.tab===key?'active':''}" aria-current="${ui.tab===key?'page':'false'}">${label}</button>`).join('')}</nav>${body}`;
@@ -298,7 +307,9 @@ window.createMinihelpDataPanels = function(h) {
     const action=el.dataset.dataAction;
     if(action==='refresh')refresh();
     else if(action==='knowledge')go('knowledge');
-    else if(['import','index','search'].includes(action)){ui.tab=action;render();}
+    else if(['materials','import','index','search'].includes(action)){ui.tab=action;render();}
+    else if(action==='source-preview')previewMaterial(el.dataset.file);
+    else if(action==='source-jobs')go('jobs');
     else if(action==='reset-text'){if(operationBusy())return true;ui.text=exampleText;ui.importType='policy';invalidatePreview();render();}
     else if(action==='confirm-ingest')confirmIngest();
     else if(action==='ingest-inventory'){ui.tab='content';ui.filter=ui.type='all';ui.query=ui.queryDraft='';ui.page=1;refresh();}
@@ -374,6 +385,24 @@ window.createMinihelpDataPanels = function(h) {
       if(epoch===ui.epoch&&dialog.open&&dialog.dataset.knowledgeKey===key){if(kind==='candidate')candidateRow=row;draw(kind==='chunk'?chunkDetailView(row):candidateDetailView(row));}
     } catch(error) {
       if(epoch===ui.epoch&&dialog.open&&dialog.dataset.knowledgeKey===key)draw(`<div class="data-empty-state compact"><h2>详情暂时无法读取</h2><p>${esc(error.message)}</p>${button('重新读取',kind,`data-id="${esc(id)}"`)}</div>`);
+    }
+  }
+  async function previewMaterial(file) {
+    const source=resource('kb').data?.sources?.find(row=>row.file===file);
+    if(ui.mode!=='live'||!source?.present||operationBusy())return;
+    const epoch=ui.epoch,key=String(++detailSequence),dialog=document.getElementById('modal');
+    const draw=body=>{modal('建库材料 · '+file,body,'<button class="btn" data-action="modal-close">关闭</button>');dialog.classList.add('knowledge-dialog');dialog.dataset.knowledgeKey=key;};
+    candidateRow=null;
+    draw('<div class="empty" role="status">正在读取文件并预览切块…</div>');
+    try {
+      const data=await request('/api/kb/preview',{file});
+      if(!Array.isArray(data.chunks)||!Number.isInteger(data.total)||data.total!==data.chunks.length)throw new Error('切块结果不完整，请重新预览。');
+      if(epoch!==ui.epoch||!dialog.open||dialog.dataset.knowledgeKey!==key)return;
+      const summary=`<div class="stat-strip data-metrics">${metric('原文字符',data.chars,'字','当前文件内容')}${metric('切出块数',data.total,'块','预览尚未写入')}${metric('关键条款',data.key_clause,'块','完整保留的约束')}${metric('重复块',data.dedup_known===true?data.duplicates:'未知',data.dedup_known===true?'块':'','与现有库存核对')}</div>`;
+      const chunks=data.chunks.map(row=>`<article class="data-preview-chunk"><div class="between"><strong>${number(row.seq)}. ${esc(row.section_path)}</strong>${row.duplicate==null?pill('未查重','neutral'):row.duplicate?pill('重复','amber'):pill('未发现重复')}</div>${row.questions?`<p><strong>问法</strong> ${esc(row.questions)}</p>`:''}<p>${esc(row.answer)}</p><div class="small muted">${number(row.chars)} 字${row.category?' · '+esc(row.category):''}${row.is_key_clause?' · 关键条款':''}${row.is_table?' · 表格':''}</div></article>`).join('')||'<div class="empty">材料中没有可切块的正文。</div>';
+      draw(`<p class="mono muted">${esc(data.source)} · ${esc(type(data.content_type))}</p><p class="field-hint">本次仅预览与查重，不写入知识库、不执行向量化。</p>${summary}${sourceFeatures(data.features)}${chunks}`);
+    } catch(error) {
+      if(epoch===ui.epoch&&dialog.open&&dialog.dataset.knowledgeKey===key)draw(`<div class="data-empty-state compact"><h2>材料预览暂时不可用</h2><p>${esc(error.message)}</p>${button('重新预览','source-preview',`data-file="${esc(file)}"`)}</div>`);
     }
   }
   async function preview() {
