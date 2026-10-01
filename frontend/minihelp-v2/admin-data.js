@@ -116,8 +116,10 @@ window.createMinihelpDataPanels = function(h) {
     return `<div class="page-title between"><div><div class="eyebrow">${page==='knowledge'?'KNOWLEDGE OPERATIONS':page==='review'?'KNOWLEDGE REVIEW':page==='jobs'?'BACKGROUND OPERATIONS':page==='quality'?'RAG QUALITY':page==='observability'?'OBSERVABILITY':page==='topics'?'CONSULTATION TOPICS':page==='models'?'CLASSIFIER MANAGEMENT':'SERVICE OPERATIONS'}</div><h1>${pageNames[page]}</h1><p>${desc[page]}</p></div><div class="page-actions">${button(`${icon('clock')}刷新读数`,'refresh',operationBusy()?'disabled':'')}${primary}</div></div>`;
   }
   function knowledgeMetrics(data) {
-    const s=data.chunks||{};
-    return `<div class="stat-strip data-metrics">${metric('知识块总数',s.total,'块','数据库原文记录')}${metric('已向量化',s.done,'块','原文已完成向量化')}${metric('待向量化',s.pending,'块','保留原文，等待补齐')}${metric('关键条款',s.key_clause,'块','需完整保留的约束')}</div>`;
+    const s=data.chunks||{},v=data.milvus||{},consistent=data.consistent;
+    const verdict=consistent===true?'一致':consistent===false?'对不上':'未知';
+    const note=consistent===true?'数量一致不代表检索合格':consistent===false?'有待补块或两端数量不同':data.db_error?'原文统计不可读，暂不下结论':v.online===false?'向量库离线，暂不下结论':'数量读数未知，暂不下结论';
+    return `<div class="stat-strip data-metrics data-knowledge-metrics" role="group" aria-label="知识库存统计" data-consistency="${consistent===true?'consistent':consistent===false?'mismatch':'unknown'}">${metric('知识块总数',s.total,'块','数据库原文记录（MySQL）')}${metric('已向量化',s.done,'块','MySQL 中标记已向量化')}${metric('待向量化',s.pending,'块','保留原文，等待补齐')}${metric('关键条款',s.key_clause,'块','需完整保留的约束')}${metric('Milvus 条数',v.online===true?v.count:v.online===false?'离线':null,v.online===true&&v.count!=null?'条':'',v.online===true?'向量库实际记录数':v.online===false?'向量库连接不可用':'向量库状态未知')}${metric('双写核对',verdict,'',note)}</div>`;
   }
   function inventoryResource() {
     const params=new URLSearchParams({page:ui.page,size:ui.size});
