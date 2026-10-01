@@ -1,0 +1,410 @@
+// 后端接口的返回值类型，对照 app/api/*.py 手写。
+// 以后可用 openapi-typescript 从 /openapi.json 自动生成。
+
+/* ---------- 通用 ---------- */
+export interface Paged<T> {
+  items: T[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
+/* ---------- 作业 /api/jobs ---------- */
+export type JobState = 'idle' | 'running' | 'ok' | 'failed' | 'stopped'
+export interface Job {
+  name: string
+  title: string
+  cmd: string
+  needs: string
+  heavy: boolean
+  status: JobState
+  pid: number | null
+  started_at: string | null
+  finished_at: string | null
+  returncode: number | null
+  log_mtime: string | null
+  log?: string
+}
+
+/* ---------- 管理总览 /api/admin/overview ---------- */
+export type ModuleStatus = 'ok' | 'attention' | 'missing' | 'error'
+export interface ModuleCard {
+  key: string
+  title: string
+  page: string
+  lede: string
+  status: ModuleStatus
+  headline: string
+  metrics: { label: string; value: string | number | null }[]
+  note: string | null
+}
+
+/* ---------- 知识库 /api/kb ---------- */
+export type ContentType = 'faq' | 'policy' | 'manual' | 'spec' | 'mined' | 'unmarked'
+export type VectorStatus = 'pending' | 'done' | 'failed'
+
+export interface KbChunkStats {
+  total: number | null
+  done: number | null
+  pending: number | null
+  key_clause: number | null
+  by_content_type: Record<string, number>
+}
+export interface KbMilvus {
+  online: boolean
+  count: number | null
+  collection?: string
+  detail?: string
+}
+export interface StagingStats {
+  counts: Record<StagingStatus, number>
+  total: number
+  batches: number
+  latest_batch: string | null
+}
+export interface KbSource {
+  file: string
+  content_type: string
+  present: boolean
+  path: string
+  chars?: number
+  lines?: number
+  mtime?: string
+  chunks?: number
+  key_clause?: number
+}
+export interface KbOverview {
+  chunks: KbChunkStats
+  milvus: KbMilvus
+  consistent: boolean | null
+  db_error: string | null
+  staging: StagingStats | null
+  sources: KbSource[]
+  content_types: { key: string; desc: string }[]
+  jobs: Job[]
+}
+export interface StoredChunk {
+  id: number
+  questions: string
+  answer: string
+  answer_chars: number
+  category: string | null
+  section_path: string | null
+  content_type: ContentType | null
+  is_key_clause: boolean
+  status: VectorStatus
+  created_at: string | null
+  vector_id?: string | null
+  review_id?: number | null
+}
+export interface PreviewChunk {
+  seq: number
+  section_path: string
+  category: string | null
+  questions: string
+  answer: string
+  chars: number
+  is_key_clause: boolean
+  is_table: boolean
+  duplicate: boolean | null
+}
+export interface PreviewResult {
+  source: string
+  content_type: string
+  chars: number
+  total: number
+  duplicates: number
+  key_clause: number
+  chunks: PreviewChunk[]
+  dedup_known: boolean
+}
+export interface IngestResult {
+  chunks: number
+  inserted: number
+  skipped: number
+  skipped_samples: { questions: string; answer: string }[]
+  vectorized: number | null
+}
+export type Strategy = 'vector' | 'bm25' | 'hybrid' | 'hybrid_rerank'
+export interface SearchHit {
+  id: number | null
+  question: string | null
+  answer: string | null
+  score: number | null
+  rerank_score: number | null
+  section_path: string | null
+  content_type: string | null
+  category: string | null
+}
+export type StagingStatus = 'extracted' | 'kept' | 'discarded' | 'approved' | 'rejected'
+export interface StagingRow {
+  id: number
+  batch_no: string
+  source_ref: string | null
+  question: string
+  answer: string
+}
+export interface StagingList {
+  stats: StagingStats
+  rows: Record<StagingStatus, StagingRow[]>
+  limit: number
+}
+export interface StagingDetail extends StagingRow {
+  status: StagingStatus
+  created_at: string | null
+  material: {
+    file: string | null
+    status: 'available' | 'missing' | 'untrusted' | 'read_error'
+    text: string | null
+    valid: boolean | null
+    reason: string | null
+  }
+}
+
+/* ---------- 知识缺口审核 /api/review ---------- */
+export type ReviewStatus = 'pending' | 'publishing' | 'approved' | 'rejected'
+export interface ReviewItem {
+  id: number
+  question: string
+  suggestion: string | null
+  occurrence_count: number
+  status: ReviewStatus
+  review_status: string
+  reviewer: string | null
+  answer: string | null
+  source_ref: string | null
+  publish_error: string | null
+  reviewed_at: string | null
+  created_at: string | null
+}
+export interface ProcessResult {
+  created: number
+  merged: number
+  already: number
+  skipped: number
+  candidate_truncated: number
+  skipped_reasons: Record<string, number>
+}
+
+/* ---------- RAG 质量 /api/rag-eval, /api/knowledge ---------- */
+export interface StrategySummary {
+  cases: number
+  answerable_cases: number
+  failures: number
+  recall_at_k: number
+  mrr: number
+  refusal_accuracy: number
+  keyword_coverage: number
+}
+export interface EvalDetail {
+  id: string
+  strategy: Strategy
+  query: string
+  should_refuse: boolean
+  error: string | null
+  recall: number
+  rr: number
+  coverage: number
+  refusal_correct: boolean
+  hits: SearchHit[]
+  answer?: string
+  refused?: boolean
+}
+export interface RagReport {
+  status: 'evaluated' | 'not_evaluated'
+  message?: string
+  k?: number
+  generation?: boolean
+  summary?: Record<string, StrategySummary>
+  details?: EvalDetail[]
+  created_at?: string
+}
+export interface EvalCase {
+  id: string
+  query: string
+  should_refuse: boolean
+}
+export interface AnswerResult {
+  answer: string
+  refused: boolean
+  reason: string | null
+  citations: (SearchHit & { n: number })[]
+}
+
+/* ---------- 观测与成本 /api/observability ---------- */
+interface Block {
+  present: boolean
+  status: 'ok' | 'missing' | 'error' | 'not_integrated'
+  hint: string | null
+}
+export interface CostRow {
+  intent: string
+  requests: number
+  generations: number
+  input_tokens: number
+  output_tokens: number
+  unknown_usage: number
+  unpriced: number
+  priced_subtotals: Record<string, string>
+  p95_generation_ms: number | null
+}
+export interface CostBlock extends Block {
+  meta?: { generated_at: string; source: string }
+  rows?: CostRow[]
+  summary?: {
+    requests: number
+    generations: number
+    known_input_tokens: number
+    known_output_tokens: number
+    unknown_usage: number
+    unpriced: number
+  }
+}
+export interface EvalRun {
+  id: number
+  strategy: string
+  top_k: number
+  status: string
+  metrics: Record<string, number | null>
+  created_at?: string
+  finished_at?: string
+}
+export interface TrendBlock extends Block {
+  runs?: EvalRun[]
+  metric_names?: string[]
+  omitted_incomparable?: number
+}
+export interface CalibrationBlock extends Block {
+  scan?: { threshold: number; pass_rate: number; leak_rate: number; youden_j: number }[]
+  recommended?: { threshold: number; pass_rate: number; leak_rate: number; youden_j: number }
+  in_use?: number
+  in_sync?: boolean
+  created_at?: string
+  distribution?: Record<'answerable' | 'absent', { n: number; min: number; p25: number; p50: number; p75: number; max: number }>
+}
+export interface ObservabilityOverview {
+  cost: CostBlock
+  trend: TrendBlock
+  calibration: CalibrationBlock
+}
+
+/* ---------- 咨询主题 /api/topics ---------- */
+export interface TopicDistribution {
+  total: number
+  latest: string | null
+  source?: string
+  classes: { label: string; count: number; samples: (string | { text?: string })[] }[]
+}
+export interface TopicQuestion {
+  question_id: number | string
+  labels: string[]
+  text: string
+  raw_question: string
+  source: string
+  occurrence_count: number
+  review_status: string | null
+  asked_at: string | null
+}
+export interface TopicCatalog {
+  classes: { label: string; boundary: string }[]
+}
+
+/* ---------- 分类器 /api/acceptance ---------- */
+export interface AcceptanceBlock {
+  key: string
+  no: number
+  title: string
+  status: 'pass' | 'fail' | 'missing'
+  headline: string
+  note: string
+  jobs: string[]
+}
+export interface AcceptanceOverview {
+  blocks: AcceptanceBlock[]
+  passed: number
+  total: number
+  all_pass: boolean
+  classifier: { online: boolean; detail: unknown }
+  jobs: Job[]
+}
+export interface ClassMetric {
+  name: string
+  severity: string
+  p: number
+  r: number
+  f1: number
+  support: number
+  red_line: number | null
+  passed: boolean
+  tp: number
+  fp: number
+  fn: number
+  tn: number
+}
+export interface AcceptanceEval {
+  eval: {
+    present: boolean
+    hint?: string
+    ran_at?: string
+    test_size?: number
+    threshold?: number
+    micro?: { p: number; r: number; f1: number }
+    macro?: { p: number; r: number; f1: number }
+    classes?: ClassMetric[]
+    total_cells?: number
+    total_fp?: number
+    total_fn?: number
+    red_line_passed?: boolean
+  }
+  scan: {
+    present: boolean
+    hint?: string
+    scan?: { threshold: number; micro_f1: number; tp: number; fp: number; fn: number }[]
+    best_threshold?: number
+    in_use_threshold?: number
+    consistent?: boolean
+  }
+  threshold_in_use: number | null
+}
+export interface FileStat {
+  path: string
+  present: boolean
+  bytes?: number
+  mtime?: string
+  lines?: number
+}
+export interface AcceptanceData {
+  lineage: (FileStat & { file: string; stage: string; desc: string; make: string })[]
+  dataset: {
+    splits: Record<string, { desc: string; size: number; multi_label: number; counts: Record<string, number> }>
+    leaks: Record<string, number>
+    clean: boolean
+  }
+  model: { files: FileStat[]; threshold: number | null; trio_ok: boolean }
+  onnx: { files: FileStat[] }
+  topic_names: string[]
+}
+export interface ClassifierError {
+  text: string
+  gold: string[]
+  pred: string[]
+  missed: string[]
+  extra: string[]
+  kind: '漏打' | '多打' | '错位' | string
+  matrix_entries: number
+}
+export interface AcceptanceErrors {
+  eval: { present: boolean; ran_at?: string; test_size?: number; threshold?: number; hint?: string }
+  errors: ClassifierError[]
+  kinds: Record<string, number>
+  pairs: { missed: string; grabbed: string; count: number; severity: string | null }[]
+  recipes?: Record<string, string>
+}
+export interface ClassifyResult {
+  text: string
+  threshold: number | null
+  labels: string[]
+  scores: { label: string; score: number; hit: boolean }[]
+  fallback: boolean
+}
