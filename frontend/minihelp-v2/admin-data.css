@@ -157,7 +157,7 @@
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .data-alert {
@@ -327,7 +327,7 @@
   font-weight: 550;
 }
 .data-source-file .mono {
-  font-size: 10px;
+  font-size: 12px;
 }
 .data-source-features {
   display: flex;
@@ -641,7 +641,7 @@
 }
 .data-record-fields dt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-bottom: 5px;
 }
 .data-record-fields dd {

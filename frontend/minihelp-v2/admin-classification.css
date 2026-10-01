@@ -38,7 +38,7 @@
   background: var(--paper);
 }
 .cls-topic-button small {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-left: 12px;
 }
@@ -69,7 +69,7 @@
   line-height: 1.9;
 }
 .cls-boundary > span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .cls-boundary p {
@@ -166,7 +166,7 @@
 }
 .cls-gate .panel-head .mono {
   margin-right: 5px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .cls-gate .panel-pad {
   padding: 18px;
@@ -476,7 +476,7 @@ dialog.classification-dialog {
   font-variant-numeric: tabular-nums;
 }
 .cls-matrix span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .cls-matrix .is-correct b {
@@ -526,7 +526,7 @@ dialog.classification-dialog {
 .cls-lineage small {
   display: block;
   margin-top: 14px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -803,7 +803,7 @@ dialog.classification-dialog {
 .cls-gate-numbers span {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-bottom: 5px;
 }
 .cls-gate-numbers b {

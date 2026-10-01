@@ -1,7 +1,7 @@
 @charset "UTF-8";
 :root {
   --ink: #263c42;
-  --muted: #72807e;
+  --muted: #5f6c69;
   --brand: #39776e;
   --brand-deep: #285e55;
   --brand-soft: #eaf2ed;
@@ -303,7 +303,7 @@ a {
   gap: 16px;
 }
 .demo-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   border: 1px dashed var(--line-strong);
   padding: 1px 6px;
@@ -385,7 +385,7 @@ a {
   margin-left: auto;
 }
 .nav-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--rail-muted);
   padding: 0 12px;
   margin: 0 0 8px;
@@ -429,7 +429,7 @@ a {
   border-radius: 4px;
   min-width: 19px;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 .rail-note {
   margin-top: auto;
@@ -455,7 +455,7 @@ a {
 .operator small {
   display: block;
   color: var(--rail-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .operator .icon-btn {
   color: var(--rail-muted);
@@ -492,7 +492,7 @@ a {
   gap: 13px;
 }
 .key {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   border: 1px solid var(--line);
   padding: 0 4px;
@@ -528,6 +528,10 @@ a {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 7px 9px;
+}
+.search:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgb(57 119 110 / 10%);
 }
 .search .icon {
   width: 15px;
@@ -568,7 +572,7 @@ a {
 }
 .queue-sub {
   padding: 14px 18px 8px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.5px;
   color: var(--muted);
   display: flex;
@@ -637,7 +641,7 @@ a {
   font-weight: 600;
 }
 .conversation-copy time {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-left: auto;
 }
@@ -650,7 +654,7 @@ a {
   margin: 5px 0 9px;
 }
 .conversation-copy .pill {
-  font-size: 9px;
+  font-size: 11px;
   padding: 1px 5px;
 }
 .unread {
@@ -662,7 +666,7 @@ a {
 }
 .queue-footer {
   border-top: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 12px;
   padding: 14px 18px;
   color: var(--muted);
 }
@@ -688,7 +692,7 @@ a {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 3px;
 }
 .chat-header .btn {
@@ -705,7 +709,7 @@ a {
   align-items: center;
   gap: 14px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   justify-content: center;
   margin: 0 0 24px;
 }
@@ -728,7 +732,7 @@ a {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 6px;
 }
@@ -762,7 +766,7 @@ a {
   color: var(--brand);
 }
 .message-note {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 5px;
 }
@@ -778,14 +782,14 @@ a {
   padding: 9px 0 0;
   margin-top: 10px;
   color: var(--brand);
-  font-size: 10px;
+  font-size: 12px;
   display: flex;
   align-items: center;
   gap: 5px;
 }
 .system-message {
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin: 18px 0;
 }
@@ -861,7 +865,7 @@ a {
   padding: 0 10px 10px;
 }
 .composer-foot .hint {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   margin-left: auto;
   margin-right: 8px;
@@ -912,7 +916,7 @@ a {
   font-size: 13px;
 }
 .detail-profile p {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .detail-row {
@@ -920,7 +924,7 @@ a {
   justify-content: space-between;
   gap: 8px;
   margin: 9px 0;
-  font-size: 10px;
+  font-size: 12px;
 }
 .detail-row span:first-child {
   color: var(--muted);
@@ -946,7 +950,10 @@ a {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  padding: 4px;
   flex: none;
 }
 .order-tile strong {
@@ -954,12 +961,12 @@ a {
   display: block;
 }
 .order-tile p {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .order-tile .btn {
   width: 100%;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 11px;
   padding: 6px;
 }
@@ -968,7 +975,7 @@ a {
   align-items: flex-start;
   gap: 8px;
   margin: 12px 0;
-  font-size: 10px;
+  font-size: 12px;
 }
 .record .dot {
   margin-top: 6px;
@@ -1041,7 +1048,7 @@ a {
   margin-left: 6px;
 }
 .stat-foot {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .content-grid {
@@ -1121,7 +1128,7 @@ tr:last-child td {
 .table-sub {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 4px;
 }
 .doc-icon {
@@ -1150,7 +1157,7 @@ tr:last-child td {
   justify-content: space-between;
   align-items: center;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   border-top: 1px solid var(--line);
 }
 .aside-panel {
@@ -1179,7 +1186,7 @@ tr:last-child td {
 }
 .aside-panel .eyebrow {
   color: var(--brand);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.5px;
   margin-bottom: 13px;
 }
@@ -1197,7 +1204,7 @@ tr:last-child td {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 .ticket-filter {
@@ -1273,7 +1280,7 @@ tr:last-child td {
   padding: 35px 0 0;
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 2px;
   color: var(--brand);
   margin-bottom: 20px;
@@ -1318,7 +1325,7 @@ tr:last-child td {
   color: var(--brand);
 }
 .client-note {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   display: flex;
   gap: 8px;
@@ -1347,7 +1354,7 @@ tr:last-child td {
   max-width: 85%;
 }
 .client-window .message-label {
-  font-size: 9px;
+  font-size: 11px;
 }
 .client-window .bubble {
   font-size: 12px;
@@ -1374,7 +1381,7 @@ tr:last-child td {
   border: 1px solid var(--line);
   background: var(--white);
   border-radius: 20px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .client-quick button:hover {
   color: var(--brand);
@@ -1383,7 +1390,7 @@ tr:last-child td {
 .powered {
   text-align: center;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   padding: 0 0 10px;
 }
 .powered b {
@@ -1401,12 +1408,12 @@ tr:last-child td {
   font-size: 11px;
 }
 .client-order p {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .client-order .btn {
   padding: 3px 7px;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 5px;
 }
 .toast {
@@ -1493,7 +1500,7 @@ dialog::backdrop {
   resize: vertical;
 }
 .field-hint {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 7px;
 }
@@ -1820,7 +1827,7 @@ dialog::backdrop {
     min-height: 68px;
   }
   .chat-header .btn {
-    font-size: 10px;
+    font-size: 12px;
   }
   .message-body {
     max-width: 85%;
@@ -1845,7 +1852,7 @@ dialog::backdrop {
   }
   .page-title .btn {
     padding: 8px 10px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .stat-strip {
     grid-template-columns: 1fr 1fr;
@@ -1908,7 +1915,7 @@ dialog::backdrop {
   }
   .store-nav {
     gap: 15px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .client-window .chat-messages {
     max-height: none;
