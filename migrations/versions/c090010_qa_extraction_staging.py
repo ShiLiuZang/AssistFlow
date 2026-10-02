@@ -1,4 +1,4 @@
-"""Add Minihelp dialogue extraction staging for the KB management page."""
+"""Add AssistFlow dialogue extraction staging for the KB management page."""
 
 from alembic import op
 import sqlalchemy as sa

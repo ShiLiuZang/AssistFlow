@@ -1,4 +1,4 @@
-"""Minihelp 知识库与 微调 作业的跨平台白名单入口。"""
+"""AssistFlow 知识库与 微调 作业的跨平台白名单入口。"""
 
 import argparse
 import os
