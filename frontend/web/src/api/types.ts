@@ -189,6 +189,16 @@ export interface ReviewItem {
   publish_error: string | null
   reviewed_at: string | null
   created_at: string | null
+  source_digest?: string | null
+  normalized_question?: string
+  ai_suggested_answer?: string | null
+  raws?: {
+    raw_question: string
+    source: string | null
+    reason: string | null
+    created_at: string | null
+    retrieved_chunks?: { question?: string; section_path?: string; answer?: string; score?: number | null }[] | null
+  }[]
 }
 export interface ProcessResult {
   created: number
