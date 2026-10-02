@@ -1,10 +1,9 @@
 <!-- 根组件：V2 顶部产品预览栏 + 三种视角（客户咨询页 / 客服工作台 / 管理后台） -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from './components/AppShell.vue'
 import ModalHost from './components/ModalHost.vue'
-import ConfirmHost from './components/ConfirmHost.vue'
 import { cyclePalette, paletteName } from './composables/useShell'
 import { toastState } from './composables/useToast'
 
@@ -16,6 +15,19 @@ const surfaces = [
   ['service', '客服工作台', '/workbench'],
   ['admin', '管理后台', '/overview'],
 ] as const
+
+// ⌘K / Ctrl+K：聚焦当前页的搜索框（与 V2 相同）
+const searchIds = ['conversation-search', 'doc-search', 'ticket-search', 'customer-search', 'order-search', 'product-search']
+function onKey(e: KeyboardEvent) {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return
+  const field = searchIds.map((id) => document.getElementById(id)).find(Boolean)
+  if (field) {
+    e.preventDefault()
+    field.focus()
+  }
+}
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </script>
 
 <template>
@@ -55,5 +67,4 @@ const surfaces = [
 
   <div id="toast" class="toast" :class="{ show: toastState.show }" role="status" aria-live="polite">{{ toastState.message }}</div>
   <ModalHost />
-  <ConfirmHost />
 </template>

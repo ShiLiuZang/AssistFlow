@@ -12,7 +12,6 @@ declare module 'vue-router' {
   }
 }
 
-const Pending = () => import('./pages/PendingPage.vue')
 const page = (path: string, title: string, surface: Surface, component: RouteRecordRaw['component'], data = false) =>
   ({ path, component, meta: { title, surface, data } }) as RouteRecordRaw
 
@@ -30,15 +29,15 @@ export const router = createRouter({
     page('/models', '分类器管理', 'admin', () => import('./pages/ModelsPage.vue'), true),
     page('/jobs', '作业中心', 'admin', () => import('./pages/JobsPage.vue'), true),
     // 管理后台：演示页
-    page('/migration', '原功能对照', 'admin', Pending),
-    page('/settings', '设置与权限', 'admin', Pending),
+    page('/migration', '原功能对照', 'admin', () => import('./pages/demo/MigrationPage.vue')),
+    page('/settings', '设置与权限', 'admin', () => import('./pages/demo/SettingsPage.vue')),
     // 客服工作台：演示页
-    page('/workbench', '会话工作台', 'service', Pending),
-    page('/tickets', '工单中心', 'service', Pending),
-    page('/customers', '客户资料', 'service', Pending),
-    page('/products', '商品与订单', 'service', Pending),
+    page('/workbench', '会话工作台', 'service', () => import('./pages/demo/WorkbenchPage.vue')),
+    page('/tickets', '工单中心', 'service', () => import('./pages/demo/TicketsPage.vue')),
+    page('/customers', '客户资料', 'service', () => import('./pages/demo/CustomersPage.vue')),
+    page('/products', '商品与订单', 'service', () => import('./pages/demo/ProductsPage.vue')),
     // 客户咨询页
-    page('/client', '客户咨询页', 'client', Pending),
+    page('/client', '客户咨询页', 'client', () => import('./pages/demo/ClientPage.vue')),
     { path: '/:pathMatch(.*)*', redirect: '/workbench' },
   ],
 })

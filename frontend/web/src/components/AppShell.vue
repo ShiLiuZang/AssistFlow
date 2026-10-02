@@ -150,7 +150,7 @@ const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, pr
         <button class="btn menu-trigger" aria-label="打开页面菜单" @click="showMenu"><Icon name="book" />菜单</button>
         <div class="breadcrumb">喵喵优选<span>/</span><strong>{{ route.meta.title }}</strong></div>
         <div class="top-tools">
-          <span class="small muted"><template v-if="!route.meta.data"><Icon name="clock" /> </template>{{ contextText }}</span>
+          <span class="small muted"><template v-if="!route.meta.data"><Icon name="clock" />{{ ' ' }}</template>{{ contextText }}</span>
           <span class="pill neutral">{{ badgeText }}</span>
           <button class="icon-btn" aria-label="操作说明" @click="showGuide"><Icon name="info" /></button>
         </div>
