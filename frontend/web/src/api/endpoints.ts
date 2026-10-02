@@ -6,6 +6,7 @@ import type {
   AcceptanceEval,
   AcceptanceOverview,
   AnswerResult,
+  ClassifierService,
   ClassifyResult,
   ContentType,
   EvalCase,
@@ -107,12 +108,13 @@ export const getObservability = () => get<ObservabilityOverview>('/api/observabi
 export const getTopicCatalog = () => get<TopicCatalog>('/api/topics/catalog')
 export const getTopicDistribution = () => get<TopicDistribution>('/api/topics/distribution')
 export const listTopicQuestions = (label: string, page: number, size: number) =>
-  get<Paged<TopicQuestion> & { label: string }>(`/api/topics/questions${qs({ label, page, size })}`)
+  get<Paged<TopicQuestion> & { label: string; source?: string | null }>(`/api/topics/questions${qs({ label, page, size })}`)
 
 /* 分类器 */
 export const getAcceptanceOverview = () => get<AcceptanceOverview>('/api/acceptance/overview')
 export const getAcceptanceEval = () => get<AcceptanceEval>('/api/acceptance/eval')
 export const getAcceptanceData = () => get<AcceptanceData>('/api/acceptance/data')
 export const getAcceptanceErrors = () => get<AcceptanceErrors>('/api/acceptance/errors')
+export const getClassifierService = () => get<ClassifierService>('/api/acceptance/service')
 export const classifyText = (text: string) =>
   post<ClassifyResult>('/api/acceptance/classify', { text }, 30000)

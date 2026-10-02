@@ -333,114 +333,145 @@ export interface ObservabilityOverview {
 
 /* ---------- 咨询主题 /api/topics ---------- */
 export interface TopicDistribution {
-  total: number
-  latest: string | null
-  source?: string
-  classes: { label: string; count: number; samples: (string | { text?: string })[] }[]
+  total?: number | null
+  latest?: string | null
+  source?: string | null
+  classes?: { label: string; count?: number | null; samples?: string[] }[]
 }
 export interface TopicQuestion {
   question_id: number | string
-  labels: string[]
-  text: string
-  raw_question: string
-  source: string
-  occurrence_count: number
-  review_status: string | null
-  asked_at: string | null
+  labels?: string[]
+  text?: string | null
+  raw_question?: string | null
+  normalized?: boolean | null
+  source?: string | null
+  occurrence_count?: number | null
+  review_status?: string | null
+  asked_at?: string | null
+  classified_at?: string | null
 }
 export interface TopicCatalog {
-  classes: { label: string; boundary: string }[]
+  classes?: { label: string; boundary?: string }[]
 }
 
 /* ---------- 分类器 /api/acceptance ---------- */
 export interface AcceptanceBlock {
   key: string
-  no: number
+  no?: number | null
   title: string
-  status: 'pass' | 'fail' | 'missing'
-  headline: string
-  note: string
-  jobs: string[]
+  status?: 'pass' | 'fail' | 'missing' | string
+  headline?: string
+  note?: string
+  jobs?: string[]
+}
+export interface ClassifierService {
+  online?: boolean | null
+  detail?: unknown
+  threshold?: number | null
+  onnx_present?: boolean | null
 }
 export interface AcceptanceOverview {
-  blocks: AcceptanceBlock[]
-  passed: number
-  total: number
-  all_pass: boolean
-  classifier: { online: boolean; detail: unknown }
-  jobs: Job[]
+  blocks?: AcceptanceBlock[]
+  passed?: number | null
+  total?: number | null
+  all_pass?: boolean | null
+  classifier?: ClassifierService
 }
 export interface ClassMetric {
   name: string
-  severity: string
-  p: number
-  r: number
-  f1: number
-  support: number
-  red_line: number | null
-  passed: boolean
-  tp: number
-  fp: number
-  fn: number
-  tn: number
+  severity?: string | null
+  p?: number | null
+  r?: number | null
+  f1?: number | null
+  support?: number | null
+  red_line?: number | null
+  passed?: boolean | null
+  tp?: number | null
+  fp?: number | null
+  fn?: number | null
+  tn?: number | null
+}
+export interface ReportBlock {
+  present?: boolean
+  hint?: string
+}
+export type Prf = { p?: number | null; r?: number | null; f1?: number | null }
+export interface ClassifierEvalReport extends ReportBlock {
+  ran_at?: string
+  test_size?: number
+  origin_counts?: Record<string, number>
+  real_subset?: { size?: number; micro_f1?: number | null }
+  threshold?: number
+  micro?: Prf
+  macro?: Prf
+  classes?: ClassMetric[]
+  total_cells?: number
+  total_fp?: number
+  total_fn?: number
+  red_line_passed?: boolean | null
+}
+export interface ClassifierScan extends ReportBlock {
+  ran_at?: string
+  val_size?: number
+  scan?: { threshold: number; micro_f1?: number | null; tp?: number; fp?: number; fn?: number }[]
+  best_threshold?: number
+  best_micro_f1?: number
+  in_use_threshold?: number
+  consistent?: boolean | null
 }
 export interface AcceptanceEval {
-  eval: {
-    present: boolean
-    hint?: string
-    ran_at?: string
-    test_size?: number
-    threshold?: number
-    micro?: { p: number; r: number; f1: number }
-    macro?: { p: number; r: number; f1: number }
-    classes?: ClassMetric[]
-    total_cells?: number
-    total_fp?: number
-    total_fn?: number
-    red_line_passed?: boolean
-  }
-  scan: {
-    present: boolean
-    hint?: string
-    scan?: { threshold: number; micro_f1: number; tp: number; fp: number; fn: number }[]
-    best_threshold?: number
-    in_use_threshold?: number
-    consistent?: boolean
-  }
-  threshold_in_use: number | null
+  eval?: ClassifierEvalReport
+  scan?: ClassifierScan
+  threshold_in_use?: number | null
+  severity?: Record<string, string>
 }
 export interface FileStat {
-  path: string
-  present: boolean
-  bytes?: number
-  mtime?: string
-  lines?: number
+  path?: string
+  present?: boolean | null
+  bytes?: number | null
+  mtime?: string | null
+  lines?: number | null
+  file?: string
+  stage?: string
+  desc?: string
+}
+export interface DataSplit {
+  desc?: string
+  size?: number
+  multi_label?: number
+  origins?: Record<string, number>
+  counts?: Record<string, number>
+  file?: FileStat
 }
 export interface AcceptanceData {
-  lineage: (FileStat & { file: string; stage: string; desc: string; make: string })[]
-  dataset: {
-    splits: Record<string, { desc: string; size: number; multi_label: number; counts: Record<string, number> }>
-    leaks: Record<string, number>
-    clean: boolean
+  lineage?: FileStat[]
+  corpus_origins?: Record<string, number>
+  dataset?: { splits?: Record<string, DataSplit>; leaks?: Record<string, number>; clean?: boolean | null }
+  sample_review?: FileStat
+  model?: { files?: FileStat[]; threshold?: number | null; trio_ok?: boolean | null }
+  onnx?: {
+    files?: FileStat[]
+    report?: ReportBlock & { ran_at?: string; checked?: number; mismatch?: number; passed?: boolean | null; opset?: number; onnx_path?: string }
   }
-  model: { files: FileStat[]; threshold: number | null; trio_ok: boolean }
-  onnx: { files: FileStat[] }
-  topic_names: string[]
+  topic_names?: string[]
 }
 export interface ClassifierError {
   text: string
-  gold: string[]
-  pred: string[]
-  missed: string[]
-  extra: string[]
-  kind: '漏打' | '多打' | '错位' | string
-  matrix_entries: number
+  gold?: string[]
+  pred?: string[]
+  missed?: string[]
+  extra?: string[]
+  kind: string
+  matrix_entries?: number
 }
 export interface AcceptanceErrors {
-  eval: { present: boolean; ran_at?: string; test_size?: number; threshold?: number; hint?: string }
-  errors: ClassifierError[]
-  kinds: Record<string, number>
-  pairs: { missed: string; grabbed: string; count: number; severity: string | null }[]
+  eval: ReportBlock & { ran_at?: string; test_size?: number; threshold?: number }
+  errors?: ClassifierError[]
+  kinds?: Record<string, number>
+  matrix_entries?: number
+  total_fp?: number
+  total_fn?: number
+  pairs?: { missed: string; grabbed: string; count?: number; severity?: string | null }[]
   recipes?: Record<string, string>
 }
 export interface ClassifyResult {

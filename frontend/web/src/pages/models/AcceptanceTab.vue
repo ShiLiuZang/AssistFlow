@@ -1,84 +1,84 @@
+<!-- 九项验收 -->
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
-import { getAcceptanceOverview } from '../../api/endpoints'
-import JobCard from '../../components/JobCard.vue'
-import Pill from '../../components/Pill.vue'
-import StatCard from '../../components/StatCard.vue'
-import StateBlock from '../../components/StateBlock.vue'
-import { acceptanceStatus } from '../../utils/labels'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import type { AcceptanceBlock } from '../../api/types'
+import DataState from '../../components/DataState.vue'
+import Icon from '../../components/Icon.vue'
+import SimpleModal from '../../components/SimpleModal.vue'
+import VStat from '../../components/VStat.vue'
+import { closeModal, openModal } from '../../composables/useModal'
+import GateStatus from '../classification/GateStatus.vue'
+import JobButtons from '../classification/JobButtons.vue'
+import MetaRow from '../classification/MetaRow.vue'
+import Note from '../classification/Note.vue'
+import { trackTime, useClsData, useClsErrors, useClsEval, useOverview } from '../classification/queries'
+import { num, serviceDetail } from '../classification/shared'
+import GateModal from './GateModal.vue'
+import GateNumbers from './GateNumbers.vue'
 
-const { data, error, isPending, refetch } = useQuery({ queryKey: ['acceptance', 'overview'], queryFn: getAcceptanceOverview })
-const openJobs = ref<string | null>(null)
+const emit = defineEmits<{ tab: [key: string] }>()
+const router = useRouter()
+const v = useOverview()
+const data = useClsData()
+const evaluation = useClsEval()
+const errors = useClsErrors()
+trackTime(v)
+const d = computed(() => v.data.value)
+const blocks = computed(() => d.value?.blocks || [])
+const countOf = (s: string) => blocks.value.filter((b) => b.status === s).length
+
+// 验收依据弹窗里的"查看对应报告"
+function toReport(key: string) {
+  if (key === 'classify') router.push('/topics')
+  else if (key === 'golden')
+    openModal({
+      title: '黄金样例闸 · 数据范围',
+      view: SimpleModal,
+      props: { html: '<div class="notice report-note amber" role="alert">现有接口提供验收摘要，尚无黄金样例逐条详情查询。未用其他错例代替这项依据。</div>' },
+      cls: 'classification-dialog',
+    })
+  else emit('tab', ['data', 'train', 'export'].includes(key) ? 'data' : key === 'errors' ? 'errors' : 'evaluation')
+}
+function toJobs() {
+  closeModal()
+  router.push('/jobs')
+}
+const showGate = (block: AcceptanceBlock) => openModal({ title: block.title, view: GateModal, props: { block, onReport: toReport, onJobs: toJobs }, cls: 'classification-dialog' })
 </script>
 
 <template>
-  <StateBlock :loading="isPending" :error="error" @retry="refetch()" />
-  <template v-if="data">
-    <section class="stat-strip">
-      <StatCard label="通过验收" :value="`${data.passed} / ${data.total}`" foot="后端逐项判定" />
-      <StatCard label="未达标" :value="data.blocks.filter((b) => b.status === 'fail').length" unit="项" foot="产物存在但条件未满足" />
-      <StatCard label="未生成" :value="data.blocks.filter((b) => b.status === 'missing').length" unit="项" foot="缺少所需产物或报告" />
-      <StatCard label="分类服务" :value="data.classifier.online ? '在线' : '离线'" foot=":8110 健康检查" :tone="data.classifier.online ? 'normal' : 'warn'" />
-    </section>
-    <p class="notice" :class="{ warn: !data.all_pass }">
-      {{ data.all_pass ? '九项全部达标。' : '尚未全部达标：' }}文件齐全、评测达标与服务在线分别判断，完整验收需要所有项目满足条件。
-    </p>
-
-    <div class="grid-3">
-      <article v-for="b in data.blocks" :key="b.key" class="block">
-        <header>
-          <span class="no mono">{{ String(b.no).padStart(2, '0') }}</span>
-          <h3>{{ b.title }}</h3>
-          <Pill :tone="acceptanceStatus[b.status][1]">{{ acceptanceStatus[b.status][0] }}</Pill>
-        </header>
-        <p class="headline">{{ b.headline }}</p>
-        <p class="small muted">{{ b.note }}</p>
-        <button class="btn small ghost" type="button" @click="openJobs = openJobs === b.key ? null : b.key">
-          {{ openJobs === b.key ? '收起作业' : `相关作业（${b.jobs.length}）` }}
-        </button>
-        <div v-if="openJobs === b.key" class="jobs">
-          <JobCard v-for="j in b.jobs" :key="j" :name="j" compact />
+  <DataState v-if="!d" :loading="v.isPending.value" :error="v.error.value" />
+  <template v-else>
+    <div class="stat-strip data-metrics">
+      <VStat label="通过验收" :value="d.passed" :unit="'/ ' + num(d.total)" foot="后端逐项判定" />
+      <VStat label="未达标" :value="countOf('fail')" unit="项" foot="产物存在，但验收条件未满足" />
+      <VStat label="未生成" :value="countOf('missing')" unit="项" foot="缺少所需产物或报告" />
+      <VStat label="分类服务" :value="d.classifier?.online === true ? '在线' : d.classifier?.online === false ? '离线' : null" foot="独立健康检查" />
+    </div>
+    <Note>文件齐全、评测达标与服务在线分别判断。矩阵和错例项达标仅表示报告可读；完整验收需所有项目满足条件。</Note>
+    <MetaRow
+      :items="[
+        ['整体验收', d.all_pass === true ? '全部达标' : d.all_pass === false ? '尚未全部达标' : '未知'],
+        ['服务状态', serviceDetail(d.classifier?.detail)],
+      ]"
+    />
+    <div class="cls-gates">
+      <section v-for="b in blocks" :key="b.key" class="panel cls-gate">
+        <div class="panel-head">
+          <h2>
+            <span class="mono muted">{{ num(b.no).padStart(2, '0') }}</span> {{ b.title }}
+          </h2>
+          <GateStatus :status="b.status" />
         </div>
-      </article>
+        <div class="panel-pad">
+          <GateNumbers :gate="b.key" :data="data.data.value" :evaluation="evaluation.data.value" :errors="errors.data.value" :overview="d" />
+          <strong class="cls-gate-headline">{{ b.headline || '尚无结论' }}</strong>
+          <p>{{ b.note || '未提供说明' }}</p>
+          <JobButtons :jobs="b.jobs" />
+          <button class="table-actions" @click="showGate(b)">查看依据 <Icon name="arrow" /></button>
+        </div>
+      </section>
     </div>
   </template>
 </template>
-
-<style scoped>
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 18px;
-  background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-h3 {
-  margin: 0;
-  font-size: 15px;
-  flex: 1;
-}
-.no {
-  color: var(--muted);
-}
-.headline {
-  margin: 0;
-  font-size: 14px;
-}
-.small {
-  margin: 0;
-}
-.jobs {
-  border-top: 1px solid var(--line);
-}
-.btn {
-  align-self: flex-start;
-}
-</style>

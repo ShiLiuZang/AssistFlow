@@ -1,188 +1,157 @@
-<!-- 咨询主题：17 类问题分布，点开某一类看完整问法与归类依据 -->
+<!-- 咨询主题（对应 V2 admin-classification.js 的 topicsPage） -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { getTopicCatalog, getTopicDistribution, listTopicQuestions } from '../api/endpoints'
-import PageHeader from '../components/PageHeader.vue'
-import Pager from '../components/Pager.vue'
-import Panel from '../components/Panel.vue'
-import Pill from '../components/Pill.vue'
-import StatCard from '../components/StatCard.vue'
-import StateBlock from '../components/StateBlock.vue'
+import type { TopicQuestion } from '../api/types'
+import DataPage from '../components/DataPage.vue'
+import DataState from '../components/DataState.vue'
+import Icon from '../components/Icon.vue'
+import StatusPill from '../components/StatusPill.vue'
+import VStat from '../components/VStat.vue'
+import VTable from '../components/VTable.vue'
+import { reportDataTime } from '../composables/useDataTime'
+import { openModal } from '../composables/useModal'
 import { useUrlNumber, useUrlState } from '../composables/useUrlState'
-import { dateTime, DASH } from '../utils/format'
-
-const dist = useQuery({ queryKey: ['topics', 'distribution'], queryFn: getTopicDistribution })
-const catalog = useQuery({ queryKey: ['topics', 'catalog'], queryFn: getTopicCatalog })
+import MetaRow from './classification/MetaRow.vue'
+import Note from './classification/Note.vue'
+import QuestionModal from './classification/QuestionModal.vue'
+import Tags from './classification/Tags.vue'
+import { openClsGuide } from './classification/guide'
+import { finite, num, pct, reviewNames, source, stamp } from './classification/shared'
 
 const label = useUrlState('label', '')
 const page = useUrlNumber('page', 1)
+const size = useUrlNumber('size', 10)
 
-const classes = computed(() => [...(dist.data.value?.classes ?? [])].sort((a, b) => b.count - a.count))
-const max = computed(() => Math.max(1, ...classes.value.map((c) => c.count)))
-const hit = computed(() => classes.value.filter((c) => c.count > 0).length)
-const boundary = computed(() => catalog.data.value?.classes.find((c) => c.label === label.value)?.boundary)
-const sourceName = computed(() =>
-  dist.data.value?.source === 'conversation_history' ? '历史会话（隔离归类）' : '低置信度问题池',
-)
+const cv = useQuery({ queryKey: ['topics', 'catalog'], queryFn: getTopicCatalog })
+const dv = useQuery({ queryKey: ['topics', 'distribution'], queryFn: getTopicDistribution })
+watch(dv.dataUpdatedAt, reportDataTime, { immediate: true })
+
+const catalogue = computed(() => cv.data.value?.classes || [])
+const d = computed(() => dv.data.value)
+const counts = computed(() => new Map((d.value?.classes || []).map((c) => [c.label, c])))
+const hit = computed(() => (d.value ? (d.value.classes || []).filter((c) => finite(c.count) && c.count > 0).length : null))
+// 所选类目不在权威类目里时，回到第一个类目
+const current = computed(() => (catalogue.value.some((c) => c.label === label.value) ? label.value : catalogue.value[0]?.label || ''))
+const selected = computed(() => catalogue.value.find((c) => c.label === current.value))
+const examples = computed(() => (counts.value.get(current.value)?.samples || []).slice(0, 3))
+const ratio = (name: string) => {
+  const row = counts.value.get(name)
+  return finite(row?.count) && finite(d.value?.total) && d.value.total > 0 ? row.count / d.value.total : null
+}
+
+const qv = useQuery({
+  queryKey: computed(() => ['topics', 'questions', current.value, page.value, size.value]),
+  queryFn: () => listTopicQuestions(current.value, page.value, size.value),
+  enabled: computed(() => !!current.value),
+  placeholderData: keepPreviousData,
+})
+const q = computed(() => qv.data.value)
 
 function pick(name: string) {
   label.value = name
   page.value = 1
 }
-
-const questions = useQuery({
-  queryKey: computed(() => ['topics', 'questions', label.value, page.value]),
-  queryFn: () => listTopicQuestions(label.value, page.value, 20),
-  enabled: computed(() => !!label.value),
-  placeholderData: keepPreviousData,
-})
-
-const sampleText = (s: string | { text?: string }) => (typeof s === 'string' ? s : (s.text ?? ''))
+function setSize(v: string) {
+  size.value = Number(v)
+  page.value = 1
+}
+function turn(step: number) {
+  if (q.value) page.value = Math.min(q.value.pages, Math.max(1, q.value.page + step))
+}
+const showQuestion = (row: TopicQuestion) => openModal({ title: '归类问题 · #' + row.question_id, view: QuestionModal, props: { row }, cls: 'classification-dialog' })
 </script>
 
 <template>
-  <PageHeader eyebrow="CONSULTATION TOPICS" title="咨询主题" desc="看清问题分布，按权威类目核对完整问法与归类依据。">
-    <button class="btn" type="button" @click="dist.refetch()">刷新读数</button>
-  </PageHeader>
+  <DataPage page="topics">
+    <template #actions>
+      <button class="btn soft" @click="openClsGuide">查看查询范围</button>
+    </template>
 
-  <StateBlock :loading="dist.isPending.value" :error="dist.error.value" @retry="dist.refetch()" />
-
-  <template v-if="dist.data.value">
-    <section class="stat-strip">
-      <StatCard label="已归类问题" :value="dist.data.value.total" unit="条" :foot="`来源：${sourceName}`" />
-      <StatCard label="命中类目" :value="`${hit} / ${classes.length}`" foot="至少有一条问题的类目" />
-      <StatCard label="最近归类" :value="dateTime(dist.data.value.latest)" />
-    </section>
-
-    <div class="layout">
-      <Panel title="类目分布">
-        <p v-if="!dist.data.value.total" class="muted">还没有归类结果。可在"分类器管理"或"作业中心"运行批量归类。</p>
-        <ul class="topic-list">
-          <li v-for="c in classes" :key="c.label">
-            <button type="button" :class="{ active: label === c.label }" @click="pick(c.label)">
-              <span class="name">{{ c.label }}</span>
-              <span class="track"><span v-if="c.count" class="fill" :style="{ width: `${(c.count / max) * 100}%` }" /></span>
-              <span class="count">{{ c.count }}</span>
-            </button>
-          </li>
-        </ul>
-      </Panel>
-
-      <Panel :title="label ? `「${label}」的问题` : '选择一个类目'">
-        <p v-if="!label" class="muted">点击左侧类目，查看这一类的完整问法。</p>
-        <template v-else>
-          <p v-if="boundary" class="notice">归类边界：{{ boundary }}</p>
-          <StateBlock
-            :loading="questions.isPending.value"
-            :error="questions.error.value"
-            :empty="questions.data.value && !questions.data.value.items.length ? '这一类还没有问题' : ''"
-            @retry="questions.refetch()"
-          />
-          <ul v-if="questions.data.value?.items.length" class="questions">
-            <li v-for="item in questions.data.value.items" :key="item.question_id">
-              <div>{{ item.text }}</div>
-              <div class="small muted">
-                <span v-if="item.text !== item.raw_question">原话：{{ item.raw_question }} · </span>
-                出现 {{ item.occurrence_count }} 次 · {{ dateTime(item.asked_at) }}
-              </div>
-              <div class="labels">
-                <Pill v-for="l in item.labels" :key="l" :tone="l === label ? 'green' : 'neutral'">{{ l }}</Pill>
-                <Pill v-if="item.review_status" tone="amber">{{ item.review_status }}</Pill>
-              </div>
-            </li>
-          </ul>
-          <Pager
-            v-if="questions.data.value?.items.length"
-            :page="questions.data.value.page"
-            :pages="questions.data.value.pages"
-            :total="questions.data.value.total"
-            @go="page = $event"
-          />
-          <details v-if="classes.find((c) => c.label === label)?.samples.length" class="samples">
-            <summary>分布样例</summary>
-            <ul>
-              <li v-for="(s, i) in classes.find((c) => c.label === label)?.samples ?? []" :key="i">{{ sampleText(s) || DASH }}</li>
-            </ul>
-          </details>
-        </template>
-      </Panel>
+    <div class="stat-strip data-metrics">
+      <VStat label="已归类问题" :value="d?.total" unit="条" foot="分布接口的独立问题数" />
+      <VStat label="已命中类目" :value="hit" unit="类" foot="问题可同时命中多个类目" />
+      <VStat label="权威类目" :value="cv.data.value ? catalogue.length : null" unit="类" foot="名称与边界来自类目定义" />
+      <VStat label="最新归类" :value="d?.latest ? d.latest.replace('T', ' ').slice(5, 16) : null" foot="接口返回的归类时间" />
     </div>
-  </template>
+    <DataState v-if="!d" :loading="dv.isPending.value" :error="dv.error.value" />
+    <template v-else>
+      <MetaRow
+        :items="[
+          ['分布来源', source(d.source)],
+          ['占比口径', '类目问题数 / 已归类问题数'],
+        ]"
+      />
+      <Note>一个问题可以属于多个类目，各类占比之和可能超过 100%。0 条表示当前没有命中，不代表未分类问题总数。</Note>
+    </template>
+    <DataState v-if="!cv.data.value" :loading="cv.isPending.value" :error="cv.error.value" />
+    <div v-else class="cls-topics-layout">
+      <aside class="panel cls-topic-list">
+        <div class="panel-head">
+          <h2>咨询类目</h2>
+          <span class="small muted">{{ catalogue.length }} 类</span>
+        </div>
+        <button v-for="c in catalogue" :key="c.label" class="cls-topic-button" :class="{ active: current === c.label }" :aria-pressed="current === c.label" @click="pick(c.label)">
+          <span
+            >{{ c.label }}<small>{{ ratio(c.label) == null ? '—' : pct(ratio(c.label)) }}</small></span
+          ><b>{{ num(counts.get(c.label)?.count) }}</b
+          ><span class="cls-topic-track"><i :style="{ width: (ratio(c.label) == null ? 0 : Math.min(100, (ratio(c.label) as number) * 100)) + '%' }"></i></span>
+        </button>
+      </aside>
+      <div>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>{{ current }} · 问题明细</h2>
+            <StatusPill color="neutral">服务端分页</StatusPill>
+          </div>
+          <div class="cls-boundary">
+            <span>类目边界</span>
+            <p>{{ selected?.boundary || '未提供' }}</p>
+            <details v-if="examples.length" class="cls-examples">
+              <summary>分布中的代表问法 · {{ examples.length }} 条</summary>
+              <ul>
+                <li v-for="(text, i) in examples" :key="i">{{ text }}</li>
+              </ul>
+            </details>
+          </div>
+          <Note v-if="!current">暂无可查询类目。</Note>
+          <DataState v-else-if="!q" :loading="qv.isPending.value" :error="qv.error.value" />
+          <template v-else>
+            <MetaRow
+              :items="[
+                ['列表来源', source(q.source)],
+                ['类目问题', q.total],
+                ['分页范围', '所选类目的全部问题'],
+              ]"
+            />
+            <VTable :heads="['问题 / 原始问法', '完整标签', '来源 / 审核', '归类时间', '操作']" :empty="!q.items?.length">
+              <tr v-for="row in q.items ?? []" :key="row.question_id">
+                <td class="cls-question">
+                  <strong>{{ row.text || row.raw_question || '未标注文本' }}</strong><span class="table-sub">#{{ row.question_id }} · 出现 {{ num(row.occurrence_count) }} 次</span>
+                </td>
+                <td><Tags :values="row.labels" /></td>
+                <td>
+                  {{ source(row.source) }}<span class="table-sub">审核：{{ (row.review_status && reviewNames[row.review_status]) || row.review_status || '未提供' }}</span>
+                </td>
+                <td class="data-time-cell">{{ stamp(row.classified_at) }}</td>
+                <td><button class="table-actions" @click="showQuestion(row)">查看 <Icon name="arrow" /></button></td>
+              </tr>
+            </VTable>
+            <div class="data-table-footer cls-pagination">
+              <span>共 {{ num(q.total) }} 条 · 第 {{ num(q.page) }} / {{ num(q.pages) }} 页</span>
+              <label
+                >每页<select id="cls-topic-size" aria-label="每页问题数" :value="size" @change="setSize(($event.target as HTMLSelectElement).value)">
+                  <option v-for="s in [10, 20, 50]" :key="s" :value="s">{{ s }} 条</option>
+                </select></label
+              >
+              <div>
+                <button class="btn" :disabled="q.page <= 1" @click="turn(-1)">上一页</button><button class="btn" :disabled="q.page >= q.pages" @click="turn(1)">下一页</button>
+              </div>
+            </div>
+          </template>
+        </section>
+      </div>
+    </div>
+  </DataPage>
 </template>
-
-<style scoped>
-.layout {
-  display: grid;
-  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
-  gap: 20px;
-}
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-.topic-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.topic-list button {
-  display: grid;
-  grid-template-columns: 96px 1fr 36px;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  text-align: left;
-  font-size: 13px;
-}
-.topic-list button:hover {
-  background: var(--canvas);
-}
-.topic-list button.active {
-  background: var(--brand-soft);
-}
-.name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.track {
-  height: 8px;
-  background: var(--sand);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.fill {
-  display: block;
-  height: 100%;
-  background: var(--brand);
-}
-.count {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.questions {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.questions li {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-}
-.labels {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-.samples {
-  margin-top: 14px;
-  font-size: 13px;
-}
-</style>
