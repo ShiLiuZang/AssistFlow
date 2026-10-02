@@ -15,7 +15,7 @@ from app.db.models import (
     Conversation, KnowledgeChunk, Message, Ticket, ToolAuditLog,
     TraceSpan, Turn, LowConfidenceQuestion, Review, EvalRun, QaExtractionStaging,
     TopicClassification,
-    StaffUser,
+    StaffUser, TicketEvent,
 )
 from app.tools.audit import ToolAuditRecord
 
@@ -170,6 +170,8 @@ async def list_dialog_messages(
             and not record.tool_calls
             and record.content
         )
+        # 人工接待期间的顾客消息、坐席回复和接入提示；内部备注 staff_note 不给顾客看
+        or record.role in {"handoff_user", "staff", "handoff_event"}
     ]
 async def create_ticket(
     conversation_id: int,
@@ -487,10 +489,14 @@ async def decide_ticket(conversation_id: int, user_id: str, call_id: str,
                 ticket = Ticket(conversation_id=conversation_id,
                                 ticket_no="PENDING-" + uuid4().hex,
                                 ticket_type=str(args.get("ticket_type") or "咨询"),
-                                description=str(args.get("description") or ""))
+                                description=str(args.get("description") or ""),
+                                user_id=user_id, source="customer", status="待处理",
+                                updated_at=datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0))
                 session.add(ticket)
                 await session.flush()
                 ticket.ticket_no = f"T{datetime.now():%Y%m%d}{ticket.id:04d}"
+                session.add(TicketEvent(ticket_id=ticket.id, actor=f"customer:{user_id}", action="create",
+                                        to_status="待处理", note="顾客在会话中确认创建"))
                 result = {"confirmed": True, "ticket_no": ticket.ticket_no}
             else:
                 result = {"confirmed": False, "message": "用户取消建单"}

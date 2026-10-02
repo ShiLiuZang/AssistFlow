@@ -239,6 +239,8 @@ uv run python -m scripts.tasks staff-create --username admin --role admin
 
 Back-office pages require staff login. Customer identity comes from tokens signed by the storefront backend (sharing `CUSTOMER_TOKEN_SECRET`); for local development set `AUTH_DEV_MODE=true` in `.env` and enter any customer ID on the chat page.
 
+**Human handoff:** create `agent` accounts for customer-service staff. When a customer asks for a human (or complains, or clicks 转人工), the conversation enters the queue on `#/workbench`; once an agent accepts it the AI is paused until the agent ends the session. Real-time push uses in-process SSE, so run a single API instance for now. See [docs/phase2-human-handoff.md](docs/phase2-human-handoff.md).
+
 ### 4. Initialize Knowledge Base
 
 ```bash

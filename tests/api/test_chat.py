@@ -225,6 +225,47 @@ class TestStreamGraphChat:
         assert runtime.calls == []
 
 
+class TestHandoffRouting:
+    REQUEST = ChatRequest(user_id="u1", message="在吗", conversation_id=7)
+
+    async def test_message_goes_to_agent_while_handoff_open(self, graph_repo, monkeypatch):
+        from app.core import handoff
+
+        async def routed(conversation_id, user_id, text):
+            return {"handoff": {"status": "active"}, "message": {"role": "customer", "content": text}}
+
+        monkeypatch.setattr(handoff, "customer_message", routed)
+        runtime = FakeRuntime(DONE_EVENTS)
+        frames = sse_frames("".join(await collect(graph_chat.stream_graph_chat(self.REQUEST, 7, runtime))))
+
+        assert runtime.calls == []
+        assert frames[1][1]["event"] == "handoff" and frames[1][1]["handoff"] == {"status": "active"}
+        assert frames[2][1] == {"event": "done", "conversation_id": 7, "message_id": None, "handoff": True}
+        assert frames[-1] == (None, "[DONE]")
+        graph_repo.persist_graph_messages.assert_not_awaited()
+
+    async def test_turn_that_queues_reports_status(self, graph_repo, monkeypatch):
+        from app.core import handoff
+
+        async def status(conversation_id):
+            return {"status": "queued", "position": 2}
+
+        monkeypatch.setattr(handoff, "open_status", status)
+        frames = sse_frames("".join(await collect(graph_chat.stream_graph_chat(self.REQUEST, 7, FakeRuntime(DONE_EVENTS)))))
+        assert (None, {"event": "handoff", "conversation_id": 7, "handoff": {"status": "queued", "position": 2}}) in frames
+        assert any(f[1].get("event") == "done" for f in frames if isinstance(f[1], dict))
+
+    async def test_status_lookup_failure_does_not_break_turn(self, graph_repo, monkeypatch):
+        from app.core import handoff
+
+        async def broken(conversation_id):
+            raise RuntimeError("db")
+
+        monkeypatch.setattr(handoff, "open_status", broken)
+        frames = sse_frames("".join(await collect(graph_chat.stream_graph_chat(self.REQUEST, 7, FakeRuntime(DONE_EVENTS)))))
+        assert all(event != "error" for event, _ in frames)
+
+
 class TestGraphChatEndpoint:
     def test_503_without_runtime(self, client, graph_repo):
         assert client.post("/api/graph-chat", json={"user_id": "u1", "message": "hi"}).status_code == 503
@@ -276,6 +317,17 @@ class TestConversations:
         ])
         response = client.get("/api/conversations/1/messages", params={"user_id": "u1"})
         assert response.json()[1] == {"role": "assistant", "content": "hello", "message_id": "m1"}
+        repo.get_conversation.assert_awaited_once_with(1, "u1")
+
+    def test_messages_include_human_service(self, client, repo):
+        repo.set("get_conversation", return_value=conversation(1))
+        repo.set("list_dialog_messages", return_value=[
+            SimpleNamespace(role="handoff_event", content="人工客服已接入", turn_message_id=None),
+            SimpleNamespace(role="handoff_user", content="在吗", turn_message_id=None),
+            SimpleNamespace(role="staff", content="在的", turn_message_id=None),
+        ])
+        roles = [m["role"] for m in client.get("/api/conversations/1/messages").json()]
+        assert roles == ["system", "user", "staff"]
         repo.get_conversation.assert_awaited_once_with(1, "u1")
 
     def test_messages_of_other_user_404(self, client, repo):

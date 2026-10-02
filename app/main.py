@@ -36,11 +36,13 @@ from app.api.admin import router as admin_router  # 管理后台
 from app.api.acceptance import router as acceptance_router  # 验收测试
 from app.api.topics import router as topics_router  # 话题管理
 from app.api.observability import router as observability_router  # 观测数据
+from app.api.agent import router as agent_router  # 人工坐席工作台
 
 # 核心服务导入
 from app.config import settings  # 配置管理
-from app.core import auth  # 认证配置校验
+from app.core import auth, handoff  # 认证配置校验、转人工
 from app.core.safety import install_log_redaction  # 日志脱敏
+from app.core.realtime import install_shutdown_hook  # 实时推送
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
 from app.db import repository  # 数据库操作
 from app.graph.adapters import make_services_with_mcp  # 服务容器和 MCP 工具集成
@@ -77,6 +79,7 @@ async def lifespan(app: FastAPI):
     # 0. 认证密钥不满足要求时拒绝启动（开发模式除外）；日志统一脱敏
     auth.check_configuration()
     install_log_redaction()
+    install_shutdown_hook()  # 退出时结束实时推送长连接
 
     # 1. 从环境变量收集已配置的 MCP 服务器 URL
     # 仅包含非空 URL，支持逐步启用 MCP 服务器
@@ -102,6 +105,7 @@ async def lifespan(app: FastAPI):
     # trace_sink: 记录执行追踪 span，用于性能分析和调试（git commit 805cba5）
     services.audit_sink = repository.insert_tool_audit
     services.trace_sink = repository.insert_trace_span
+    services.request_handoff = handoff.request_from_graph
 
     # 4. 记录 MCP 工具发现异常
     for issue in issues:
@@ -179,6 +183,7 @@ app.include_router(admin_router)  # 管理后台
 # 测试和话题管理接口
 app.include_router(acceptance_router)  # 验收测试
 app.include_router(topics_router)  # 话题管理
+app.include_router(agent_router)  # 人工坐席工作台与工单
 
 
 @app.get("/api/health")

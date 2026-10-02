@@ -663,12 +663,29 @@ def make_nodes(services):
             "chat",
             answer="你好，可以咨询商品知识、订单或售后问题。"
         )
+    async def handoff(state: ConversationState, reason: str, fallback_answer: str, lead: str) -> str:
+        """转入人工排队并返回给顾客的话术；转人工服务不可用时退回原引导话术。"""
+        request_handoff = getattr(services, "request_handoff", None)
+        if not callable(request_handoff):
+            return fallback_answer
+        try:
+            result = await request_handoff(state, reason)
+        except Exception:
+            logger.exception("转人工失败 conversation_id=%s", state.get("conversation_id"))
+            return fallback_answer
+        if result.get("status") == "active":
+            return f"{lead}人工客服正在为您服务，请直接描述您的问题。"
+        ahead = max(int(result.get("position") or 1) - 1, 0)
+        queue = f"前面还有 {ahead} 位顾客" if ahead else "您是下一位"
+        return f"{lead}已为您转接人工客服，{queue}，客服接入后会在这里回复您。"
+
     async def complaint(state: ConversationState):
-        return update(
-            state,
-            "complaint",
-            answer="已了解你的投诉，请通过订单售后入口联系人工客服处理。",
+        answer = await handoff(
+            state, "complaint",
+            "已了解你的投诉，请通过订单售后入口联系人工客服处理。",
+            "非常抱歉给您带来不好的体验，",
         )
+        return update(state, "complaint", answer=answer)
     async def resolve_reference(state: ConversationState):
         messages = state.get("messages", [])
         covered_count = state.get("covered_count", 0)
@@ -830,12 +847,8 @@ def make_nodes(services):
             citations=[],
         )
     async def human(state: ConversationState):
-        return update(
-            state,
-            "human",
-            answer="如需人工协助，请通过订单售后入口联系人工客服。",
-            citations=[],
-        )
+        answer = await handoff(state, "human", "如需人工协助，请通过订单售后入口联系人工客服。", "好的，")
+        return update(state, "human", answer=answer, citations=[])
 
     async def clarify_intent(state: ConversationState):
         return update(

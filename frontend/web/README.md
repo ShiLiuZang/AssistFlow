@@ -47,9 +47,15 @@ npm run dev          # http://localhost:5173
 
 `#/client` 通过 `/api/graph-chat` 接收事件流，读取会话历史与待确认操作，通过 `/api/feedback` 提交反馈。支持工单确认、订单选择、连接中断后的重新读取；失败时不会以演示回复代替。顾客身份来自令牌：嵌入商城时通过地址参数 `#/client?token=…` 或 `postMessage({ type: 'assistflow:customer-token', token })` 传入；开发模式（`AUTH_DEV_MODE=true`）下可在侧栏输入顾客 ID 模拟登录。管理后台与客服工作台需要员工登录（`#/login`）。
 
-### 客服工作台（演示数据）
+### 客服工作台（会话与工单为真实接口）
 
-`#/workbench`、`#/tickets`、`#/customers`、`#/products` 仍使用 `src/demo/store.ts` 的内存演示数据，与真实客户聊天分开。刷新会重置，不代表真实客服接管已经接通。
+| 路由 | 页面 | 主要接口 | 说明 |
+|---|---|---|---|
+| `#/workbench` | 会话工作台 | `/api/agent/conversations*`、`/api/agent/stream` | 排队接入、主动接管、回复与内部备注、转交、结束接待；新转人工会话实时出现 |
+| `#/tickets` | 工单中心 | `/api/agent/tickets*` | 状态流转与处理记录 |
+| `#/customers`、`#/products` | 客户资料、商品与订单 | — | 仍为 `src/demo/store.ts` 的演示数据 |
+
+需要坐席或管理员账号。顾客在 `#/client` 点击「转人工」或说“转人工”“我要投诉”后进入排队；坐席接入后，顾客的消息直接发给坐席，不再经过 AI；坐席回复通过 `/api/conversations/{id}/events` 实时推送到客户咨询页。设计见 [docs/phase2-human-handoff.md](../../docs/phase2-human-handoff.md)。
 
 页面内的子页、筛选、页码都写在 URL 上（例如 `#/models?tab=evaluation`、`#/review?status=all&page=2`），刷新不丢，链接可以直接分享。
 
@@ -82,7 +88,8 @@ src/
 
 - [ ] 用 openapi-typescript 从 `/openapi.json` 自动生成 `api/types.ts`
 - [x] FastAPI 在 `/` 托管 `dist/`，旧静态页已删除
-- [ ] 客服工作台与电商平台集成（客户聊天已连接本项目 API）
+- [x] 客服工作台接通真实会话（人工接待、工单）
+- [ ] 接入电商平台 IM 渠道
 - [x] 登录与权限：员工登录、按角色提示写操作权限，令牌保存在 sessionStorage
 
 ## 对话挖知识与飞轮

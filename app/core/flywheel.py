@@ -7,6 +7,7 @@ import logging
 from pydantic import BaseModel, Field, StrictInt, field_validator
 
 from app.core.llm import get_chat_model
+from app.core.handoff import harvested_answer
 from app.db import repository
 
 
@@ -85,6 +86,10 @@ async def process_pending(
                 timeout=timeout,
             )
             result = NormalizedQuestion.model_validate(raw)
+            # 人工接待回流的记录：坐席回复比模型草稿更贴近实际，作为建议答案（仍需审核员核对材料）
+            staff_answer = harvested_answer(row)
+            if staff_answer:
+                result.suggestion = staff_answer[:2000]
             _, action = await repository.merge_question(
                 pool_id=row["id"],
                 question=result.question,

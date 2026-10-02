@@ -423,3 +423,43 @@ class TestOutputGuard:
     async def test_policy_explanation_passes(self, repo):
         result = await runtime_for(make_services()).run_turn("退货期限是多久", "u1", "c1")
         assert result["answer"] == ANSWER and "output_guard" not in result["trace"]
+
+
+class TestHandoffNodes:
+    """human / complaint 节点把会话转入人工排队。"""
+
+    @pytest.mark.parametrize("route,reason", [("human", "human"), ("complaint", "complaint")])
+    async def test_queues_handoff_with_state(self, repo, route, reason):
+        calls = []
+
+        async def request_handoff(state, why):
+            calls.append((state, why))
+            return {"status": "queued", "position": 3}
+
+        services = make_services(route=route, request_handoff=request_handoff)
+        result = await runtime_for(services).run_turn("我要找人工", "u1", "7")
+
+        assert calls[0][1] == reason
+        assert calls[0][0]["conversation_id"] == "7" and calls[0][0]["user_id"] == "u1"
+        assert "已为您转接人工客服，前面还有 2 位顾客" in result["answer"]
+
+    async def test_first_in_queue(self, repo):
+        async def request_handoff(state, why):
+            return {"status": "queued", "position": 1}
+
+        result = await runtime_for(make_services(route="human", request_handoff=request_handoff)).run_turn("转人工", "u1", "7")
+        assert "您是下一位" in result["answer"]
+
+    async def test_already_with_agent(self, repo):
+        async def request_handoff(state, why):
+            return {"status": "active", "position": None}
+
+        result = await runtime_for(make_services(route="human", request_handoff=request_handoff)).run_turn("转人工", "u1", "7")
+        assert "人工客服正在为您服务" in result["answer"]
+
+    async def test_falls_back_when_handoff_fails(self, repo):
+        async def request_handoff(state, why):
+            raise RuntimeError("db down")
+
+        result = await runtime_for(make_services(route="complaint", request_handoff=request_handoff)).run_turn("投诉", "u1", "7")
+        assert result["answer"].startswith("已了解你的投诉")

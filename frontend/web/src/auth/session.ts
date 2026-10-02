@@ -66,6 +66,7 @@ export function hasRole(...roles: Role[]) {
 const WRITE_ROLES: [RegExp, Role[]][] = [
   [/^\/api\/(kb\/(preview|ingest|vectorize)|jobs\/|knowledge\/evaluate)/, []],
   [/^\/api\/(review\/|kb\/staging\/(approve|reject))/, ['reviewer']],
+  [/^\/api\/agent\//, ['agent']],
 ]
 
 /** 当前员工执行该写操作缺少权限时返回提示文字，否则返回 null。 */

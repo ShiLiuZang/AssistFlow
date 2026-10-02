@@ -62,3 +62,7 @@
   .live-chat-heading { padding: 12px; }
   .live-store-header { padding: 0 16px; }
 }
+/* 人工客服：客服回复与接入提示 */
+.live-message.staff .live-bubble { background: var(--blue-soft); border-color: transparent; }
+.live-message.staff .live-speaker { color: var(--blue); }
+.live-system { text-align: center; color: var(--muted); font-size: 12px; margin: 0 0 18px; }

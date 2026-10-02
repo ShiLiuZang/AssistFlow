@@ -1,15 +1,16 @@
 <!-- V2 外壳：深色侧栏（品牌、工作区、分组导航、操作者）+ 顶栏（菜单、面包屑、状态） -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import Icon from './Icon.vue'
 import NavMenuModal from './NavMenuModal.vue'
 import SimpleModal from './SimpleModal.vue'
+import { agentSummary } from '../api/agent'
 import { listReviews } from '../api/endpoints'
-import { ROLE_NAMES, session, setStaff } from '../auth/session'
+import { ROLE_NAMES, hasRole, session, setStaff } from '../auth/session'
+import { agentLive, startAgentLive, stopAgentLive } from '../composables/useAgentLive'
 import { openModal } from '../composables/useModal'
-import { queuedCount } from '../demo/store'
 
 const catUrl = `${import.meta.env.BASE_URL}assets/minihelp-cat.svg`
 const props = defineProps<{ surface: 'admin' | 'service' }>()
@@ -18,6 +19,7 @@ const router = useRouter()
 const staffName = computed(() => session.staff?.username ?? '未登录')
 const staffRole = computed(() => (session.staff ? ROLE_NAMES[session.staff.role] : ''))
 function logout() {
+  stopAgentLive()
   setStaff(null)
   router.replace('/login')
 }
@@ -30,6 +32,14 @@ const pending = useQuery({
   enabled: admin,
 })
 const reviewBadge = computed(() => pending.data.value?.total || '')
+
+// 客服工作台：坐席（或管理员）登录后建立实时连接，侧栏显示排队数
+const client = useQueryClient()
+const agentEnabled = computed(() => !admin.value && hasRole('agent'))
+const summary = useQuery({ queryKey: ['agent', 'summary'], queryFn: agentSummary, enabled: agentEnabled, refetchInterval: 60000 })
+const queuedBadge = computed(() => summary.data.value?.queued || '')
+watch(agentEnabled, (on) => (on ? startAgentLive(client) : stopAgentLive()), { immediate: true })
+onBeforeUnmount(stopAgentLive)
 
 type NavItem = { path: string; label: string; icon: string; count?: string | number }
 const adminGroups = computed<{ label?: string; items: NavItem[]; bottom?: boolean }[]>(() => [
@@ -63,7 +73,7 @@ const serviceGroups = computed<{ label?: string; items: NavItem[]; bottom?: bool
   {
     label: '服务工作区',
     items: [
-      { path: '/workbench', label: '会话工作台', icon: 'chat', count: queuedCount.value },
+      { path: '/workbench', label: '会话工作台', icon: 'chat', count: queuedBadge.value },
       { path: '/tickets', label: '工单中心', icon: 'ticket' },
       { path: '/customers', label: '客户资料', icon: 'users' },
       { path: '/products', label: '商品与订单', icon: 'box' },
@@ -80,6 +90,7 @@ const serviceGroups = computed<{ label?: string; items: NavItem[]; bottom?: bool
 const groups = computed(() => (admin.value ? adminGroups.value : serviceGroups.value))
 
 const contextText = computed(() => {
+  if (!admin.value && route.meta.data) return agentLive.connected ? '实时推送已连接' : '实时推送连接中…'
   if (!route.meta.data) return '演示工作日 · 09 / 22'
   if (['/quality', '/observability', '/models'].includes(route.path)) return '报告与评估状态'
   if (route.path.startsWith('/topics')) return '主题归类状态'
@@ -100,7 +111,7 @@ const showGuide = () =>
     title: '页面与数据范围',
     view: SimpleModal,
     props: {
-      html: '<div class="page-map"><div class="map-row"><h3>客户咨询页</h3><p>连接当前项目后端，可读取历史会话、发送问题、提交反馈及确认操作。刷新后从后端恢复会话。</p></div><div class="map-row"><h3>管理后台</h3><p>知识、审核和作业读取真实接口，操作前显示影响与确认。主题图可直接跳到类目问题明细。</p></div><div class="map-row"><h3>客服工作台</h3><p>客服工作台、工单中心、客户资料和商品页仍使用演示数据，尚未与真实聊天联动。</p></div></div>',
+      html: '<div class="page-map"><div class="map-row"><h3>客户咨询页</h3><p>连接当前项目后端，可读取历史会话、发送问题、提交反馈及确认操作。刷新后从后端恢复会话。</p></div><div class="map-row"><h3>管理后台</h3><p>知识、审核和作业读取真实接口，操作前显示影响与确认。主题图可直接跳到类目问题明细。</p></div><div class="map-row"><h3>客服工作台</h3><p>会话工作台和工单中心连接真实接口：顾客转人工后实时进入排队，坐席接入后的回复会推送到客户咨询页。客户资料和商品页仍是演示数据。</p></div></div>',
     },
   })
 const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, props: { surface: props.surface } })

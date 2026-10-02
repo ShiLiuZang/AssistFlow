@@ -9,6 +9,7 @@
 4. 审核流程：LowConfidenceQuestion、Review、TopicClassification
 5. 观测数据：ToolAuditLog、TraceSpan、EvalRun
 6. 后台账号：StaffUser
+7. 人工坐席：Handoff、TicketEvent
 
 数据库技术栈：
 - SQLAlchemy 2.0：ORM 框架，使用新的 Mapped 类型注解
@@ -19,7 +20,7 @@
 
 from datetime import datetime
 from sqlalchemy import (
-    BigInteger, JSON, DateTime, Float, ForeignKey, Integer, String, Text,
+    BigInteger, JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -66,7 +67,9 @@ class Message(Base):
         ForeignKey("conversations.id"),
         index=True,
     )
-    role: Mapped[str] = mapped_column(String(20))  # "user", "assistant", "tool"
+    # "user", "assistant", "tool" 属于 AI 对话历史；
+    # "handoff_user"、"staff"、"staff_note"、"handoff_event" 属于人工接待，不进入图历史
+    role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str | None] = mapped_column(Text, nullable=True)  # 消息文本内容
     tool_calls: Mapped[list | None] = mapped_column(JSON, nullable=True)  # 工具调用请求（assistant 消息）
     tool_call_id: Mapped[str | None] = mapped_column(
@@ -82,6 +85,7 @@ class Message(Base):
         nullable=True,
         unique=True,
     )  # 轮次消息唯一标识，用于关联 Turn 表
+    author: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 坐席消息的发送人
 
 class Ticket(Base):
     """
@@ -111,6 +115,49 @@ class Ticket(Base):
         DateTime,
         server_default=func.now(),
     )
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # 顾客
+    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(8), nullable=True, default="普通")  # 普通 / 优先；旧工单为空
+    assignee: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 负责坐席
+    source: Mapped[str] = mapped_column(String(16), default="customer", server_default="customer")  # customer / staff
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TicketEvent(Base):
+    """工单处理记录：创建、状态流转、备注。"""
+    __tablename__ = "ticket_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    actor: Mapped[str] = mapped_column(String(64))  # 坐席用户名，或 customer:<顾客 ID>
+    action: Mapped[str] = mapped_column(String(16))  # create / status / note
+    from_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Handoff(Base):
+    """
+    转人工记录
+
+    会话的人工接待状态由它推导：同一会话最多一条 queued/active 记录，
+    没有未结束记录时由 AI 接待。见 docs/phase2-human-handoff.md。
+    """
+    __tablename__ = "handoffs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(16), index=True)  # queued / active / closed / cancelled
+    reason: Mapped[str] = mapped_column(String(32))  # human / complaint / customer_request / staff_takeover
+    card: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # 交接卡片
+    assignee: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    closed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    harvested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # 是否已回流到问题池
 
 
 class KnowledgeChunk(Base):
