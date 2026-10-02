@@ -45,7 +45,7 @@ npm run dev          # http://localhost:5173
 
 ### 客户咨询页（真实接口）
 
-`#/client` 通过 `/api/graph-chat` 接收事件流，读取会话历史与待确认操作，通过 `/api/feedback` 提交反馈。支持工单确认、订单选择、连接中断后的重新读取；失败时不会以演示回复代替。默认本地用户为 `u1`，可在侧栏切换；这是现有用户标识机制，不是登录认证。
+`#/client` 通过 `/api/graph-chat` 接收事件流，读取会话历史与待确认操作，通过 `/api/feedback` 提交反馈。支持工单确认、订单选择、连接中断后的重新读取；失败时不会以演示回复代替。顾客身份来自令牌：嵌入商城时通过地址参数 `#/client?token=…` 或 `postMessage({ type: 'assistflow:customer-token', token })` 传入；开发模式（`AUTH_DEV_MODE=true`）下可在侧栏输入顾客 ID 模拟登录。管理后台与客服工作台需要员工登录（`#/login`）。
 
 ### 客服工作台（演示数据）
 
@@ -83,7 +83,7 @@ src/
 - [ ] 用 openapi-typescript 从 `/openapi.json` 自动生成 `api/types.ts`
 - [x] FastAPI 在 `/` 托管 `dist/`，旧静态页已删除
 - [ ] 客服工作台与电商平台集成（客户聊天已连接本项目 API）
-- [ ] 登录与权限（后端先补鉴权）
+- [x] 登录与权限：员工登录、按角色提示写操作权限，令牌保存在 sessionStorage
 
 ## 对话挖知识与飞轮
 

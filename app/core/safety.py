@@ -80,16 +80,19 @@ def desensitize(text: str) -> str:
 
 
 class DesensitizeFilter(logging.Filter):
-    """应用日志输出前脱敏：先把参数格式化进消息，再整体脱敏。"""
+    """日志脱敏：分别处理消息模板和每个字符串参数。
+
+    保留 args 的结构（元组或字典），因为 uvicorn 访问日志等格式化器会按位置解包参数。
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        try:
-            message = record.getMessage()
-        except Exception:
-            return True
-        cleaned = desensitize(message)
-        if cleaned != message or record.args:
-            record.msg, record.args = cleaned, None
+        if isinstance(record.msg, str):
+            record.msg = desensitize(record.msg)
+        args = record.args
+        if isinstance(args, tuple):
+            record.args = tuple(desensitize(a) if isinstance(a, str) else a for a in args)
+        elif isinstance(args, dict):
+            record.args = {k: desensitize(v) if isinstance(v, str) else v for k, v in args.items()}
         return True
 
 

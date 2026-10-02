@@ -231,6 +231,14 @@ uv run alembic upgrade head
 - Milvus: `127.0.0.1:19531`
 - MinIO (Milvus storage): `127.0.0.1:9000`
 
+**Create a back-office account** (roles: `admin`, `reviewer`, `agent`):
+
+```bash
+uv run python -m scripts.tasks staff-create --username admin --role admin
+```
+
+Back-office pages require staff login. Customer identity comes from tokens signed by the storefront backend (sharing `CUSTOMER_TOKEN_SECRET`); for local development set `AUTH_DEV_MODE=true` in `.env` and enter any customer ID on the chat page.
+
 ### 4. Initialize Knowledge Base
 
 ```bash

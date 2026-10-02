@@ -1,18 +1,26 @@
 <!-- V2 外壳：深色侧栏（品牌、工作区、分组导航、操作者）+ 顶栏（菜单、面包屑、状态） -->
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import Icon from './Icon.vue'
 import NavMenuModal from './NavMenuModal.vue'
 import SimpleModal from './SimpleModal.vue'
 import { listReviews } from '../api/endpoints'
+import { ROLE_NAMES, session, setStaff } from '../auth/session'
 import { openModal } from '../composables/useModal'
 import { queuedCount } from '../demo/store'
 
 const catUrl = `${import.meta.env.BASE_URL}assets/minihelp-cat.svg`
 const props = defineProps<{ surface: 'admin' | 'service' }>()
 const route = useRoute()
+const router = useRouter()
+const staffName = computed(() => session.staff?.username ?? '未登录')
+const staffRole = computed(() => (session.staff ? ROLE_NAMES[session.staff.role] : ''))
+function logout() {
+  setStaff(null)
+  router.replace('/login')
+}
 const admin = computed(() => props.surface === 'admin')
 
 // 知识缺口角标：待审数量（读取失败或为 0 时不显示）
@@ -87,14 +95,6 @@ const showWorkspace = () =>
       html: '<div class="row"><span class="avatar green">喵</span><div><h3>喵喵优选</h3><p class="muted">独立店铺 · Web 咨询渠道</p></div></div><p style="margin-top:20px">首版以单组织、单工作区为产品边界。成员管理和渠道接入将在设置页中配置。</p>',
     },
   })
-const showProfile = () =>
-  openModal({
-    title: '周小雨 · 演示账号',
-    view: SimpleModal,
-    props: {
-      html: '<div class="notice">这是交互原型，没有登录会话和真实权限控制。</div><p>规划角色：管理员、主管、客服。生产版根据角色区分知识发布、成员管理、客服接管和工单处理权限。</p>',
-    },
-  })
 const showGuide = () =>
   openModal({
     title: '页面与数据范围',
@@ -139,11 +139,11 @@ const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, pr
       </template>
       <div class="rail-note">每一次对话，<br />都值得被认真回应。</div>
       <div class="operator">
-        <span class="avatar">周</span>
+        <span class="avatar">{{ staffName.slice(0, 1).toUpperCase() }}</span>
         <div>
-          周小雨<small>{{ admin ? '管理员' : '客服' }} · 演示视角</small>
+          {{ staffName }}<small>{{ staffRole }}</small>
         </div>
-        <button class="icon-btn" aria-label="当前账号" @click="showProfile"><Icon name="down" /></button>
+        <button class="text-button" aria-label="退出登录" title="退出登录" @click="logout">退出</button>
       </div>
     </aside>
     <main class="main">

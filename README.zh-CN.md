@@ -231,6 +231,14 @@ uv run alembic upgrade head
 - Milvus: `127.0.0.1:19531`
 - MinIO（Milvus 存储）: `127.0.0.1:9000`
 
+**创建后台账号**（角色：`admin` 管理员、`reviewer` 审核员、`agent` 坐席）：
+
+```bash
+uv run python -m scripts.tasks staff-create --username admin --role admin
+```
+
+后台页面需要员工登录。顾客身份来自电商主站签发的令牌（与本服务共享 `CUSTOMER_TOKEN_SECRET`）；本地开发在 `.env` 中设置 `AUTH_DEV_MODE=true` 后，可在客户咨询页直接输入顾客 ID 模拟登录。
+
 ### 4. 初始化知识库
 
 ```bash

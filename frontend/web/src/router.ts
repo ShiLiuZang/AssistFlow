@@ -1,8 +1,9 @@
 // 路由：与 V2 相同的 hash 地址（#/overview、#/workbench、#/client …）。
 // meta.surface 决定外壳：admin = 管理后台，service = 客服工作台，client = 客户咨询页
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
+import { session } from './auth/session'
 
-type Surface = 'admin' | 'service' | 'client'
+type Surface = 'admin' | 'service' | 'client' | 'auth'
 declare module 'vue-router' {
   interface RouteMeta {
     title: string
@@ -37,6 +38,8 @@ export const router = createRouter({
     page('/tickets', '工单中心', 'service', () => import('./pages/demo/TicketsPage.vue')),
     page('/customers', '客户资料', 'service', () => import('./pages/demo/CustomersPage.vue')),
     page('/products', '商品与订单', 'service', () => import('./pages/demo/ProductsPage.vue')),
+    // 员工登录
+    page('/login', '员工登录', 'auth', () => import('./pages/LoginPage.vue')),
     // 客户咨询页
     page('/client', '客户咨询页', 'client', () => import('./pages/ClientPage.vue'), true),
     { path: '/:pathMatch(.*)*', redirect: '/workbench' },
@@ -44,6 +47,13 @@ export const router = createRouter({
   scrollBehavior(to, from, saved) {
     return saved || (to.path !== from.path ? { top: 0 } : undefined)
   },
+})
+
+// 管理后台与客服工作台需要员工登录；客户咨询页使用顾客令牌，在页面内处理
+router.beforeEach((to) => {
+  if ((to.meta.surface === 'admin' || to.meta.surface === 'service') && !session.staff) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
 })
 
 router.afterEach((to) => {

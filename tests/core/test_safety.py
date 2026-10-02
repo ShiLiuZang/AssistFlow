@@ -54,6 +54,18 @@ class TestLogFilter:
         safety.DesensitizeFilter().filter(record)
         assert (record.msg, record.args) == ("ok", None)
 
+    def test_keeps_args_structure_for_positional_formatters(self):
+        # uvicorn 访问日志会按位置解包 args，结构不能被改掉
+        args = ("127.0.0.1:1", "GET", "/api/health", "1.1", 200)
+        record = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d', args, None)
+        safety.DesensitizeFilter().filter(record)
+        assert record.args == args
+
+    def test_redacts_message_template_and_mapping_args(self):
+        record = logging.LogRecord("x", logging.INFO, __file__, 1, "手机 13812345678 %(who)s", ({"who": "收件人：张三"},), None)
+        safety.DesensitizeFilter().filter(record)
+        assert record.getMessage() == "手机 [手机号] 收件人：[姓名]"
+
     def test_record_factory_redacts_every_logger(self, monkeypatch, caplog):
         monkeypatch.setattr(safety, "_factory_installed", False)
         original = logging.getLogRecordFactory()
