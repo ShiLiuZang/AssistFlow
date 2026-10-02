@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.chat import graph_event_to_sse, restore_messages, make_sse
+from app.api.sse import graph_event_to_sse, restore_messages, make_sse
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
 from app.db import repository
 from app.core.conversation_lock import conversation_lock

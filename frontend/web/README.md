@@ -6,7 +6,7 @@ V2 保留作对照。
 
 ## 运行
 
-需要 Node.js 20.19 以上（推荐 22）。
+需要 Node.js 22.6 以上（前端测试直接运行 TypeScript 源文件）。
 
 ```powershell
 cd frontend\web
@@ -20,7 +20,8 @@ npm run dev          # http://localhost:5173
 |---|---|
 | `npm run dev` | 开发服务器，改代码自动刷新 |
 | `npm run typecheck` | TypeScript 类型检查 |
-| `npm run build` | 类型检查 + 打包到 `dist/` |
+| `npm run build` | 类型检查 + 打包到 `dist/`（FastAPI 在 `/` 托管） |
+| `npm test` | 前端单元测试 |
 
 ## 三种视角
 
@@ -80,7 +81,7 @@ src/
 ## 待办
 
 - [ ] 用 openapi-typescript 从 `/openapi.json` 自动生成 `api/types.ts`
-- [ ] FastAPI 挂载 `dist/`（例如 `/admin`），替换旧 V2
+- [x] FastAPI 在 `/` 托管 `dist/`，旧静态页已删除
 - [ ] 客服工作台与电商平台集成（客户聊天已连接本项目 API）
 - [ ] 登录与权限（后端先补鉴权）
 
@@ -89,4 +90,4 @@ src/
 - 知识中心 → 候选问答 → **从对话挖掘候选**，对应 `python -m scripts.tasks kb-mine`。读取最近 20 个有助手回复的会话，每个最多 40 条消息、12,000 字符，过滤订单号、电话等标识后复用 `mine_dialogue`。仅接受可信材料原文，写入候选暂存区，人工采纳后才能进入正式知识库。
 - 已有候选的相同会话批次跳过，同一候选不会重复新增。没有产生候选的会话再次运行会重新尝试模型调用；批次不作为全量历史挖掘进度。
 - 知识缺口 → **对话快照 / 问题池 / 待归并** 显示 `/api/review/stats` 的真实计数。负反馈或满足采集条件的拒答先进入问题池，点击归并后才产生待审项；历史会话数量不等于待审数量。
-- 当前轮次的具体任务和验收边界见 [INTEGRATION_PLAN.md](INTEGRATION_PLAN.md)。
+- 当前轮次的具体任务和验收边界见 [docs/web-v2-integration-plan.md](../../docs/web-v2-integration-plan.md)。

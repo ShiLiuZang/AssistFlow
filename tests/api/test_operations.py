@@ -163,7 +163,6 @@ class TestKnowledge:
         assert evaluate.await_args.kwargs == {"k": 3, "generate": False}
         assert json.loads(report_path.read_text(encoding="utf-8")) == result
         assert client.get("/rag-eval").json() == result
-        assert client.get("/rag-eval", headers={"accept": "text/html"}).headers["content-type"].startswith("text/html")
 
     def test_evaluate_timeout_keeps_old_report(self, client, report_path, monkeypatch):
         monkeypatch.setattr("app.core.evaluation.evaluate", AsyncMock(side_effect=TimeoutError()))

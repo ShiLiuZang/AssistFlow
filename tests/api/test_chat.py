@@ -1,11 +1,11 @@
-"""聊天接口：/api/graph-chat、/api/chat 与会话历史（图运行时、模型、数据库均为替身）。"""
+"""聊天接口：/api/graph-chat 与会话历史（图运行时、模型、数据库均为替身）。"""
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.api import chat, graph_chat
+from app.api import graph_chat, sse
 from app.main import app
 from app.schemas.chat import ChatRequest
 from tests.api.conftest import conversation, sse_frames
@@ -21,7 +21,7 @@ CALL = {"id": "c1", "name": "query_order", "args": {"order_id": "ORD-1"}, "type"
 
 class TestSseHelpers:
     def test_make_sse(self):
-        assert chat.make_sse({"delta": "你好"}) == 'data: {"delta": "你好"}\n\n'
+        assert sse.make_sse({"delta": "你好"}) == 'data: {"delta": "你好"}\n\n'
 
     @pytest.mark.parametrize(
         "event,expected",
@@ -35,17 +35,17 @@ class TestSseHelpers:
         ],
     )
     def test_graph_event_to_sse(self, event, expected):
-        assert chat.graph_event_to_sse(event, 7) == expected
+        assert sse.graph_event_to_sse(event, 7) == expected
 
     @pytest.mark.parametrize(
         "content,status",
         [('{"found": true}', "success"), ('{"error": "x"}', "error"), ("not json", "error"), ("[1]", "error")],
     )
     def test_restored_tool_status(self, content, status):
-        assert chat.restored_tool_status(content) == status
+        assert sse.restored_tool_status(content) == status
 
     def test_restore_messages(self):
-        messages = chat.restore_messages([
+        messages = sse.restore_messages([
             row(1, "user", "查订单"),
             row(2, "assistant", None, tool_calls=[CALL], turn_message_id="m1"),
             row(3, "tool", '{"found": true}', tool_call_id="c1"),
@@ -240,104 +240,6 @@ class TestGraphChatEndpoint:
         response = client.post("/api/graph-chat", json={"user_id": "u1", "message": "hi", "conversation_id": 7})
         assert response.status_code == 409
 
-
-class StreamingModel:
-    """按轮次输出预设分块的流式模型替身。"""
-
-    def __init__(self, *rounds):
-        self.rounds = list(rounds)
-        self.seen = []
-
-    def bind_tools(self, tools):
-        self.tools = tools
-        return self
-
-    async def astream(self, messages):
-        self.seen.append(list(messages))
-        for chunk in self.rounds.pop(0):
-            yield chunk
-
-
-@pytest.fixture
-def legacy(repo, monkeypatch):
-    repo.set("list_messages", return_value=[])
-    repo.set("append_message")
-    repo.set("create_conversation", return_value=5)
-    repo.set("get_conversation", return_value=conversation(5))
-    repo.set("get_pending_ticket_call", return_value=None)
-
-    def install(*rounds):
-        model = StreamingModel(*rounds)
-        monkeypatch.setattr(chat, "get_chat_model", lambda streaming=False: model)
-        return model
-
-    repo.install = install
-    return repo
-
-
-class TestLegacyChat:
-    def test_streams_plain_answer(self, client, legacy):
-        legacy.install([AIMessageChunk(content="你"), AIMessageChunk(content="好")])
-
-        frames = sse_frames(client.post("/api/chat", json={"user_id": "u1", "message": "hi"}).text)
-
-        assert frames[:2] == [(None, {"delta": "你"}), (None, {"delta": "好"})]
-        assert frames[2] == (None, {"event": "done", "conversation_id": 5})
-        roles = [c.args[1] for c in legacy.append_message.await_args_list]
-        assert roles == ["user", "assistant"]
-        assert legacy.append_message.await_args_list[1].args[2] == "你好"
-
-    def test_query_order_tool_round(self, client, legacy):
-        call = {"name": "query_order", "args": {"order_id": "ORD-1001"}, "id": "c1", "type": "tool_call"}
-        model = legacy.install(
-            [AIMessageChunk(content="", tool_calls=[call])],
-            [AIMessageChunk(content="已发货")],
-        )
-
-        frames = sse_frames(client.post("/api/chat", json={"user_id": "u1", "message": "查订单"}).text)
-
-        assert (None, {"event": "tool", "name": "query_order"}) in frames
-        tool_message = model.seen[1][-1]
-        assert tool_message.type == "tool"
-        assert '"found": true' in tool_message.content
-        roles = [c.args[1] for c in legacy.append_message.await_args_list]
-        assert roles == ["user", "assistant", "tool", "assistant"]
-
-    def test_ticket_interrupts_for_confirmation(self, client, legacy):
-        calls = [
-            {"name": "create_ticket", "args": {"ticket_type": "退款", "description": "坏了"}, "id": "t1", "type": "tool_call"},
-            {"name": "create_ticket", "args": {"ticket_type": "换货", "description": "再来"}, "id": "t2", "type": "tool_call"},
-        ]
-        legacy.install([AIMessageChunk(content="", tool_calls=calls)])
-
-        frames = sse_frames(client.post("/api/chat", json={"user_id": "u1", "message": "报修"}).text)
-
-        interrupt = next(data for _, data in frames if isinstance(data, dict) and data.get("event") == "interrupt")
-        assert interrupt["tool_call_id"] == "t1"
-        assert interrupt["preview"] == {"ticket_type": "退款", "description": "坏了"}
-        stored = [c for c in legacy.append_message.await_args_list if c.args[1] == "tool"]
-        assert [c.kwargs["tool_call_id"] for c in stored] == ["t2"]
-
-    def test_too_many_tool_rounds(self, client, legacy):
-        call = {"name": "unknown_tool", "args": {}, "id": "c", "type": "tool_call"}
-        legacy.install(*[[AIMessageChunk(content="", tool_calls=[{**call, "id": f"c{i}"}])] for i in range(3)])
-
-        frames = sse_frames(client.post("/api/chat", json={"user_id": "u1", "message": "q"}).text)
-
-        assert (None, {"delta": "工具调用次数过多，请稍后重试"}) in frames
-
-    def test_model_failure_yields_error_event(self, client, legacy):
-        legacy.install([])
-        frames = sse_frames(client.post("/api/chat", json={"user_id": "u1", "message": "q"}).text)
-        assert frames[-2][0] == "error"
-        assert frames[-1] == (None, "[DONE]")
-
-    def test_existing_conversation_checks(self, client, legacy):
-        legacy.get_conversation.return_value = None
-        assert client.post("/api/chat", json={"user_id": "u1", "message": "q", "conversation_id": 1}).status_code == 404
-        legacy.get_conversation.return_value = conversation(5)
-        legacy.get_pending_ticket_call.return_value = {"id": "t"}
-        assert client.post("/api/chat", json={"user_id": "u1", "message": "q", "conversation_id": 5}).status_code == 409
 
 
 class TestConversations:

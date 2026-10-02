@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from app.core.observability import span
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
-from app.api.chat import make_sse, graph_event_to_sse
+from app.api.sse import make_sse, graph_event_to_sse
 from app.api.graph_chat import _thread_config, _persist_graph_messages
 from app.core.conversation_lock import conversation_lock
 from app.db import repository

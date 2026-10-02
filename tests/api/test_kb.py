@@ -198,12 +198,18 @@ def staging_row(row_id, question="能退吗", answer="签收后7天内可退"):
 
 class TestStaging:
     def test_list(self, client, kb_repo):
-        kb_repo.set("list_staging_by_status", return_value=[staging_row(1, answer="x" * 300), staging_row(2)])
+        kb_repo.set("list_staging_by_status", return_value=[staging_row(1, answer="x" * 300)])
         body = client.get("/api/kb/staging", params={"limit": 1}).json()
         assert body["stats"] == {"kept": 1}
+        assert body["limit"] == 1
         assert set(body["rows"]) == {"extracted", "kept", "discarded", "approved", "rejected"}
         assert [len(rows) for rows in body["rows"].values()] == [1] * 5
         assert len(body["rows"]["kept"][0]["answer"]) == 160
+        kb_repo.list_staging_by_status.assert_awaited_with("rejected", limit=1)
+
+    def test_list_limit_bounds(self, client):
+        assert client.get("/api/kb/staging", params={"limit": 0}).status_code == 422
+        assert client.get("/api/kb/staging", params={"limit": 101}).status_code == 422
 
     def test_list_unavailable(self, client, kb_repo):
         kb_repo.staging_stats.side_effect = RuntimeError()

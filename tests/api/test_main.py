@@ -1,4 +1,4 @@
-"""app.main：健康检查、静态页面路由与 lifespan 装配（MCP、检查点、Langfuse 均为替身）。"""
+"""app.main：健康检查、前端入口与 lifespan 装配（MCP、检查点、Langfuse 均为替身）。"""
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -15,23 +15,25 @@ def test_health(client):
     assert body["status"] == "ok"
 
 
-@pytest.mark.parametrize("path", ["/", "/observability", "/admin"])
-def test_main_pages(client, path):
-    response = client.get(path)
+def test_index_serves_built_frontend(client, monkeypatch, tmp_path):
+    (tmp_path / "index.html").write_text("<!doctype html><title>AssistFlow</title>", encoding="utf-8")
+    monkeypatch.setattr(main, "WEB_DIST", tmp_path)
+    response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-
-
-@pytest.mark.parametrize("path", sorted(set(main.ADMIN_PAGES) - {"/rag-eval"}))
-def test_admin_pages_not_cached(client, path):
-    response = client.get(path)
-    assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.headers["content-type"].startswith("text/html")
 
 
-def test_every_admin_page_file_exists():
-    assert all((main.STATIC_DIR / name).is_file() for name in main.ADMIN_PAGES.values())
+def test_index_explains_missing_build(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "WEB_DIST", tmp_path / "missing")
+    response = client.get("/")
+    assert response.status_code == 503
+    assert "npm run build" in response.text
+
+
+@pytest.mark.parametrize("path", ["/admin", "/observability", "/kb", "/v2/", "/api/chat"])
+def test_legacy_pages_removed(client, path):
+    assert client.get(path).status_code in {404, 405}
 
 
 def test_lifespan_wires_runtime_and_cleans_up(monkeypatch, tmp_path):

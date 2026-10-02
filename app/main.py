@@ -18,11 +18,10 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 # API 路由导入
-from app.api.chat import router as chat_router  # 基础聊天接口（已废弃，被 graph_chat 替代）
 from app.api.graph_chat import router as graph_chat_router  # LangGraph 驱动的聊天接口
 from app.api.extract import router as extract_router  # 信息抽取接口
 from app.api.conversations import router as conversations_router  # 会话历史管理
@@ -137,20 +136,18 @@ async def lifespan(app: FastAPI):
         await close_langfuse_client(langfuse_client)
 
 
-# 静态资源目录，存放前端页面和资源文件
-STATIC_DIR = Path(__file__).parent / "static"
+# Vue 前端构建产物（frontend/web 下执行 npm run build 生成）
+WEB_DIST = Path(__file__).resolve().parents[1] / "frontend" / "web" / "dist"
 
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
-    title="Minihelp Handwritten",
+    title="AssistFlow",
     version="0.1.0",
     lifespan=lifespan,  # 应用生命周期管理
 )
 
 # 注册 API 路由
-# 核心聊天接口
-app.include_router(chat_router)  # 基础聊天（已废弃）
 app.include_router(graph_chat_router)  # LangGraph 聊天（主要接口）
 
 # 辅助功能接口
@@ -158,14 +155,6 @@ app.include_router(extract_router)  # 信息抽取
 app.include_router(conversations_router)  # 会话历史
 app.include_router(actions_router)  # 用户动作记录
 app.include_router(knowledge_router)  # 知识库查询
-
-# 静态文件服务（CSS、JS、图片等）
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-# V2 原型与现有 API 同源运行，文件仍保留在 frontend 目录。
-V2_DIR = Path(__file__).resolve().parents[1] / "frontend" / "minihelp-v2"
-if V2_DIR.is_dir():
-    app.mount("/v2", StaticFiles(directory=V2_DIR, html=True), name="v2")
 
 # 观测和反馈接口
 app.include_router(observability_router)  # 观测数据（token 用量、追踪）
@@ -180,8 +169,10 @@ app.include_router(jobs_router)  # 后台任务（摘要、挖掘等）
 app.include_router(admin_router)  # 管理后台
 
 # 测试和话题管理接口
-app.include_router(acceptance_router)  # 验收测试（git commit 8f03245）
-app.include_router(topics_router)  # 话题管理（git commit 4d1384a）
+app.include_router(acceptance_router)  # 验收测试
+app.include_router(topics_router)  # 话题管理
+
+
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     """
@@ -189,83 +180,27 @@ async def health() -> dict[str, str]:
 
     返回进程存活状态，不检查模型、数据库或其他外部服务。
     用于 Kubernetes liveness probe 或负载均衡器健康检查。
-
-    Returns:
-        包含 status、service 和 chapter 的字典
     """
-    return {
-        "status": "ok",
-        "service": "minihelp-handwritten",
-        "chapter": "ch05",
-    }
+    return {"status": "ok", "service": "assistflow"}
 
 
-@app.get("/", include_in_schema=False)
-async def chat_page() -> FileResponse:
+@app.get("/", include_in_schema=False, response_model=None)
+async def web_index() -> FileResponse | PlainTextResponse:
     """
-    聊天首页
+    前端入口
 
-    返回聊天首页 HTML，页面随后通过 /api/graph-chat 调用后端。
-    不包含在 OpenAPI schema 中（仅供浏览器访问）。
+    Vue 使用 hash 路由（#/overview、#/client …），只需返回 index.html；
+    尚未构建时给出提示，而不是 404。
     """
-    return FileResponse(STATIC_DIR / "index.html")
+    index = WEB_DIST / "index.html"
+    if not index.is_file():
+        return PlainTextResponse(
+            "前端尚未构建：请在 frontend/web 下执行 npm install && npm run build",
+            status_code=503,
+        )
+    return FileResponse(index, headers={"Cache-Control": "no-store"})
 
 
-@app.get("/observability", include_in_schema=False)
-async def observability_page() -> FileResponse:
-    """观测数据页面，展示 token 用量和执行追踪"""
-    return FileResponse(STATIC_DIR / "observability.html")
-
-
-@app.get("/admin", include_in_schema=False)
-async def admin_page() -> FileResponse:
-    """管理后台首页"""
-    return FileResponse(STATIC_DIR / "admin.html")
-
-
-
-
-# 管理后台页面路由映射
-# 将 URL 路径映射到对应的 HTML 文件
-ADMIN_PAGES = {
-    "/kb": "kb.html",  # 知识库管理
-    "/rag-eval": "rageval.html",  # RAG 评估
-    "/review": "review.html",  # 知识审核
-    "/topics": "topics.html",  # 话题管理
-    "/topic-questions": "topic-questions.html",  # 话题问题
-    "/topics/questions": "topic-questions.html",  # 话题问题（别名）
-    "/acceptance": "acceptance.html",  # 验收测试
-    "/acceptance-eval": "acceptance-eval.html",  # 验收评估
-    "/acceptance-data": "acceptance-data.html",  # 验收数据
-    "/acceptance-errors": "acceptance-errors.html",  # 验收错误
-    "/acceptance/eval": "acceptance-eval.html",  # 验收评估（别名）
-    "/acceptance/data": "acceptance-data.html",  # 验收数据（别名）
-    "/acceptance/errors": "acceptance-errors.html",  # 验收错误（别名）
-}
-
-
-def _admin_page(path: str) -> FileResponse:
-    """
-    返回管理后台页面，禁用浏览器缓存
-
-    Args:
-        path: URL 路径，必须在 ADMIN_PAGES 中
-
-    Returns:
-        对应的 HTML 页面响应，带 Cache-Control: no-store 头
-    """
-    return FileResponse(
-        STATIC_DIR / ADMIN_PAGES[path],
-        headers={"Cache-Control": "no-store"},  # 强制每次重新加载，避免查看过期数据
-    )
-
-
-# 动态注册所有管理后台页面路由
-# 使用闭包捕获 path 参数，避免 lambda 延迟绑定问题
-for _path in ADMIN_PAGES:
-    app.add_api_route(
-        _path,
-        lambda path=_path: _admin_page(path),  # 使用默认参数捕获当前 path
-        methods=["GET"],
-        include_in_schema=False,  # 不包含在 OpenAPI schema 中
-    )
+# 构建产物中的静态资源（JS、CSS、图片）；目录不存在时不挂载，避免启动失败
+if (WEB_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
