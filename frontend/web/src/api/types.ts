@@ -211,47 +211,53 @@ export interface ProcessResult {
 
 /* ---------- RAG 质量 /api/rag-eval, /api/knowledge ---------- */
 export interface StrategySummary {
-  cases: number
-  answerable_cases: number
-  failures: number
-  recall_at_k: number
-  mrr: number
-  refusal_accuracy: number
-  keyword_coverage: number
+  cases?: number
+  answerable_cases?: number
+  failures?: number
+  recall_at_k?: number | null
+  mrr?: number | null
+  refusal_accuracy?: number | null
+  keyword_coverage?: number | null
 }
+export type EvalHit = Partial<SearchHit> & { questions?: string; text?: string }
 export interface EvalDetail {
   id: string
-  strategy: Strategy
+  strategy: string
   query: string
-  should_refuse: boolean
-  error: string | null
-  recall: number
-  rr: number
-  coverage: number
-  refusal_correct: boolean
-  hits: SearchHit[]
+  should_refuse?: boolean | null
+  error?: string | null
+  recall?: number | null
+  rr?: number | null
+  coverage?: number | null
+  refusal_correct?: boolean | null
+  hits?: EvalHit[]
   answer?: string
   refused?: boolean
-}
-export interface RagReport {
-  status: 'evaluated' | 'not_evaluated'
-  message?: string
-  k?: number
-  generation?: boolean
-  summary?: Record<string, StrategySummary>
-  details?: EvalDetail[]
-  created_at?: string
 }
 export interface EvalCase {
   id: string
   query: string
-  should_refuse: boolean
+  should_refuse?: boolean | null
+  groups?: string[][]
+  expected_terms?: string[]
+}
+export interface RagReport {
+  status: string
+  message?: string
+  k?: number | null
+  generation?: boolean | null
+  rewrite?: boolean | null
+  split?: boolean | null
+  summary?: Record<string, StrategySummary>
+  details?: EvalDetail[]
+  dataset?: EvalCase[]
+  created_at?: string
 }
 export interface AnswerResult {
   answer: string
   refused: boolean
   reason: string | null
-  citations: (SearchHit & { n: number })[]
+  citations: (EvalHit & { n: number })[]
 }
 
 /* ---------- 观测与成本 /api/observability ---------- */
@@ -262,33 +268,44 @@ interface Block {
 }
 export interface CostRow {
   intent: string
-  requests: number
-  generations: number
-  input_tokens: number
-  output_tokens: number
-  unknown_usage: number
-  unpriced: number
-  priced_subtotals: Record<string, string>
-  p95_generation_ms: number | null
+  requests?: number
+  generations?: number
+  input_tokens?: number
+  output_tokens?: number
+  unknown_usage?: number
+  unpriced?: number
+  priced_subtotals?: Record<string, string>
+  price_versions?: string[]
+  estimate_complete?: boolean
+  duration_samples?: number
+  p95_generation_ms?: number | null
 }
 export interface CostBlock extends Block {
-  meta?: { generated_at: string; source: string }
+  meta?: { generated_at?: string; source?: string; scope?: string; pricing_basis?: string }
   rows?: CostRow[]
   summary?: {
-    requests: number
-    generations: number
-    known_input_tokens: number
-    known_output_tokens: number
-    unknown_usage: number
-    unpriced: number
+    requests?: number
+    generations?: number
+    known_input_tokens?: number
+    known_output_tokens?: number
+    unknown_usage?: number
+    unpriced?: number
+    usage_complete?: boolean
+    estimate_complete?: boolean
   }
 }
 export interface EvalRun {
   id: number
+  dataset_version?: string
+  case_ids?: string[]
+  config_version?: string
+  kb_revision?: string
   strategy: string
   top_k: number
+  triggered_by?: string
   status: string
   metrics: Record<string, number | null>
+  details?: EvalDetail[]
   created_at?: string
   finished_at?: string
 }
@@ -297,13 +314,16 @@ export interface TrendBlock extends Block {
   metric_names?: string[]
   omitted_incomparable?: number
 }
+export type ScanRow = { threshold: number; pass_rate: number; leak_rate: number; youden_j: number }
 export interface CalibrationBlock extends Block {
-  scan?: { threshold: number; pass_rate: number; leak_rate: number; youden_j: number }[]
-  recommended?: { threshold: number; pass_rate: number; leak_rate: number; youden_j: number }
+  scan?: ScanRow[]
+  recommended?: ScanRow
   in_use?: number
   in_sync?: boolean
   created_at?: string
-  distribution?: Record<'answerable' | 'absent', { n: number; min: number; p25: number; p50: number; p75: number; max: number }>
+  dataset_version?: string
+  scored?: { id: string; split?: string; answerable?: boolean | null; score: number }[]
+  distribution?: Partial<Record<'answerable' | 'absent', { n?: number; min?: number; p25?: number; p50?: number; p75?: number; max?: number }>>
 }
 export interface ObservabilityOverview {
   cost: CostBlock

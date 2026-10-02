@@ -35,7 +35,7 @@ const surfaces = [
       </button>
     </nav>
     <div class="preview-options">
-      <span class="demo-label">{{ route.meta.data ? '实时数据' : '演示数据' }}</span>
+      <span class="demo-label">{{ route.meta.data ? (route.path === '/observability' ? '实时数据 · 只读' : '实时数据') : '演示数据' }}</span>
       <button class="text-button" @click="router.push('/migration')">页面规划 <span aria-hidden="true">↗</span></button>
       <button
         class="palette-button"

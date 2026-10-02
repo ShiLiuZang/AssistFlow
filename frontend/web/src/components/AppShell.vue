@@ -77,7 +77,7 @@ const contextText = computed(() => {
   if (route.path === '/topics') return '主题归类状态'
   return '库存与运行状态'
 })
-const badgeText = computed(() => (route.meta.data ? '实时数据' : admin.value ? '数据演示' : '演示接待'))
+const badgeText = computed(() => (route.meta.data ? (route.path === '/observability' ? '实时数据 · 只读' : '实时数据') : admin.value ? '数据演示' : '演示接待'))
 
 const showWorkspace = () =>
   openModal({
