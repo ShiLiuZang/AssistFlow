@@ -1,110 +1,86 @@
-<!-- 管理总览：六个模块各自的健康状态，点击进入对应页面 -->
+<!-- 管理总览（对应 V2 admin-data.js 的 overviewPage） -->
 <script setup lang="ts">
+import { computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import { getAdminOverview } from '../api/endpoints'
-import PageHeader from '../components/PageHeader.vue'
-import Pill from '../components/Pill.vue'
-import StateBlock from '../components/StateBlock.vue'
-import { moduleStatus } from '../utils/labels'
-import { clock, num } from '../utils/format'
+import DataPage from '../components/DataPage.vue'
+import DataState from '../components/DataState.vue'
+import Icon from '../components/Icon.vue'
+import StatusPill from '../components/StatusPill.vue'
+import { reportDataTime } from '../composables/useDataTime'
 
-const { data, error, isPending, isFetching, refetch, dataUpdatedAt } = useQuery({
-  queryKey: ['admin', 'overview'],
-  queryFn: getAdminOverview,
-})
+const router = useRouter()
+const { data, error, isPending, dataUpdatedAt } = useQuery({ queryKey: ['admin', 'overview'], queryFn: getAdminOverview })
+watch(dataUpdatedAt, reportDataTime, { immediate: true })
 
-// 后端返回的是旧页面路径，这里换成新路由
-const routeByKey: Record<string, string> = {
+const routes: Record<string, string> = {
   kb: '/knowledge',
-  rageval: '/quality',
   review: '/review',
+  rageval: '/quality',
   observability: '/observability',
   topics: '/topics',
   classifier: '/models',
 }
+const icons: Record<string, string> = { kb: 'book', review: 'search', rageval: 'shield', observability: 'chart', topics: 'chat', classifier: 'spark' }
+const titles: Record<string, string> = { kb: '知识中心', review: '知识缺口', rageval: 'RAG 质量', classifier: '分类器管理' }
+const stateLabel: Record<string, [string, string]> = {
+  ok: ['正常', ''],
+  attention: ['需关注', 'amber'],
+  missing: ['尚无数据', 'neutral'],
+  error: ['读取失败', 'red'],
+}
+const attention = computed(() => (data.value?.modules ?? []).filter((m) => m.status === 'attention' || m.status === 'error'))
+const value = (v: unknown) => (v === null || v === undefined ? '—' : String(v))
 </script>
 
 <template>
-  <PageHeader eyebrow="SERVICE OPERATIONS" title="管理总览" desc="查看知识、质量与模型的当前状态，找到下一件需要处理的事。">
-    <button class="btn" type="button" :disabled="isFetching" @click="refetch()">
-      {{ isFetching ? '刷新中…' : '刷新读数' }}
-    </button>
-  </PageHeader>
+  <DataPage page="overview">
+    <template #actions>
+      <button class="btn primary" @click="router.push('/knowledge')">打开知识中心</button>
+    </template>
 
-  <StateBlock :loading="isPending" :error="error" @retry="refetch()" />
-
-  <template v-if="data">
-    <div class="grid-3">
-      <RouterLink v-for="m in data.modules" :key="m.key" :to="routeByKey[m.key] ?? '/overview'" class="card">
-        <div class="card-top">
-          <h2>{{ m.title }}</h2>
-          <Pill :tone="moduleStatus[m.status][1]">{{ moduleStatus[m.status][0] }}</Pill>
+    <DataState :loading="isPending" :error="error" />
+    <div v-if="data" class="overview-layout">
+      <div>
+        <div class="overview-heading">
+          <h2>管理工作区</h2>
+          <span class="small muted">六个模块，分别读取业务状态</span>
         </div>
-        <p class="headline">{{ m.headline }}</p>
-        <dl v-if="m.metrics.length" class="metrics">
-          <div v-for="metric in m.metrics" :key="metric.label">
-            <dt>{{ metric.label }}</dt>
-            <dd>{{ num(metric.value) }}</dd>
-          </div>
-        </dl>
-        <p v-if="m.note" class="note">{{ m.note }}</p>
-      </RouterLink>
+        <div class="module-grid">
+          <button v-for="row in data.modules" :key="row.key" class="module-card data-module" @click="router.push(routes[row.key] ?? '/overview')">
+            <div class="module-card-top">
+              <span class="module-icon"><Icon :name="icons[row.key] ?? 'chart'" /></span>
+              <StatusPill :color="stateLabel[row.status]?.[1] ?? 'neutral'">{{ stateLabel[row.status]?.[0] ?? '未知' }}</StatusPill>
+            </div>
+            <h2>{{ titles[row.key] ?? row.title }}</h2>
+            <p>{{ row.headline }}</p>
+            <div class="data-module-metrics">
+              <span v-for="m in row.metrics" :key="m.label">{{ m.label }} <b>{{ value(m.value) }}</b></span>
+              <span v-if="!row.metrics.length" class="muted">等待读数或报告</span>
+            </div>
+            <small>{{ row.note || row.lede || '查看详细业务状态' }}</small>
+          </button>
+        </div>
+      </div>
+      <aside>
+        <section class="aside-panel">
+          <div class="eyebrow">需要关注</div>
+          <h3>从这里开始处理</h3>
+          <button v-for="row in attention" :key="row.key" class="todo-row" @click="router.push(routes[row.key] ?? '/knowledge')">
+            <span>{{ row.title }}<small>{{ row.headline }}</small></span><Icon name="arrow" />
+          </button>
+          <p v-if="!attention.length" class="small muted section-gap">当前没有读到需关注事项。</p>
+          <button class="todo-row" @click="router.push('/knowledge')">
+            <span>核对知识与索引<small>原文、待向量化与向量数量</small></span><Icon name="arrow" />
+          </button>
+        </section>
+        <section class="aside-panel data-scope-note">
+          <h3>每个数字，都有来源</h3>
+          <p>库存、报告和运行状态分别读取；未知值保留为 —。</p>
+          <p>当前接入总览、知识、审核、作业、质量、观测、主题与分类器的只读数据。</p>
+        </section>
+      </aside>
     </div>
-    <p class="muted small">读数时间 {{ clock(dataUpdatedAt) }}。缺失项显示"—"，不以零值代替。</p>
-  </template>
+  </DataPage>
 </template>
-
-<style scoped>
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 20px;
-  background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  color: inherit;
-  text-decoration: none;
-  transition: border-color 150ms, box-shadow 150ms;
-}
-.card:hover {
-  border-color: var(--brand);
-  box-shadow: var(--small-shadow);
-}
-.card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-h2 {
-  font-size: 17px;
-}
-.headline {
-  margin: 0;
-  color: var(--muted);
-}
-.metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin: 0;
-}
-.metrics dt {
-  font-size: 12px;
-  color: var(--muted);
-}
-.metrics dd {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.note {
-  margin: auto 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  font-size: 12px;
-  color: var(--muted);
-}
-</style>

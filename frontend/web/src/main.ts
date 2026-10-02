@@ -3,8 +3,14 @@ import { createApp } from 'vue'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import App from './App.vue'
 import { router } from './router'
-import './styles/tokens.css'
-import './styles/base.css'
+// V2 样式原样复用，顺序与 V2 index.html 一致
+import './styles/v2/prototype.css'
+import './styles/v2/admin-panels.css'
+import './styles/v2/service-panels.css'
+import './styles/v2/admin-data.css'
+import './styles/v2/admin-workflows.css'
+import './styles/v2/admin-reports.css'
+import './styles/v2/admin-classification.css'
 
 // QueryClient 负责缓存所有接口数据。
 // 旧 V2 里手写的 ui.cache / epoch 防竞态，现在都由它管。
