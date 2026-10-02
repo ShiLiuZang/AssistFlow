@@ -3,6 +3,7 @@
 // 超时或 5xx 视为"结果待核对"，提示先查询再决定，不自动重试。
 import { reactive, ref } from 'vue'
 import { request } from '../api/client'
+import { authFetch, missingPermission } from '../auth/session'
 import type { Job, ReviewItem, StagingDetail } from '../api/types'
 import { queryClient } from '../queryClient'
 import ActionModal from '../components/ActionModal.vue'
@@ -50,6 +51,8 @@ export async function prepare(build: () => Promise<ActionSpec>) {
   try {
     const spec = await build()
     if (!stillOpen(token)) return
+    const denied = missingPermission(spec.path)
+    if (denied) throw new Error(denied)
     actionState.spec = spec
     actionState.phase = 'confirm'
     show(spec.title)
@@ -75,7 +78,7 @@ export async function execute() {
   let message = ''
   let uncertain = false
   try {
-    const response = await fetch(spec.path, {
+    const response = await authFetch(spec.path, {
       method: 'POST',
       signal: controller.signal,
       headers: { Accept: 'application/json', ...(spec.data !== undefined ? { 'Content-Type': 'application/json' } : {}) },

@@ -1,4 +1,5 @@
-// 统一请求：超时、错误信息都在这里处理，页面只管拿数据。
+// 统一请求：令牌、超时、错误信息都在这里处理，页面只管拿数据。
+import { authFetch } from '../auth/session'
 
 export class ApiError extends Error {
   constructor(
@@ -20,7 +21,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(path, {
+    const res = await authFetch(path, {
       method,
       signal: controller.signal,
       cache: 'no-store',
@@ -36,7 +37,13 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       const detail =
         typeof data?.detail === 'string'
           ? data.detail
-          : res.status === 503
+          : res.status === 401
+            ? '登录已失效，请重新登录。'
+            : res.status === 403
+              ? '当前账号没有执行此操作的权限。'
+              : res.status === 429
+                ? '操作太频繁，请稍后再试。'
+                : res.status === 503
             ? '后台数据服务暂不可用，请检查服务后重试。'
             : `请求失败（HTTP ${res.status}）`
       throw new ApiError(detail, res.status)

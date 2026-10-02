@@ -12,15 +12,16 @@ from pathlib import Path
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.retrieval import search_knowledge
 from app.core.evidence import answer_from_hits
+from app.core.auth import current_staff, require_admin
+from app.core.ratelimit import limit_staff_model
 
 
-router = APIRouter(tags=["knowledge"])
+router = APIRouter(tags=["knowledge"], dependencies=[Depends(current_staff)])
 
 # 评测报告存储路径
 REPORT_PATH = Path(__file__).resolve().parents[2] / "reports" / "04.json"
@@ -76,7 +77,7 @@ async def evaluation_state():
             "report_mtime": REPORT_PATH.stat().st_mtime if REPORT_PATH.exists() else None}
 
 
-@router.post("/api/knowledge/evaluate")
+@router.post("/api/knowledge/evaluate", dependencies=[Depends(require_admin)])
 async def run_evaluation(request: EvaluationRequest):
     """
     运行知识库评测
@@ -129,15 +130,8 @@ async def run_evaluation(request: EvaluationRequest):
 
 
 @router.get("/rag-eval")
-async def evaluation_page(request: Request):
-    """
-    RAG评测页面入口
-
-    如果请求头包含text/html，返回评测页面；否则返回评测报告
-    实现内容协商，同一个URL支持浏览器访问和API调用
-    """
-    if "text/html" in request.headers.get("accept", ""):
-        return FileResponse(Path(__file__).resolve().parents[1] / "static" / "rageval.html")
+async def evaluation_page():
+    """RAG 评测报告（兼容旧地址，等同 /api/rag-eval/report）。"""
     return await report()
 
 
@@ -201,7 +195,7 @@ async def search(request: KnowledgeRequest):
         ) from exc
 
 
-@router.post("/api/knowledge/answer")
+@router.post("/api/knowledge/answer", dependencies=[Depends(limit_staff_model)])
 async def answer(request: KnowledgeRequest):
     """
     基于检索结果生成答案

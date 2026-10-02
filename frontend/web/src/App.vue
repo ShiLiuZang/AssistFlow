@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from './components/AppShell.vue'
 import ModalHost from './components/ModalHost.vue'
+import { AUTH_EXPIRED_EVENT } from './auth/session'
 import { cyclePalette, paletteName } from './composables/useShell'
 import { toastState } from './composables/useToast'
 
@@ -26,11 +27,26 @@ function onKey(e: KeyboardEvent) {
     field.focus()
   }
 }
-onMounted(() => document.addEventListener('keydown', onKey))
-onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
+// 员工令牌失效：回到登录页，登录后返回当前页面；顾客令牌失效由咨询页自行提示
+function onExpired(e: Event) {
+  const kind = (e as CustomEvent<{ kind: string }>).detail?.kind
+  if (kind === 'staff' && route.meta.surface !== 'client' && route.path !== '/login') {
+    router.replace({ path: '/login', query: { redirect: route.fullPath, expired: '1' } })
+  }
+}
+onMounted(() => {
+  document.addEventListener('keydown', onKey)
+  window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKey)
+  window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
+})
 </script>
 
 <template>
+  <RouterView v-if="surface === 'auth'" />
+  <template v-else>
   <header class="preview-bar" :class="{ 'admin-preview': surface === 'admin' }">
     <div class="preview-label">
       <span class="v0">V2</span><span>Minihelp <span class="muted">/ 产品预览</span></span>
@@ -64,6 +80,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   <AppShell v-else :surface="surface">
     <RouterView />
   </AppShell>
+  </template>
 
   <div id="toast" class="toast" :class="{ show: toastState.show }" role="status" aria-live="polite">{{ toastState.message }}</div>
   <ModalHost />

@@ -12,7 +12,7 @@ class ResumeTicketRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     conversation_id: int
-    user_id: str
+    user_id: str | None = Field(default=None, description="已废弃：身份取自令牌，此字段会被忽略")
     confirmed: StrictBool
     tool_call_id: str | None = None
 
@@ -21,7 +21,7 @@ class SelectOrderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     conversation_id: int = Field(gt=0)
-    user_id: str = Field(min_length=1)
+    user_id: str | None = Field(default=None, description="已废弃：身份取自令牌，此字段会被忽略")
     kind: Literal["select_order"] = "select_order"
     request_id: str = Field(min_length=1)
     order_id: str | None = Field(default=None, min_length=1)

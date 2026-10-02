@@ -1,6 +1,7 @@
 <!-- 核对本次录入（对应 V2 confirmIngest / ingest）：只保存原文，vectorize=false -->
 <script setup lang="ts">
 import { ref } from 'vue'
+import { authFetch } from '../../auth/session'
 import StatusPill from '../../components/StatusPill.vue'
 import { closeModal } from '../../composables/useModal'
 import { queryClient } from '../../queryClient'
@@ -19,7 +20,7 @@ async function ingest() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 30000)
   try {
-    const response = await fetch('/api/kb/ingest', {
+    const response = await authFetch('/api/kb/ingest', {
       method: 'POST',
       signal: controller.signal,
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },

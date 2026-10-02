@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     chat_base_url: str  # API 基础 URL，如 "https://api.openai.com/v1"
     chat_api_key: str  # API 密钥
     chat_thinking: str = "disabled"  # 思考模式，"disabled" 或 "enabled"（仅部分模型支持）
+    chat_timeout_seconds: float = Field(default=20, gt=0)  # 单次模型请求超时
+    chat_max_retries: int = Field(default=1, ge=0)  # 单次模型请求失败后的重试次数
+    chat_turn_timeout_seconds: float = Field(default=60, gt=0)  # 一轮对话（整张图）最长执行时间
 
     # ==================== 数据库配置 ====================
     handwritten_database_url: str = (
@@ -82,8 +85,16 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""  # Langfuse 私钥
     langfuse_base_url: str = ""  # Langfuse 服务地址
 
-    # ==================== 其他配置 ====================
-    review_admin_name: str = "local-reviewer"  # 知识审核管理员名称
+    # ==================== 认证配置 ====================
+    auth_secret: str = ""  # 员工令牌签名密钥（至少 32 字符）
+    customer_token_secret: str = ""  # 与电商主站共享的顾客令牌密钥（至少 32 字符）
+    auth_dev_mode: bool = False  # 开发模式：开放模拟顾客接口，未配置密钥时自动生成
+    staff_token_ttl_minutes: int = Field(default=480, ge=5)  # 员工令牌有效期
+
+    # ==================== 限流配置（每分钟次数） ====================
+    rate_chat_per_minute: int = Field(default=20, ge=1)  # 每个顾客发消息
+    rate_login_per_minute: int = Field(default=10, ge=1)  # 每个 IP 登录
+    rate_staff_model_per_minute: int = Field(default=30, ge=1)  # 每个员工调用模型的试用接口
 
     @property
     def langfuse_configured(self) -> bool:

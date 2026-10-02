@@ -7,7 +7,7 @@ import datetime as dt
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from app.core import jobs, retrieval
@@ -15,9 +15,10 @@ from app.db import repository
 from app.kb import chunking, dedup, documents, dualwrite, milvus_client
 from app.kb.sources import CONTENT_TYPE_DESC, CONTENT_TYPES, KB_DIR, SOURCE_TYPES
 from app.core.trusted_sources import validate_review_source
+from app.core.auth import current_staff, require_admin, require_reviewer
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/kb")
+router = APIRouter(prefix="/api/kb", dependencies=[Depends(current_staff)])
 
 # 单次手工录入的正文字数上限，避免超大文档阻塞接口
 MAX_TEXT_CHARS = 40000
@@ -335,7 +336,7 @@ def _resolve_preview(body: PreviewIn) -> tuple[str, str, str]:
     return text, body.content_type, "手工录入"
 
 
-@router.post("/preview")
+@router.post("/preview", dependencies=[Depends(require_admin)])
 async def preview(body: PreviewIn) -> dict:
     """
     切块预览接口（干运行）
@@ -384,7 +385,7 @@ class IngestIn(BaseModel):
     vectorize: bool = True
 
 
-@router.post("/ingest")
+@router.post("/ingest", dependencies=[Depends(require_admin)])
 async def ingest(body: IngestIn) -> dict:
     """
     知识录入接口
@@ -450,7 +451,7 @@ async def ingest(body: IngestIn) -> dict:
             "chunk_stats": await repository.knowledge_stats()}
 
 
-@router.post("/vectorize")
+@router.post("/vectorize", dependencies=[Depends(require_admin)])
 async def vectorize() -> dict:
     """
     向量化待补块接口
@@ -614,7 +615,7 @@ class StagingReviewIn(BaseModel):
     ids: list[int] = Field(min_length=1, description="要处理的暂存行 id")
 
 
-@router.post("/staging/approve")
+@router.post("/staging/approve", dependencies=[Depends(require_reviewer)])
 async def staging_approve(body: StagingReviewIn) -> dict:
     """
     人工采纳QA对入库接口
@@ -682,7 +683,7 @@ async def staging_approve(body: StagingReviewIn) -> dict:
     return {"approved": len(rows), "chunk_ids": ids}
 
 
-@router.post("/staging/reject")
+@router.post("/staging/reject", dependencies=[Depends(require_reviewer)])
 async def staging_reject(body: StagingReviewIn) -> dict:
     """
     人工弃用QA对接口

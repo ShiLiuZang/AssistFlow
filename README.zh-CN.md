@@ -75,7 +75,7 @@
 | **工具集成** | MCP (Model Context Protocol) |
 | **可观测性** | 本地追踪 + 可选 Langfuse |
 | **主题分类** | PyTorch + Transformers + ONNX Runtime |
-| **前端** | 原生 HTML/CSS/JavaScript |
+| **前端** | Vue 3 + TypeScript + Vite（`frontend/web`） |
 
 ---
 
@@ -137,7 +137,6 @@
 │   │   ├── repository.py     # 数据访问层
 │   │   └── database.py       # 异步会话工厂
 │   ├── schemas/              # Pydantic 数据模型
-│   ├── static/               # Web UI（HTML/CSS/JS）
 │   ├── config.py             # 配置管理
 │   └── main.py               # 应用入口
 ├── data/
@@ -232,6 +231,14 @@ uv run alembic upgrade head
 - Milvus: `127.0.0.1:19531`
 - MinIO（Milvus 存储）: `127.0.0.1:9000`
 
+**创建后台账号**（角色：`admin` 管理员、`reviewer` 审核员、`agent` 坐席）：
+
+```bash
+uv run python -m scripts.tasks staff-create --username admin --role admin
+```
+
+后台页面需要员工登录。顾客身份来自电商主站签发的令牌（与本服务共享 `CUSTOMER_TOKEN_SECRET`）；本地开发在 `.env` 中设置 `AUTH_DEV_MODE=true` 后，可在客户咨询页直接输入顾客 ID 模拟登录。
+
 ### 4. 初始化知识库
 
 ```bash
@@ -253,11 +260,14 @@ uv run python -m scripts.tasks kb-vectorize
 - `member-benefits.md` - 会员权益
 - `after-sales-manual.md` - 售后手册
 
-### 5. 启动应用
+### 5. 构建前端并启动应用
 
 ```bash
+cd frontend/web && npm install && npm run build && cd ../..   # 需要 Node.js 22.6+
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+前端开发时可改用 `npm run dev`（http://localhost:5173，自动把 `/api` 转发到 8000 端口）。
 
 访问：**http://127.0.0.1:8000**
 
@@ -265,8 +275,22 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ## 📱 功能页面
 
+前端是 Vue 单页应用，使用 hash 路由。
+
 | 页面 | 路由 | 说明 |
 |------|------|------|
+| 🏠 **客户咨询** | `/#/client` | 客服对话界面 |
+| 🎛️ **管理总览** | `/#/overview` | 系统概览仪表板 |
+| 📚 **知识中心** | `/#/knowledge` | 知识管理、候选问答与检索自测 |
+| ✅ **知识缺口** | `/#/review` | 待审核知识队列 |
+| 🔬 **RAG 质量** | `/#/quality` | 检索与生成评估 |
+| 📊 **观测与成本** | `/#/observability` | 执行追踪与模型用量 |
+| 🏷️ **咨询主题** | `/#/topics` | 按主题统计问题分布 |
+| 🎯 **分类器管理** | `/#/models` | 分类器验收与评测 |
+| ⚙️ **作业中心** | `/#/jobs` | 启动与停止后台作业 |
+| 📖 **API 文档** | `/docs` | FastAPI 自动生成文档 |
+
+------|------|------|
 | 🏠 **聊天** | `/` | 客服对话界面 |
 | 🎛️ **管理** | `/admin` | 系统概览仪表板 |
 | 📚 **知识库** | `/kb` | 知识管理与检索测试 |
@@ -327,6 +351,15 @@ uv run --group ml python -m scripts.tasks classifier-up
 
 ```bash
 python -m compileall -q app scripts migrations
+```
+
+### 运行单元测试
+
+单元测试位于 `tests/`，LLM、Milvus、MySQL 均以替身代替，无需 `.env` 或外部服务。
+
+```bash
+uv sync --group dev
+uv run pytest
 ```
 
 ### 数据库迁移

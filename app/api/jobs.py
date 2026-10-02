@@ -7,11 +7,12 @@
 作业定义和参数配置在app/core/jobs.py中维护。
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core import jobs
+from app.core.auth import current_staff, require_admin
 
-router = APIRouter(prefix="/api/jobs")
+router = APIRouter(prefix="/api/jobs", dependencies=[Depends(current_staff)])
 
 
 def _known(name: str) -> None:
@@ -43,7 +44,7 @@ async def jobs_list() -> dict:
     return {"jobs": jobs.status_all()}
 
 
-@router.post("/{name}")
+@router.post("/{name}", dependencies=[Depends(require_admin)])
 async def job_start(name: str) -> dict:
     """
     启动指定作业
@@ -91,7 +92,7 @@ async def job_status(name: str) -> dict:
     return jobs.status(name, with_log=True)
 
 
-@router.post("/{name}/stop")
+@router.post("/{name}/stop", dependencies=[Depends(require_admin)])
 async def job_stop(name: str) -> dict:
     """
     停止指定作业

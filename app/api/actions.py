@@ -11,11 +11,13 @@ import logging
 import time
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from app.core.auth import current_customer
 from app.core.observability import span
+from app.core.ratelimit import limit_customer_chat
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
-from app.api.chat import make_sse, graph_event_to_sse
+from app.api.sse import TURN_TIMEOUT_SSE, collect_turn, make_sse, graph_event_to_sse
 from app.api.graph_chat import _thread_config, _persist_graph_messages
 from app.core.conversation_lock import conversation_lock
 from app.db import repository
@@ -277,15 +279,12 @@ async def stream_order_selection(
             )
 
             # 恢复图执行
-            events = [
-                event
-                async for event in runtime.stream_turn(
-                    "",
-                    request.user_id,
-                    str(request.conversation_id),
-                    resume=resume,
-                )
-            ]
+            events = await collect_turn(runtime.stream_turn(
+                "",
+                request.user_id,
+                str(request.conversation_id),
+                resume=resume,
+            ))
 
             # 持久化图消息
             await _persist_graph_messages(
@@ -316,6 +315,9 @@ async def stream_order_selection(
                     request.conversation_id,
                 )
 
+    except TimeoutError:
+        logger.warning("订单选择超时 conversation_id=%s", request.conversation_id)
+        yield TURN_TIMEOUT_SSE
     except Exception:
         logger.exception(
             "订单选择或消息保存失败 conversation_id=%s",
@@ -330,13 +332,17 @@ async def stream_order_selection(
 
 
 @router.get("/pending")
-async def pending_ticket(conversation_id: int, user_id: str, http_request: Request):
+async def pending_ticket(
+    conversation_id: int,
+    http_request: Request,
+    user_id: str = Depends(current_customer),
+):
     """
     查询指定会话的待处理操作
 
     参数:
         conversation_id: 会话ID
-        user_id: 用户ID
+        user_id: 令牌中的顾客 ID
         http_request: FastAPI请求对象
 
     返回:
@@ -389,7 +395,11 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
 
 
 @router.post("/resume")
-async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> StreamingResponse:
+async def resume_ticket(
+    request: ResumeTicketRequest,
+    http_request: Request,
+    user_id: str = Depends(limit_customer_chat),
+) -> StreamingResponse:
     """
     恢复工单确认流程
 
@@ -413,6 +423,9 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
     - 无待确认工单时返回409
     - 找不到对应工具调用时返回409
     """
+    # 身份只来自令牌
+    request.user_id = user_id
+
     # 校验会话存在性
     conversation = await repository.get_conversation(request.conversation_id, request.user_id)
     if conversation is None:
@@ -451,6 +464,7 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
 async def select_order(
     request: SelectOrderRequest,
     http_request: Request,
+    user_id: str = Depends(limit_customer_chat),
 ) -> StreamingResponse:
     """
     处理订单选择
@@ -471,6 +485,9 @@ async def select_order(
     - 会话不存在时返回404
     - 图服务未启动时返回503
     """
+    # 身份只来自令牌
+    request.user_id = user_id
+
     # 校验会话存在性
     conversation = await repository.get_conversation(
         request.conversation_id,

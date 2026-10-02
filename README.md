@@ -75,7 +75,7 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 | **Tool Integration** | MCP (Model Context Protocol) |
 | **Observability** | Local tracing + Optional Langfuse |
 | **Topic Classification** | PyTorch + Transformers + ONNX Runtime |
-| **Frontend** | Vanilla HTML/CSS/JavaScript |
+| **Frontend** | Vue 3 + TypeScript + Vite (`frontend/web`) |
 
 ---
 
@@ -137,7 +137,6 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 │   │   ├── repository.py     # Data access layer
 │   │   └── database.py       # Async session factory
 │   ├── schemas/              # Pydantic models
-│   ├── static/               # Web UI (HTML/CSS/JS)
 │   ├── config.py             # Configuration management
 │   └── main.py               # Application entry
 ├── data/
@@ -232,6 +231,14 @@ uv run alembic upgrade head
 - Milvus: `127.0.0.1:19531`
 - MinIO (Milvus storage): `127.0.0.1:9000`
 
+**Create a back-office account** (roles: `admin`, `reviewer`, `agent`):
+
+```bash
+uv run python -m scripts.tasks staff-create --username admin --role admin
+```
+
+Back-office pages require staff login. Customer identity comes from tokens signed by the storefront backend (sharing `CUSTOMER_TOKEN_SECRET`); for local development set `AUTH_DEV_MODE=true` in `.env` and enter any customer ID on the chat page.
+
 ### 4. Initialize Knowledge Base
 
 ```bash
@@ -253,11 +260,14 @@ Sample knowledge includes 6 markdown files:
 - `member-benefits.md` - Membership benefits
 - `after-sales-manual.md` - After-sales manual
 
-### 5. Start Application
+### 5. Build the Frontend and Start the Application
 
 ```bash
+cd frontend/web && npm install && npm run build && cd ../..   # requires Node.js 22.6+
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+For frontend development use `npm run dev` instead (http://localhost:5173, proxies `/api` to port 8000).
 
 Visit: **http://127.0.0.1:8000**
 
@@ -265,8 +275,22 @@ Visit: **http://127.0.0.1:8000**
 
 ## 📱 Feature Pages
 
+The frontend is a Vue single-page app with hash routing.
+
 | Page | Route | Description |
 |------|-------|-------------|
+| 🏠 **Customer Chat** | `/#/client` | Customer service chat interface |
+| 🎛️ **Overview** | `/#/overview` | System overview dashboard |
+| 📚 **Knowledge** | `/#/knowledge` | Knowledge management, candidates & retrieval test |
+| ✅ **Review** | `/#/review` | Pending knowledge review queue |
+| 🔬 **RAG Quality** | `/#/quality` | Retrieval and generation evaluation |
+| 📊 **Observability** | `/#/observability` | Execution traces & model usage |
+| 🏷️ **Topics** | `/#/topics` | Question distribution by topic |
+| 🎯 **Classifier** | `/#/models` | Classifier acceptance & evaluation |
+| ⚙️ **Jobs** | `/#/jobs` | Start and stop background jobs |
+| 📖 **API Docs** | `/docs` | FastAPI auto-generated documentation |
+
+------|-------|-------------|
 | 🏠 **Chat** | `/` | Customer service chat interface |
 | 🎛️ **Admin** | `/admin` | System overview dashboard |
 | 📚 **Knowledge** | `/kb` | Knowledge management & retrieval test |
@@ -327,6 +351,15 @@ Acceptance page shows error samples and improvement suggestions when criteria ar
 
 ```bash
 python -m compileall -q app scripts migrations
+```
+
+### Run Unit Tests
+
+Unit tests live in `tests/`. LLM, Milvus and MySQL are mocked, so no `.env` or external service is needed.
+
+```bash
+uv sync --group dev
+uv run pytest
 ```
 
 ### Database Migrations

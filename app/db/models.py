@@ -8,6 +8,7 @@
 3. 知识库：KnowledgeChunk、QaExtractionStaging
 4. 审核流程：LowConfidenceQuestion、Review、TopicClassification
 5. 观测数据：ToolAuditLog、TraceSpan、EvalRun
+6. 后台账号：StaffUser
 
 数据库技术栈：
 - SQLAlchemy 2.0：ORM 框架，使用新的 Mapped 类型注解
@@ -438,3 +439,21 @@ class EvalRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), index=True,
     )
+
+
+class StaffUser(Base):
+    """
+    后台员工账号表
+
+    顾客身份由电商主站签发的令牌确定，不落库；这里只存后台员工。
+    角色：admin（管理员）、reviewer（审核员）、agent（坐席）。
+    """
+    __tablename__ = "staff_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))  # scrypt 哈希，见 app.core.auth
+    role: Mapped[str] = mapped_column(String(16))
+    active: Mapped[bool] = mapped_column(default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -30,6 +30,8 @@ def _client() -> AsyncOpenAI:
         _CLIENT = AsyncOpenAI(
             base_url=settings.embed_base_url,
             api_key=settings.embed_api_key,
+            timeout=settings.chat_timeout_seconds,
+            max_retries=settings.chat_max_retries,
         )
 
     return _CLIENT

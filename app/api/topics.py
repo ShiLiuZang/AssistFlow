@@ -7,13 +7,14 @@
 分布接口返回每类前3个样例，详情接口支持分页查看全部归类结果。
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.taxonomy import TOPIC_CLASSES, TOPIC_NAMES
 from app.core import topic_views
+from app.core.auth import current_staff
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_staff)])
 
 
 @router.get("/api/topics/catalog")
