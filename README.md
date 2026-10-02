@@ -329,6 +329,15 @@ Acceptance page shows error samples and improvement suggestions when criteria ar
 python -m compileall -q app scripts migrations
 ```
 
+### Run Unit Tests
+
+Unit tests live in `tests/`. LLM, Milvus and MySQL are mocked, so no `.env` or external service is needed.
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
 ### Database Migrations
 
 ```bash
