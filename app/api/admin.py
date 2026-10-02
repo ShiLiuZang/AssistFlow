@@ -10,7 +10,7 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
 from app.api import acceptance, kb, observability
@@ -19,9 +19,10 @@ from app.config import settings
 from app.db import repository
 from app.db.database import SessionLocal
 from app.db.models import Review
+from app.core.auth import current_staff
 
 
-router = APIRouter(prefix="/api/admin")
+router = APIRouter(prefix="/api/admin", dependencies=[Depends(current_staff)])
 
 
 def _card(key: str, title: str, page: str, lede: str) -> dict:

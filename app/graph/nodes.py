@@ -22,6 +22,7 @@ LangGraph 节点实现模块
 """
 
 import json
+import logging
 from dataclasses import replace
 from app.core.observability import (
     extract_model_name,
@@ -42,12 +43,14 @@ from app.tools.engine import (
 )
 from app.tools.audit import build_tool_audit, emit_tool_audit
 from app.config import settings
+from app.core.safety import SAFE_REPLY, guard_reply
 from app.core.confidence import evidence_gate
 from app.db import repository
 
 # 置信度不足时的拒答模板
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
 
+logger = logging.getLogger(__name__)
 
 
 def make_nodes(services):
@@ -868,21 +871,34 @@ def make_nodes(services):
                 getattr(last_message,"type",None)=="ai"
                 and str(last_message.content)==answer
             )
-            if answer and not answer_already_present:
+            safe_answer, blocked = guard_reply(answer)
+            if blocked and answer_already_present:
+                # 同 id 覆盖 Agent 已写入的那条回复，保存到数据库的也是安全话术
+                messages = [AIMessage(content=safe_answer, id=last_message.id)]
+            elif answer and not answer_already_present:
                 messages = [
                     AIMessage(
-                        content=answer,
+                        content=safe_answer,
                         id=state.get("message_id"),
                     )
                 ]
         else:
+            safe_answer, blocked = guard_reply(state["answer"])
             messages = [
                 AIMessage(
-                    content=state["answer"],
+                    content=safe_answer,
                     id=state.get("message_id"),
                 )
             ]
 
+        if blocked:
+            logger.warning("输出拦截：回复含办理承诺，已替换 conversation_id=%s", state.get("conversation_id"))
+            return update(
+                {**state, "trace": [*state.get("trace", []), "output_guard"]},
+                "finish",
+                messages=messages,
+                answer=safe_answer,
+            )
         return update(
             state,
             "finish",

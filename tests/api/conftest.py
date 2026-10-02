@@ -6,16 +6,40 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core import auth
+from app.core.auth import Staff
 from app.db import repository as repository_module
 from app.main import app
 
 
+CUSTOMER = "u1"
+STAFF = Staff(username="test-reviewer", role="admin")
+
+
 @pytest.fixture
-def client():
-    """不进入 lifespan，避免启动时连接 MCP、SQLite 检查点等外部资源。"""
+def anon_client():
+    """不带任何身份的客户端，用于鉴权测试。"""
     app.state.graph_runtime = None
     yield TestClient(app)
     app.state.graph_runtime = None
+
+
+@pytest.fixture
+def client(anon_client):
+    """业务接口测试默认以顾客 u1 和管理员身份调用；鉴权本身在 test_auth.py 中测试。
+
+    不进入 lifespan，避免启动时连接 MCP、SQLite 检查点等外部资源。
+    """
+    async def customer() -> str:
+        return CUSTOMER
+
+    async def staff() -> Staff:
+        return STAFF
+
+    app.dependency_overrides[auth.current_customer] = customer
+    app.dependency_overrides[auth.current_staff] = staff
+    yield anon_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

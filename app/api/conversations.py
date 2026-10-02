@@ -6,7 +6,9 @@
 在系统中充当会话数据的只读访问层，供前端展示历史对话使用。
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.auth import current_customer
 
 from app.db import repository
 
@@ -15,12 +17,12 @@ router = APIRouter(tags=["conversations"])
 
 
 @router.get("/api/conversations")
-async def list_conversations(user_id: str) -> list[dict]:
+async def list_conversations(user_id: str = Depends(current_customer)) -> list[dict]:
     """
     获取指定用户的所有会话列表
 
     参数:
-        user_id: 用户标识
+        user_id: 令牌中的顾客 ID
 
     返回:
         会话列表，每个会话包含id和created_at字段
@@ -41,14 +43,14 @@ async def list_conversations(user_id: str) -> list[dict]:
 @router.get("/api/conversations/{conversation_id}/messages")
 async def list_messages(
     conversation_id: int,
-    user_id: str,
+    user_id: str = Depends(current_customer),
 ) -> list[dict]:
     """
     获取指定会话的消息历史
 
     参数:
         conversation_id: 会话ID（路径参数）
-        user_id: 用户标识（查询参数，用于权限校验）
+        user_id: 令牌中的顾客 ID（用于权限校验）
 
     返回:
         消息列表，每条消息包含role、content、message_id字段

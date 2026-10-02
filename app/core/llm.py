@@ -48,4 +48,6 @@ def get_chat_model(*, streaming: bool = False) -> ChatOpenAI:
         api_key=settings.chat_api_key,
         streaming=streaming,
         extra_body=extra_body,
+        timeout=settings.chat_timeout_seconds,
+        max_retries=settings.chat_max_retries,
     )

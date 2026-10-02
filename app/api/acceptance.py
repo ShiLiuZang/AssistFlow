@@ -8,14 +8,16 @@ import pathlib
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core import jobs
 from app.core import topic_views
 from app.core.taxonomy import SEVERITY, TOPIC_NAMES
+from app.core.auth import current_staff
+from app.core.ratelimit import limit_staff_model
 
-router = APIRouter(prefix="/api/acceptance")
+router = APIRouter(prefix="/api/acceptance", dependencies=[Depends(current_staff)])
 
 
 FINETUNE_DIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "finetune"
@@ -553,7 +555,7 @@ class ClassifyIn(BaseModel):
     text: str
 
 
-@router.post("/classify")
+@router.post("/classify", dependencies=[Depends(limit_staff_model)])
 async def classify(body: ClassifyIn) -> dict:
     """
     单句试分类接口

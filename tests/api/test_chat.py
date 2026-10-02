@@ -154,6 +154,23 @@ async def collect(stream):
 class TestStreamGraphChat:
     REQUEST = ChatRequest(user_id="u1", message="你好", conversation_id=7)
 
+    async def test_turn_timeout_yields_friendly_error(self, graph_repo, monkeypatch):
+        import asyncio
+
+        from app.config import settings
+
+        class SlowRuntime(FakeRuntime):
+            async def stream_turn(self, *args, **kwargs):
+                await asyncio.sleep(1)
+                yield {"event": "end"}
+
+        monkeypatch.setattr(settings, "chat_turn_timeout_seconds", 0.01)
+        frames = sse_frames("".join(await collect(graph_chat.stream_graph_chat(self.REQUEST, 7, SlowRuntime([])))))
+
+        assert ("error", {"message": "当前咨询较多，请稍后重试或转人工"}) in frames
+        assert frames[-1] == (None, "[DONE]")
+        graph_repo.persist_graph_messages.assert_not_awaited()
+
     async def test_restores_history_streams_and_schedules_summary(self, graph_repo):
         graph_repo.get_conversation.return_value = conversation(summary_text="旧摘要", summary_upto=1)
         graph_repo.list_messages.return_value = [row(1, "user", "上一轮"), row(2, "assistant", "回答")]
@@ -212,7 +229,7 @@ class TestGraphChatEndpoint:
     def test_503_without_runtime(self, client, graph_repo):
         assert client.post("/api/graph-chat", json={"user_id": "u1", "message": "hi"}).status_code == 503
 
-    @pytest.mark.parametrize("body", [{"user_id": "u1", "message": ""}, {"user_id": "", "message": "hi"}, {"message": "hi"}])
+    @pytest.mark.parametrize("body", [{"message": ""}, {"message": "长" * 2001}, {"conversation_id": 1}])
     def test_422_on_invalid_body(self, client, graph_repo, body):
         app.state.graph_runtime = FakeRuntime(DONE_EVENTS)
         assert client.post("/api/graph-chat", json=body).status_code == 422

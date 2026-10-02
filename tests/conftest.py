@@ -24,12 +24,24 @@ _TEST_ENV = {
     "MILVUS_COLLECTION": "test_collection",
     "MCP_LOGISTICS_URL": "",
     "MCP_AFTERSALES_URL": "",
-    "REVIEW_ADMIN_NAME": "test-reviewer",
+    "AUTH_SECRET": "test-auth-secret-" + "x" * 32,
+    "CUSTOMER_TOKEN_SECRET": "test-customer-secret-" + "y" * 32,
+    "AUTH_DEV_MODE": "false",
 }
 os.environ.update(_TEST_ENV)
 
 
 import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """限流计数是进程级的，测试之间互不影响。"""
+    from app.core.ratelimit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture(autouse=True)

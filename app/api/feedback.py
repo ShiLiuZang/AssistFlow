@@ -6,8 +6,10 @@
 在系统中充当用户反馈收集的入口，为飞轮优化提供数据源。
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from app.core.auth import current_customer
 
 from app.db import repository
 
@@ -20,19 +22,22 @@ class FeedbackRequest(BaseModel):
     反馈请求模型
 
     属性:
-        user_id: 用户标识
+        user_id: 已废弃，身份取自令牌
         conversation_id: 会话ID
         message_id: 消息ID（AI消息的turn_message_id）
         rating: 评分，up（点赞）或down（点踩）
     """
-    user_id: str
+    user_id: str | None = Field(default=None, description="已废弃：身份取自令牌，此字段会被忽略")
     conversation_id: int
     message_id: str
     rating: str
 
 
 @router.post("/api/feedback")
-async def submit_feedback(request: FeedbackRequest) -> dict:
+async def submit_feedback(
+    request: FeedbackRequest,
+    user_id: str = Depends(current_customer),
+) -> dict:
     """
     提交用户反馈
 
@@ -59,6 +64,7 @@ async def submit_feedback(request: FeedbackRequest) -> dict:
     差评代表用户不满意，需要收集到问题池进行分析和改进
     点赞只作为正向信号记录，不需要进入改进流程
     """
+    request.user_id = user_id  # 身份只来自令牌
     # 校验rating字段
     if request.rating not in {"up", "down"}:
         raise HTTPException(

@@ -4,11 +4,25 @@
 供 graph_chat 与 actions 共用。
 """
 
+import asyncio
 import json
+from collections.abc import AsyncIterator
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+from app.config import settings
 from app.tools.engine import classify_tool_result
+
+# 一轮对话超时后发给前端的错误帧
+TURN_TIMEOUT_SSE = 'event: error\ndata: {"message":"当前咨询较多，请稍后重试或转人工"}\n\n'
+
+
+async def collect_turn(events: AsyncIterator[dict]) -> list[dict]:
+    """收集一轮图执行的全部事件，超过 CHAT_TURN_TIMEOUT_SECONDS 抛 TimeoutError。"""
+    async def collect() -> list[dict]:
+        return [event async for event in events]
+
+    return await asyncio.wait_for(collect(), timeout=settings.chat_turn_timeout_seconds)
 
 
 def make_sse(data: dict) -> str:

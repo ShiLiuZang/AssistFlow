@@ -2,24 +2,15 @@
 import random
 import re
 
+from app.core.safety import desensitize as _desensitize
 from app.core.taxonomy import LABEL2ID
 
-_PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
-_EMAIL = re.compile(r"(?<![\w.-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w.-])")
-_CN_ID = re.compile(r"(?<!\d)[1-9]\d{16}[\dXx](?!\w)")
-_LONG_DIGITS = re.compile(r"\d{10,}")
-_WX_QQ = re.compile(r"(微信|weixin|wx|QQ|qq)[号:: ]*[A-Za-z0-9_-]{5,}\s?")
 
 
 def desensitize(text: str) -> str:
-    """脱敏:手机号、邮箱、身份证号、长数字单号和微信/QQ 账号。
-    商品型号(如 MH-LP100,字母开头短串)不匹配上述模式,不受影响。"""
-    text = _PHONE.sub("[手机号]", text)
-    text = _EMAIL.sub("[邮箱]", text)
-    text = _CN_ID.sub("[身份证号]", text)
-    text = _LONG_DIGITS.sub("[单号]", text)
-    text = _WX_QQ.sub(lambda m: m.group(1) + "[账号]", text)
-    return text
+    """脱敏:手机号、邮箱、身份证号、长单号、微信/QQ 账号、收货地址和标注出的姓名。
+    规则与应用日志共用，定义在 app.core.safety。商品型号(如 MH-LP100)不受影响。"""
+    return _desensitize(text)
 
 
 def dedupe(samples: list[dict]) -> list[dict]:

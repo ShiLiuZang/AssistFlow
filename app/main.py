@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 # API 路由导入
+from app.api.auth import router as auth_router  # 登录与令牌
 from app.api.graph_chat import router as graph_chat_router  # LangGraph 驱动的聊天接口
 from app.api.extract import router as extract_router  # 信息抽取接口
 from app.api.conversations import router as conversations_router  # 会话历史管理
@@ -38,6 +39,8 @@ from app.api.observability import router as observability_router  # 观测数据
 
 # 核心服务导入
 from app.config import settings  # 配置管理
+from app.core import auth  # 认证配置校验
+from app.core.safety import install_log_redaction  # 日志脱敏
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
 from app.db import repository  # 数据库操作
 from app.graph.adapters import make_services_with_mcp  # 服务容器和 MCP 工具集成
@@ -71,6 +74,10 @@ async def lifespan(app: FastAPI):
     参考 git commit 805cba5 (接入执行追踪持久化与 Langfuse 观测)
     参考 git commit 21557ba (增加受控 MCP 发现与调用适配)
     """
+    # 0. 认证密钥不满足要求时拒绝启动（开发模式除外）；日志统一脱敏
+    auth.check_configuration()
+    install_log_redaction()
+
     # 1. 从环境变量收集已配置的 MCP 服务器 URL
     # 仅包含非空 URL，支持逐步启用 MCP 服务器
     server_urls = {
@@ -148,6 +155,7 @@ app = FastAPI(
 )
 
 # 注册 API 路由
+app.include_router(auth_router)  # 登录与令牌（无需鉴权）
 app.include_router(graph_chat_router)  # LangGraph 聊天（主要接口）
 
 # 辅助功能接口

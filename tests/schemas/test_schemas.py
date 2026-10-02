@@ -10,9 +10,13 @@ from app.schemas.extract import AfterSalesTicket, ExtractRequest, RequestType
 
 class TestChatRequest:
     def test_defaults(self):
-        assert ChatRequest(user_id="u", message="m").conversation_id is None
+        assert ChatRequest(message="m").conversation_id is None
 
-    @pytest.mark.parametrize("data", [{"user_id": "", "message": "m"}, {"user_id": "u", "message": ""}, {"user_id": "u"}])
+    def test_user_id_is_optional_and_ignored_by_api(self):
+        # 身份取自令牌；旧客户端仍传 user_id 时不报错
+        assert ChatRequest(user_id="u", message="m").message == "m"
+
+    @pytest.mark.parametrize("data", [{"message": ""}, {"message": "长" * 2001}, {"user_id": "u"}])
     def test_rejects(self, data):
         with pytest.raises(ValidationError):
             ChatRequest(**data)

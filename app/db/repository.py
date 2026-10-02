@@ -15,6 +15,7 @@ from app.db.models import (
     Conversation, KnowledgeChunk, Message, Ticket, ToolAuditLog,
     TraceSpan, Turn, LowConfidenceQuestion, Review, EvalRun, QaExtractionStaging,
     TopicClassification,
+    StaffUser,
 )
 from app.tools.audit import ToolAuditRecord
 
@@ -1968,3 +1969,34 @@ async def topic_questions(label: str, page: int = 1, size: int = 20) -> dict:
     ]
     return {"label": label, "total": len(hits), "page": page,
             "size": size, "pages": pages, "items": items}
+
+
+# ==================== 后台员工账号 ====================
+
+async def get_staff_user(username: str) -> StaffUser | None:
+    """按用户名读取员工账号；不存在返回 None。"""
+    async with SessionLocal() as session:
+        return await session.scalar(select(StaffUser).where(StaffUser.username == username))
+
+
+async def touch_staff_login(user_id: int) -> None:
+    """记录最近登录时间（UTC）。"""
+    async with SessionLocal() as session:
+        user = await session.get(StaffUser, user_id)
+        if user is not None:
+            user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            await session.commit()
+
+
+async def upsert_staff_user(username: str, password_hash: str, role: str, active: bool = True) -> StaffUser:
+    """创建员工账号；已存在时更新密码、角色和启用状态。"""
+    async with SessionLocal() as session:
+        user = await session.scalar(select(StaffUser).where(StaffUser.username == username))
+        if user is None:
+            user = StaffUser(username=username)
+            session.add(user)
+        user.password_hash = password_hash
+        user.role = role
+        user.active = active
+        await session.commit()
+        return user

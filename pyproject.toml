@@ -23,6 +23,7 @@ dependencies = [
     "httpx2",
     "langfuse>=4,<5",
     "psutil>=7.2.2",
+    "pyjwt>=2.10",
 ]
 [dependency-groups]
 dev = [

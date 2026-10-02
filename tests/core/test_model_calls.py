@@ -176,6 +176,7 @@ def test_get_chat_model_configuration(monkeypatch, thinking, expected):
     assert model.model_name == "test-chat-model"
     assert model.streaming is True
     assert model.extra_body == expected
+    assert (model.request_timeout, model.max_retries) == (20, 1)
 
 
 class FakeEmbeddings:

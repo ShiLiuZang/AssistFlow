@@ -3,18 +3,18 @@
 # 支持查看待审队列、处理建议、通过/驳回、发布到知识库
 # 核心职责：闭环飞轮流程，将人工审核的优质QA对补充回知识库
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.core.flywheel import process_pending
 from app.core.trusted_sources import validate_review_source
 from app.db import repository
 from app.kb.review_publish import publish_review
 from app.kb.sources import KB_DIR, SOURCE_TYPES
+from app.core.auth import Staff, current_staff, require_reviewer
 
 
-router = APIRouter(prefix="/api/review", tags=["review"])
+router = APIRouter(prefix="/api/review", tags=["review"], dependencies=[Depends(current_staff)])
 
 # 审核状态标签映射
 LABELS = {
@@ -108,7 +108,7 @@ async def stats() -> dict:
         raise HTTPException(503, "问题池统计暂时无法读取") from exc
 
 
-@router.post("/process")
+@router.post("/process", dependencies=[Depends(require_reviewer)])
 async def process(
     limit: int = Query(default=20, ge=1, le=20),
 ) -> dict:
@@ -159,6 +159,7 @@ async def detail(
 @router.post("/{review_id}/reject")
 async def reject(
     review_id: int,
+    staff: Staff = Depends(require_reviewer),
 ) -> dict:
     """
     驳回审核项
@@ -178,8 +179,7 @@ async def reject(
         409: 审核项状态冲突（已处理过）
     """
     try:
-        reviewer = settings.review_admin_name.strip() or "local-reviewer"
-        return _display(await repository.reject_review(review_id, reviewer))
+        return _display(await repository.reject_review(review_id, staff.username))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -191,6 +191,7 @@ async def approve(
     review_id: int,
     request: ApproveRequest,
     response: Response,
+    staff: Staff = Depends(require_reviewer),
 ) -> dict:
     """
     通过审核项并发布到知识库
@@ -235,9 +236,8 @@ async def approve(
 
     # 保存审核结果
     try:
-        reviewer = settings.review_admin_name.strip() or "local-reviewer"
         frozen = await repository.approve_review(
-            review_id, reviewer, answer, source_ref, source_digest,
+            review_id, staff.username, answer, source_ref, source_digest,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -252,7 +252,7 @@ async def approve(
         return _display(current or frozen)
 
 
-@router.post("/{review_id}/publish")
+@router.post("/{review_id}/publish", dependencies=[Depends(require_reviewer)])
 async def retry_publish(
     review_id: int,
     response: Response,

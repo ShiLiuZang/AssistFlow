@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import admin, extract, jobs as jobs_api, knowledge, observability, review, topics
-from app.config import settings
 from app.core import jobs
 from app.core.taxonomy import TOPIC_NAMES
 from app.schemas.extract import AfterSalesTicket, RequestType
@@ -48,11 +47,6 @@ class TestReview:
         assert response.status_code == status
         assert repo.reject_review.await_args.args == (3, "test-reviewer")
 
-    def test_reject_falls_back_to_local_reviewer(self, client, repo, monkeypatch):
-        monkeypatch.setattr(settings, "review_admin_name", "  ")
-        repo.set("reject_review", return_value=review_row("rejected"))
-        client.post("/api/review/3/reject")
-        assert repo.reject_review.await_args.args == (3, "local-reviewer")
 
     @pytest.fixture
     def approving(self, repo, monkeypatch):

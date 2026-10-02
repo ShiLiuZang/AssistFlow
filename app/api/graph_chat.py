@@ -10,14 +10,15 @@
 import logging
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.sse import graph_event_to_sse, restore_messages, make_sse
+from app.api.sse import TURN_TIMEOUT_SSE, collect_turn, graph_event_to_sse, restore_messages, make_sse
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
 from app.db import repository
 from app.core.conversation_lock import conversation_lock
 from app.graph.runtime import Runtime
+from app.core.ratelimit import limit_customer_chat
 from app.schemas.chat import ChatRequest
 
 
@@ -137,14 +138,14 @@ async def stream_graph_chat(
                 )
 
             # 执行图运行，收集所有事件
-            events = [event async for event in runtime.stream_turn(
+            events = await collect_turn(runtime.stream_turn(
                 request.message,
                 request.user_id,
                 str(conversation_id),
                 summary_text=conversation.summary_text or "",
                 summary_upto=conversation.summary_upto or 0,
                 covered_count=covered_count,
-            )]
+            ))
 
             # 将图消息持久化到数据库
             await _persist_graph_messages(runtime, request.user_id, conversation_id)
@@ -168,6 +169,9 @@ async def stream_graph_chat(
             if event.get("event") != "end":
                 yield graph_event_to_sse(event, conversation_id)
 
+    except TimeoutError:
+        logger.warning("图聊天超时 conversation_id=%s", conversation_id)
+        yield TURN_TIMEOUT_SSE
     except Exception:
         logger.exception("图聊天失败 conversation_id=%s", conversation_id)
         yield 'event: error\ndata: {"message":"图执行或消息保存失败，请重试"}\n\n'
@@ -231,6 +235,7 @@ def count_covered_messages(records, graph_messages, summary_upto: int) -> int:
 async def graph_chat(
     request: ChatRequest,
     http_request: Request,
+    user_id: str = Depends(limit_customer_chat),
 ) -> StreamingResponse:
     """
     图模式聊天接口端点
@@ -254,6 +259,9 @@ async def graph_chat(
     - 会话不存在时返回404
     - 有待确认工单时返回409
     """
+    # 身份只来自令牌，覆盖请求体里可能伪造的 user_id
+    request.user_id = user_id
+
     # 获取图运行时实例
     runtime: Runtime | None = getattr(http_request.app.state, "graph_runtime", None)
     if runtime is None:

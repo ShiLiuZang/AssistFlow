@@ -398,3 +398,28 @@ class TestAgentBranch:
         agent = scripted_agent(AIMessage(content="", tool_calls=[tool_call("c1", "query_order", {"order_id": "1"})]))
         with pytest.raises(RuntimeError, match="注册表"):
             await runtime_for(make_services(route="business", agent=agent, registry=None)).run_turn("q", "u1", "c1")
+
+
+class TestOutputGuard:
+    async def test_agent_promise_is_replaced_in_state_and_messages(self, repo):
+        services = make_services(route="business", agent=scripted_agent(AIMessage(content="已为您退款，请注意查收")))
+        result = await runtime_for(services).run_turn("给我退钱", "u1", "c1")
+
+        assert result["answer"] == nodes.SAFE_REPLY
+        assert [m.content for m in result["messages"]] == ["给我退钱", nodes.SAFE_REPLY]
+        assert result["trace"][-2:] == ["output_guard", "finish"]
+
+    async def test_knowledge_promise_is_replaced(self, repo):
+        services = make_services()
+
+        async def promising_answer(query, evidence, *, order, summary_text):
+            return {"answer": "我们保证全额退款[1]", "refused": False, "citations": [{**evidence[0], "n": 1}], "reason": None}
+
+        services.answer = promising_answer
+        result = await runtime_for(services).run_turn("能退吗", "u1", "c1")
+
+        assert result["messages"][-1].content == nodes.SAFE_REPLY
+
+    async def test_policy_explanation_passes(self, repo):
+        result = await runtime_for(make_services()).run_turn("退货期限是多久", "u1", "c1")
+        assert result["answer"] == ANSWER and "output_guard" not in result["trace"]

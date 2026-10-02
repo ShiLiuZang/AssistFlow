@@ -8,19 +8,21 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.llm import get_chat_model
 from app.core.prompts import EXTRACT_SYSTEM_PROMPT
 from app.schemas.extract import AfterSalesTicket, ExtractRequest
+from app.core.auth import current_staff
+from app.core.ratelimit import limit_staff_model
 
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["extract"])
+router = APIRouter(prefix="/api", tags=["extract"], dependencies=[Depends(current_staff)])
 
 
-@router.post("/extract", response_model=AfterSalesTicket)
+@router.post("/extract", response_model=AfterSalesTicket, dependencies=[Depends(limit_staff_model)])
 async def extract(request: ExtractRequest) -> AfterSalesTicket:
     """
     从售后描述中提取结构化字段

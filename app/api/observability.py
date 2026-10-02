@@ -11,17 +11,19 @@ import logging
 import json
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import ValidationError
 
 from app.schemas.cost_report import CostReport
 from app.config import settings
 from app.core.flywheel_evaluation import comparable
 from app.db import repository
+from app.core.auth import current_staff
 
 router = APIRouter(
     prefix="/api/observability",
     tags=["observability"],
+    dependencies=[Depends(current_staff)],
 )
 
 logger = logging.getLogger(__name__)
