@@ -64,6 +64,8 @@ const gates = [
   ['02', '时效', '活动截止、单笔订单进度', '不沉淀易过期或仅适用当次的事实'],
   ['03', '频次', '低频冷门、重复已有知识', '先判断是否值得沉淀，再核对通用答案'],
 ]
+// 与原飞轮待审页一致：归并 3 次及以上的问题标为高频，提示优先处理
+const hot = (row: { occurrence_count?: number | null }) => (row.occurrence_count ?? 0) >= 3
 const openReview = (id: number) => openModal({ title: '审核依据与处理结果', view: ReviewDetailModal, props: { id }, cls: 'workflow-dialog' })
 
 async function nextReview() {
@@ -148,9 +150,13 @@ const processLive = () =>
           <tbody id="wf-review-rows">
             <tr v-for="row in list.data.value.items" :key="row.id">
               <td class="data-content-cell">
-                <strong>{{ row.question }}</strong><span class="table-sub">#{{ row.id }} · AI 建议需人工核对</span>
+                <strong>{{ row.question }}</strong
+                ><span class="table-sub wf-suggestion-preview" :title="row.suggestion || undefined">{{ row.suggestion ? `AI 建议：${row.suggestion}` : '尚无 AI 建议' }}</span
+                ><span class="table-sub">#{{ row.id }} · 需人工核对</span>
               </td>
-              <td>{{ row.occurrence_count ?? '—' }} 次</td>
+              <td :title="hot(row) ? '归并次数多，建议优先补充知识' : undefined">
+                <StatusPill v-if="hot(row)" color="amber">{{ row.occurrence_count }} 次 · 高频</StatusPill><template v-else>{{ row.occurrence_count ?? '—' }} 次</template>
+              </td>
               <td><StatusPill :color="reviewColor(row.status)">{{ reviewLabels[row.status] || row.status || '未知' }}</StatusPill></td>
               <td>{{ row.source_ref || '待核对可信材料' }}</td>
               <td class="data-time-cell">{{ listStamp(row.created_at) }}</td>

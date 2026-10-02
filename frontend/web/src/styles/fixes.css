@@ -20,3 +20,11 @@
   position: sticky;
   z-index: 1;
 }
+
+/* 知识缺口队列：AI 建议预览只显示一行，完整内容在详情里 */
+.wf-suggestion-preview {
+  max-width: 420px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
