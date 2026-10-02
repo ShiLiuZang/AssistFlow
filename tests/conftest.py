@@ -19,5 +19,24 @@ _TEST_ENV = {
     "LANGFUSE_PUBLIC_KEY": "",
     "LANGFUSE_SECRET_KEY": "",
     "LANGFUSE_BASE_URL": "",
+    "CHAT_THINKING": "disabled",
+    "MILVUS_URI": "http://milvus.invalid:19530",
+    "MILVUS_COLLECTION": "test_collection",
+    "MCP_LOGISTICS_URL": "",
+    "MCP_AFTERSALES_URL": "",
+    "REVIEW_ADMIN_NAME": "test-reviewer",
 }
 os.environ.update(_TEST_ENV)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_observability():
+    """每个测试结束后清空全局 trace sink 与 Langfuse 客户端。"""
+    yield
+    from app.core import observability
+
+    observability.configure_trace_sink(None)
+    observability.configure_langfuse(None)
