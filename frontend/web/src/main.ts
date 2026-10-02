@@ -12,6 +12,7 @@ import './styles/v2/admin-data.css'
 import './styles/v2/admin-workflows.css'
 import './styles/v2/admin-reports.css'
 import './styles/v2/admin-classification.css'
+import './styles/fixes.css'
 
 
 createApp(App).use(router).use(VueQueryPlugin, { queryClient }).mount('#app')

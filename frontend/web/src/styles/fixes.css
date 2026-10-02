@@ -1,0 +1,22 @@
+/* 在 V2 原样式之上的修复（V2 文件本身保持不动）。 */
+
+/* 侧栏底部露白：侧栏是 sticky 且高度上限为"视口 - 预览栏"，页面滚动后预览栏离开视口，
+   侧栏下方会露出一条空白。在侧栏所在的网格格子里垫一块同色底板，它随整列拉伸，
+   各断点的侧栏宽度也自动跟随。 */
+.shell > .sidebar,
+.shell > .rail-fill {
+  grid-column: 1;
+  grid-row: 1;
+}
+.shell > .main {
+  grid-column: 2;
+  grid-row: 1;
+}
+.rail-fill {
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+.shell > .sidebar {
+  position: sticky;
+  z-index: 1;
+}

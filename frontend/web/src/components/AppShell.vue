@@ -108,6 +108,7 @@ const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, pr
 
 <template>
   <div class="shell">
+    <div class="rail-fill" aria-hidden="true"></div>
     <aside class="sidebar">
       <div class="brand"><img :src="catUrl" alt="" /><span>Minihelp</span></div>
       <button class="workspace-selector" @click="showWorkspace">
