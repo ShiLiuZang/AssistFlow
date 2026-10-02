@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.graph import nodes
+from app.tools.registry import Registry, ToolSpec
 from app.graph.build import build_graph
 from app.graph.routing import confidence_gate, route_by_intent, should_continue
 from app.graph.runtime import Runtime
@@ -282,6 +283,140 @@ class TestAgentFlow:
         assert result["answer"] == "工具调用格式错误，请稍后重试。"
 
 
+def tool_call(call_id, name, args):
+    return {"id": call_id, "name": name, "args": args, "type": "tool_call"}
+
+
+def make_registry(query_order=None, create_ticket=None):
+    registry = Registry()
+    registry.register(ToolSpec(
+        name="query_order",
+        invoke=query_order or AsyncMock(return_value={"found": False}),
+        description="查询订单",
+        schema={
+            "type": "object",
+            "properties": {"order_id": {"type": "string"}},
+            "required": ["order_id"],
+            "additionalProperties": False,
+        },
+    ))
+    registry.register(ToolSpec(
+        name="create_ticket",
+        invoke=create_ticket or AsyncMock(),
+        description="创建售后工单",
+        schema={
+            "type": "object",
+            "properties": {"reason": {"type": "string"}},
+            "required": ["reason"],
+            "additionalProperties": False,
+        },
+        permission="write",
+    ))
+    return registry
+
+
+def scripted_agent(*replies):
+    """按顺序返回预设的 AIMessage，并记录每次看到的消息。"""
+    seen = []
+    queue = list(replies)
+
+    async def agent(messages, *, summary_text, covered_count):
+        seen.append(list(messages))
+        return queue.pop(0)
+
+    agent.seen = seen
+    return agent
+
+
+class TestToolLoop:
+    async def test_read_tool_result_feeds_back_to_agent(self, repo):
+        order = {"found": True, "order_id": "ORD-1", "status": "已发货"}
+        query_order = AsyncMock(return_value=order)
+        agent = scripted_agent(
+            AIMessage(content="", tool_calls=[tool_call("c1", "query_order", {"order_id": "ORD-1"})]),
+            AIMessage(content="订单已发货"),
+        )
+        services = make_services(
+            route="business", agent=agent, registry=make_registry(query_order=query_order),
+        )
+
+        result = await runtime_for(services).run_turn("ORD-1 到哪了", "u1", "c1")
+
+        assert result["trace"] == [
+            "resolve_reference", "classify", "agent", "tools", "agent", "finish",
+        ]
+        assert result["answer"] == "订单已发货"
+        assert result["last_order_id"] == "ORD-1"
+        assert result["order"]["status"] == "已发货"
+        args, context, call_id = query_order.await_args.args
+        assert args == {"order_id": "ORD-1"}
+        assert (context.user_id, call_id) == ("u1", "c1")
+        # 第二次调用 agent 时能看到工具结果
+        assert agent.seen[1][-1].type == "tool"
+        assert agent.seen[1][-1].status == "success"
+
+    async def test_invalid_tool_args_become_error_message(self, repo):
+        query_order = AsyncMock()
+        agent = scripted_agent(
+            AIMessage(content="", tool_calls=[tool_call("c1", "query_order", {"bad": 1})]),
+            AIMessage(content="参数有误"),
+        )
+        services = make_services(
+            route="business", agent=agent, registry=make_registry(query_order=query_order),
+        )
+
+        await runtime_for(services).run_turn("查订单", "u1", "c1")
+
+        query_order.assert_not_awaited()
+        assert agent.seen[1][-1].status == "error"
+
+    async def test_step_limit_stops_loop(self, repo):
+        call = AIMessage(content="", tool_calls=[tool_call("c1", "query_order", {"order_id": "ORD-1"})])
+        again = AIMessage(content="", tool_calls=[tool_call("c2", "query_order", {"order_id": "ORD-1"})])
+        services = make_services(
+            route="business",
+            max_steps=2,
+            agent=scripted_agent(call, again),
+            registry=make_registry(),
+        )
+
+        result = await runtime_for(services).run_turn("查订单", "u1", "c1")
+
+        assert result["trace"].count("agent") == 3
+        assert result["answer"] == "工具调用已达上限，请补充信息或联系人工客服。"
+
+    @pytest.mark.parametrize(
+        "confirmed,expected",
+        [(True, "工单已创建，工单号：T-1"), (False, "已取消，本次没有创建工单。")],
+    )
+    async def test_ticket_requires_confirmation(self, repo, confirmed, expected):
+        create_ticket = AsyncMock()
+        agent = scripted_agent(
+            AIMessage(content="", tool_calls=[tool_call("c1", "create_ticket", {"reason": "坏了"})]),
+            AIMessage(content="模型总结"),
+        )
+        services = make_services(
+            route="business", agent=agent, registry=make_registry(create_ticket=create_ticket),
+        )
+        runtime = runtime_for(services)
+
+        first = await runtime.run_turn("我要报修", "u1", "c1")
+        preview = first["__interrupt__"][0].value
+        assert preview == {"kind": "confirm_ticket", "tool_call_id": "c1", "preview": {"reason": "坏了"}}
+
+        result = await runtime.run_turn(
+            "", "u1", "c1",
+            resume={
+                "tool_call_id": "c1",
+                "tool_result": {"confirmed": confirmed, "ticket_no": "T-1"},
+            },
+        )
+
+        assert result["answer"] == expected
+        # 写工具不会由图直接执行，只采用服务端确认结果
+        create_ticket.assert_not_awaited()
+
+
 class TestRuntime:
     async def test_resume_without_pending_rejected(self, repo):
         with pytest.raises(ValueError, match="没有待恢复"):
@@ -301,9 +436,13 @@ class TestRuntime:
     async def test_stream_turn_events(self, repo):
         events = [e async for e in runtime_for(make_services()).stream_turn("退货期限是多久", "u1", "c1")]
 
-        kinds = [e.get("event", "delta" if "delta" in e else None) for e in events]
-        assert kinds == ["node"] * 5 + ["citations", "delta", "done", "end"]
-        assert events[6]["delta"] == "签收后7天内可以退货[1]"
+        assert [e["name"] for e in events[:5]] == [
+            "resolve_reference", "classify", "retrieve", "answer", "finish",
+        ]
+        assert events[5]["event"] == "citations"
+        assert events[6] == {"delta": "签收后7天内可以退货[1]"}
+        assert events[7]["event"] == "done"
+        assert events[8] == {"event": "end"}
 
     async def test_stream_turn_interrupt(self, repo):
         services = make_services(

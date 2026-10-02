@@ -48,7 +48,7 @@ class TestCountCoveredMessages:
         assert graph_chat.count_covered_messages(self.RECORDS, self.MESSAGES, 5) == 4
 
     def test_db_longer_than_graph(self):
-        with pytest.raises(ValueError, match="更长|长"):
+        with pytest.raises(ValueError, match="比图历史长"):
             graph_chat.count_covered_messages(self.RECORDS, self.MESSAGES[:2], 0)
 
     @pytest.mark.parametrize(
