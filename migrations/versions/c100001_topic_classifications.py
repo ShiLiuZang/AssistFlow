@@ -1,4 +1,4 @@
-"""Add 微调 topic classification results for the Minihelp classifier pipeline."""
+"""Add 微调 topic classification results for the AssistFlow classifier pipeline."""
 
 from alembic import op
 import sqlalchemy as sa

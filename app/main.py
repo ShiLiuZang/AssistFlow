@@ -143,7 +143,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
-    title="Minihelp Handwritten",
+    title="AssistFlow",
     version="0.1.0",
     lifespan=lifespan,  # 应用生命周期管理
 )
@@ -190,7 +190,7 @@ async def health() -> dict[str, str]:
     """
     return {
         "status": "ok",
-        "service": "minihelp-handwritten",
+        "service": "assistflow",
         "chapter": "ch05",
     }
 

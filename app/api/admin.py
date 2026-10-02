@@ -296,7 +296,7 @@ async def _classifier_card() -> dict:
 
     九项验收包括：语料构建、数据集划分、模型训练、评估指标等
     """
-    card = _card("classifier", "分类器验收", "/acceptance", "Minihelp 微调 九项实证")
+    card = _card("classifier", "分类器验收", "/acceptance", "AssistFlow 微调 九项实证")
     try:
         result = await acceptance.overview()
     except Exception:
