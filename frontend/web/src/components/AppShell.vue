@@ -74,7 +74,7 @@ const groups = computed(() => (admin.value ? adminGroups.value : serviceGroups.v
 const contextText = computed(() => {
   if (!route.meta.data) return '演示工作日 · 09 / 22'
   if (['/quality', '/observability', '/models'].includes(route.path)) return '报告与评估状态'
-  if (route.path === '/topics') return '主题归类状态'
+  if (route.path.startsWith('/topics')) return '主题归类状态'
   return '库存与运行状态'
 })
 const badgeText = computed(() => (route.meta.data ? (route.path === '/observability' ? '实时数据 · 只读' : '实时数据') : admin.value ? '数据演示' : '演示接待'))
@@ -97,17 +97,17 @@ const showProfile = () =>
   })
 const showGuide = () =>
   openModal({
-    title: '这样体验本轮原型',
+    title: '页面与数据范围',
     view: SimpleModal,
     props: {
-      html: '<div class="page-map"><div class="map-row"><h3>01 · 接待客户</h3><p>在工作台接管林女士的会话，输入回复，然后切换到客户咨询页查看。</p></div><div class="map-row"><h3>02 · 跟进售后</h3><p>在客户页提交退货申请，再到工单中心领取和记录处理结果。</p></div><div class="map-row"><h3>03 · 更新知识</h3><p>在知识库添加草稿、提交审核、发布，查看状态和数量变化。</p></div></div><p class="field-hint">右上角色视角用于预览；正式版会按登录身份展示对应入口。刷新页面会重置数据。</p>',
+      html: '<div class="page-map"><div class="map-row"><h3>客户咨询页</h3><p>连接当前项目后端，可读取历史会话、发送问题、提交反馈及确认操作。刷新后从后端恢复会话。</p></div><div class="map-row"><h3>管理后台</h3><p>知识、审核和作业读取真实接口，操作前显示影响与确认。主题图可直接跳到类目问题明细。</p></div><div class="map-row"><h3>客服工作台</h3><p>客服工作台、工单中心、客户资料和商品页仍使用演示数据，尚未与真实聊天联动。</p></div></div>',
     },
   })
 const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, props: { surface: props.surface } })
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :class="{ 'admin-shell': admin }">
     <div class="rail-fill" aria-hidden="true"></div>
     <aside class="sidebar">
       <div class="brand"><img :src="catUrl" alt="" /><span>Minihelp</span></div>
@@ -126,9 +126,9 @@ const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, pr
           >
             <button
               class="nav-item"
-              :class="{ active: isActive }"
+              :class="{ active: isActive || route.path.startsWith(item.path + '/') }"
               :title="item.label"
-              :aria-current="isActive ? 'page' : undefined"
+              :aria-current="isActive || route.path.startsWith(item.path + '/') ? 'page' : undefined"
               @click="navigate"
             >
               <Icon :name="item.icon" /><span class="nav-name">{{ item.label }}</span>
@@ -149,7 +149,7 @@ const showMenu = () => openModal({ title: '页面菜单', view: NavMenuModal, pr
     <main class="main">
       <header class="topbar">
         <button class="btn menu-trigger" aria-label="打开页面菜单" @click="showMenu"><Icon name="book" />菜单</button>
-        <div class="breadcrumb">喵喵优选<span>/</span><strong>{{ route.meta.title }}</strong></div>
+        <div class="breadcrumb"><span class="breadcrumb-workspace">喵喵优选</span><span class="breadcrumb-divider">/</span><strong>{{ route.meta.title }}</strong></div>
         <div class="top-tools">
           <span class="small muted"><template v-if="!route.meta.data"><Icon name="clock" />{{ ' ' }}</template>{{ contextText }}</span>
           <span class="pill neutral">{{ badgeText }}</span>

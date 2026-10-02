@@ -53,7 +53,7 @@ const values = computed<[string, unknown][] | undefined>(() => {
 </script>
 
 <template>
-  <div v-if="values" class="cls-gate-numbers">
+  <div v-if="values" class="cls-gate-numbers" :class="{ 'has-three': values.length === 3 }">
     <div v-for="[title, value] in values" :key="title">
       <span>{{ title }}</span><b>{{ value }}</b>
     </div>

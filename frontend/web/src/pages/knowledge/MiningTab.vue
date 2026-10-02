@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
+import { jobAction, actionBusy } from '../../composables/useAdminActions'
 import { listStaging } from '../../api/endpoints'
 import type { StagingStatus } from '../../api/types'
 import DataState from '../../components/DataState.vue'
@@ -28,6 +29,7 @@ const show = (id: number) => openModal({ title: '候选问答详情', view: Cand
 </script>
 
 <template>
+  <div class="mining-actions"><button class="btn primary" :disabled="actionBusy" @click="jobAction('kb-mine', false)">从对话挖掘候选</button><RouterLink class="btn soft" to="/jobs?name=kb-mine">查看运行状态与日志</RouterLink><span class="field-hint">最近 20 个有回复的会话 · 去重后待人工审核</span></div>
   <DataState :loading="isPending" :error="error" />
   <template v-if="data">
     <div class="stat-strip data-metrics">

@@ -41,46 +41,29 @@ const value = (v: unknown) => (v === null || v === undefined ? '—' : String(v)
     </template>
 
     <DataState :loading="isPending" :error="error" />
-    <div v-if="data" class="overview-layout">
+    <div v-if="data" class="overview-layout admin-overview">
+      <div v-if="attention.length" class="overview-attention" aria-label="需关注的模块">
+        <strong>{{ attention.length }} 个模块需关注</strong>
+        <button v-for="row in attention" :key="row.key" class="text-button" @click="router.push(routes[row.key] ?? '/overview')">{{ titles[row.key] ?? row.title }} <Icon name="arrow" /></button>
+      </div>
       <div>
         <div class="overview-heading">
           <h2>管理工作区</h2>
           <span class="small muted">六个模块，分别读取业务状态</span>
         </div>
-        <div class="module-grid">
-          <button v-for="row in data.modules" :key="row.key" class="module-card data-module" @click="router.push(routes[row.key] ?? '/overview')">
-            <div class="module-card-top">
-              <span class="module-icon"><Icon :name="icons[row.key] ?? 'chart'" /></span>
-              <StatusPill :color="stateLabel[row.status]?.[1] ?? 'neutral'">{{ stateLabel[row.status]?.[0] ?? '未知' }}</StatusPill>
-            </div>
-            <h2>{{ titles[row.key] ?? row.title }}</h2>
-            <p>{{ row.headline }}</p>
-            <div class="data-module-metrics">
-              <span v-for="m in row.metrics" :key="m.label">{{ m.label }} <b>{{ value(m.value) }}</b></span>
+        <div class="overview-ledger">
+          <article v-for="row in data.modules" :key="row.key" class="overview-module" :class="{ 'module-error': row.status === 'error' }">
+            <div class="overview-module-name"><Icon :name="icons[row.key] ?? 'chart'" /><h2>{{ titles[row.key] ?? row.title }}</h2><StatusPill :color="stateLabel[row.status]?.[1] ?? 'neutral'">{{ stateLabel[row.status]?.[0] ?? '未知' }}</StatusPill></div>
+            <div class="overview-module-description"><p>{{ row.headline }}</p><details><summary>数据说明</summary><small>{{ row.note || row.lede || '查看详细业务状态' }}</small></details></div>
+            <div class="overview-module-metrics">
+              <span v-for="m in row.metrics" :key="m.label"><b>{{ value(m.value) }}</b>{{ m.label }}</span>
               <span v-if="!row.metrics.length" class="muted">等待读数或报告</span>
             </div>
-            <small>{{ row.note || row.lede || '查看详细业务状态' }}</small>
-          </button>
+            <RouterLink class="overview-module-link" :to="routes[row.key] ?? '/overview'">查看详情 <Icon name="arrow" /></RouterLink>
+          </article>
         </div>
       </div>
-      <aside>
-        <section class="aside-panel">
-          <div class="eyebrow">需要关注</div>
-          <h3>从这里开始处理</h3>
-          <button v-for="row in attention" :key="row.key" class="todo-row" @click="router.push(routes[row.key] ?? '/knowledge')">
-            <span>{{ row.title }}<small>{{ row.headline }}</small></span><Icon name="arrow" />
-          </button>
-          <p v-if="!attention.length" class="small muted section-gap">当前没有读到需关注事项。</p>
-          <button class="todo-row" @click="router.push('/knowledge')">
-            <span>核对知识与索引<small>原文、待向量化与向量数量</small></span><Icon name="arrow" />
-          </button>
-        </section>
-        <section class="aside-panel data-scope-note">
-          <h3>每个数字，都有来源</h3>
-          <p>库存、报告和运行状态分别读取；未知值保留为 —。</p>
-          <p>当前接入总览、知识、审核、作业、质量、观测、主题与分类器的只读数据。</p>
-        </section>
-      </aside>
+      <p class="field-hint">库存、报告和运行状态分别读取；未知值保留为 —。点击模块核对明细。</p>
     </div>
   </DataPage>
 </template>

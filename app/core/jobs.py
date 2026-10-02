@@ -35,6 +35,9 @@ class JobSpec:
 
 JOBS: dict[str, JobSpec] = {
     spec.name: spec for spec in (
+        JobSpec("kb-mine", "对话挖知识（生成待审候选）",
+                (sys.executable, "-m", "scripts.tasks", "kb-mine"),
+                "最近 20 个有回复的会话；需要 MySQL、聊天模型和可信材料", heavy=True),
         JobSpec("kb-preview", "材料清单与切块预览",
                 (sys.executable, "-m", "scripts.tasks", "kb-preview"), "本地运行，不写库"),
         JobSpec("kb-build", "离线建库（文档切块 → pending）",

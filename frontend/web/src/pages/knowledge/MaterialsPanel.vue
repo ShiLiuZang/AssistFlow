@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router'
 import type { KbOverview } from '../../api/types'
 import StatusPill from '../../components/StatusPill.vue'
 import VPanel from '../../components/VPanel.vue'
-import { actionBusy } from '../../composables/useAdminActions'
+import { actionBusy, jobAction } from '../../composables/useAdminActions'
 import { openModal } from '../../composables/useModal'
 import MaterialPreviewModal from './MaterialPreviewModal.vue'
 import SourceFeatures from './SourceFeatures.vue'
@@ -66,7 +66,9 @@ const preview = (file: string) => openModal({ title: `建库材料 · ${file}`, 
       <span>源文件已修改时，请刷新读数后重新预览。</span>
       <div class="form-actions">
         <button class="btn" :disabled="busy" @click="client.invalidateQueries()">重新读取材料</button>
-        <button class="btn soft" @click="router.push('/jobs')">查看离线建库作业</button>
+        <button class="btn soft" :disabled="busy" @click="jobAction('kb-preview', false)">重跑材料与切块预览</button>
+        <button class="btn primary" :disabled="busy" @click="jobAction('kb-build', false)">离线建库</button>
+        <button class="text-button" @click="router.push('/jobs?name=kb-')">作业状态与日志 →</button>
       </div>
     </div>
   </VPanel>

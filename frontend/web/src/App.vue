@@ -31,7 +31,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <header class="preview-bar">
+  <header class="preview-bar" :class="{ 'admin-preview': surface === 'admin' }">
     <div class="preview-label">
       <span class="v0">V2</span><span>Minihelp <span class="muted">/ 产品预览</span></span>
     </div>
@@ -47,7 +47,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
       </button>
     </nav>
     <div class="preview-options">
-      <span class="demo-label">{{ route.meta.data ? (route.path === '/observability' ? '实时数据 · 只读' : '实时数据') : '演示数据' }}</span>
+      <span v-if="surface !== 'admin'" class="demo-label">{{ route.meta.data ? '实时数据' : '演示数据' }}</span>
       <button class="text-button" @click="router.push('/migration')">页面规划 <span aria-hidden="true">↗</span></button>
       <button
         class="palette-button"

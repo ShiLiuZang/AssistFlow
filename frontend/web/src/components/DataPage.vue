@@ -1,5 +1,4 @@
-<!-- 管理数据页的统一骨架（对应 V2 admin-data.js 的 renderPage）：
-     页面标题 + 刷新读数 → 实时接口来源条 → 页面内容 → 底部"当前项目接口 · 本次读取" -->
+<!-- 管理数据页骨架：标题与操作、业务内容、可展开的数据来源说明。 -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -13,16 +12,6 @@ const route = useRoute()
 const client = useQueryClient()
 const fetching = useIsFetching()
 
-const eyebrow: Record<string, string> = {
-  knowledge: 'KNOWLEDGE OPERATIONS',
-  review: 'KNOWLEDGE REVIEW',
-  jobs: 'BACKGROUND OPERATIONS',
-  quality: 'RAG QUALITY',
-  observability: 'OBSERVABILITY',
-  topics: 'CONSULTATION TOPICS',
-  models: 'CLASSIFIER MANAGEMENT',
-  overview: 'SERVICE OPERATIONS',
-}
 const desc: Record<string, string> = {
   knowledge: '维护回复依据，核对原文、审核与向量状态。',
   overview: '查看知识、质量与模型的当前状态，找到下一件需要处理的事。',
@@ -47,10 +36,9 @@ function refresh() {
 </script>
 
 <template>
-  <div class="page admin-page data-page">
+  <div class="page admin-page data-page" :data-page="page">
     <div class="page-title between">
       <div>
-        <div class="eyebrow">{{ eyebrow[page] }}</div>
         <h1>{{ route.meta.title }}</h1>
         <p>{{ desc[page] }}</p>
       </div>
@@ -59,15 +47,11 @@ function refresh() {
         <slot name="actions" />
       </div>
     </div>
-    <div class="data-source-bar">
-      <div>
-        <span class="dot"></span><strong>{{ page === 'observability' ? '实时接口 · 只读' : '实时接口' }}</strong><span>{{ sourceText }}</span>
-      </div>
-    </div>
     <div v-if="actionNotice" class="notice data-alert" role="status">{{ actionNotice }}</div>
     <slot />
-    <p class="source-line">
-      <Icon name="file" />当前项目接口 · {{ dataTime ? `本次读取 ${dataTime}` : '等待读取' }}<template v-if="page === 'knowledge'"> · 文档版本与发布生命周期尚无对应数据</template>
-    </p>
+    <details class="source-line data-source-details">
+      <summary>数据来源与范围 · {{ dataTime ? `本次读取 ${dataTime}` : '等待读取' }}</summary>
+      <p>{{ sourceText }}<template v-if="page === 'knowledge'">文档版本与发布生命周期尚无对应数据。</template></p>
+    </details>
   </div>
 </template>

@@ -10,8 +10,6 @@ import VStat from '../../components/VStat.vue'
 import { closeModal, openModal } from '../../composables/useModal'
 import GateStatus from '../classification/GateStatus.vue'
 import JobButtons from '../classification/JobButtons.vue'
-import MetaRow from '../classification/MetaRow.vue'
-import Note from '../classification/Note.vue'
 import { trackTime, useClsData, useClsErrors, useClsEval, useOverview } from '../classification/queries'
 import { num, serviceDetail } from '../classification/shared'
 import GateModal from './GateModal.vue'
@@ -52,19 +50,21 @@ const showGate = (block: AcceptanceBlock) => openModal({ title: block.title, vie
   <template v-else>
     <div class="stat-strip data-metrics">
       <VStat label="通过验收" :value="d.passed" :unit="'/ ' + num(d.total)" foot="后端逐项判定" />
-      <VStat label="未达标" :value="countOf('fail')" unit="项" foot="产物存在，但验收条件未满足" />
+      <VStat label="未达标" :value="countOf('fail')" :tone="countOf('fail') ? 'red' : undefined" unit="项" foot="产物存在，但验收条件未满足" />
       <VStat label="未生成" :value="countOf('missing')" unit="项" foot="缺少所需产物或报告" />
-      <VStat label="分类服务" :value="d.classifier?.online === true ? '在线' : d.classifier?.online === false ? '离线' : null" foot="独立健康检查" />
+      <VStat label="分类服务" :value="d.classifier?.online === true ? '在线' : d.classifier?.online === false ? '离线' : null" :tone="d.classifier?.online === false ? 'red' : undefined" foot="独立健康检查" />
     </div>
-    <Note>文件齐全、评测达标与服务在线分别判断。矩阵和错例项达标仅表示报告可读；完整验收需所有项目满足条件。</Note>
-    <MetaRow
-      :items="[
-        ['整体验收', d.all_pass === true ? '全部达标' : d.all_pass === false ? '尚未全部达标' : '未知'],
-        ['服务状态', serviceDetail(d.classifier?.detail)],
-      ]"
-    />
+    <div class="cls-acceptance-summary" :class="{ 'is-alert': d.all_pass === false }">
+      <b>{{ d.all_pass === true ? '全部达标' : d.all_pass === false ? '尚未全部达标' : '验收结论未知' }}</b>
+      <span v-if="countOf('fail')">未达标：<strong>{{ blocks.filter(b => b.status === 'fail').map(b => b.title).join('、') }}</strong></span>
+      <details>
+        <summary>判定与服务说明</summary>
+        <p>文件齐全、评测达标与服务在线分别判断。矩阵和错例项达标仅表示报告可读；完整验收需所有项目满足条件。</p>
+        <p>服务状态：{{ serviceDetail(d.classifier?.detail) }}</p>
+      </details>
+    </div>
     <div class="cls-gates">
-      <section v-for="b in blocks" :key="b.key" class="panel cls-gate">
+      <section v-for="b in blocks" :key="b.key" class="panel cls-gate" :class="{ 'is-failed': b.status === 'fail' }">
         <div class="panel-head">
           <h2>
             <span class="mono muted">{{ num(b.no).padStart(2, '0') }}</span> {{ b.title }}

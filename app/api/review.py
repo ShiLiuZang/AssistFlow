@@ -100,6 +100,14 @@ async def material(source_ref: str) -> dict:
     return {"file": source_ref, "text": text, "sha256": sha256(text.encode("utf-8")).hexdigest()}
 
 
+@router.get("/stats")
+async def stats() -> dict:
+    try:
+        return await repository.flywheel_stats()
+    except Exception as exc:
+        raise HTTPException(503, "问题池统计暂时无法读取") from exc
+
+
 @router.post("/process")
 async def process(
     limit: int = Query(default=20, ge=1, le=20),

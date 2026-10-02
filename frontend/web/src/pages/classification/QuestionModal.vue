@@ -4,6 +4,7 @@ import ModalFoot from '../reports/ModalFoot.vue'
 import MetaRow from './MetaRow.vue'
 import Tags from './Tags.vue'
 import { source } from './shared'
+import { topicTime } from './topicTime'
 defineProps<{ row: TopicQuestion }>()
 </script>
 
@@ -14,8 +15,8 @@ defineProps<{ row: TopicQuestion }>()
       :items="[
         ['来源', source(row.source)],
         ['出现次数', row.occurrence_count],
-        ['提问时间', row.asked_at],
-        ['归类时间', row.classified_at],
+        ['提问时间 (UTC+8)', topicTime(row.asked_at)],
+        ['归类时间 (UTC+8)', topicTime(row.classified_at)],
         ['规范化', row.normalized === true ? '是' : row.normalized === false ? '否' : '未提供'],
         ['审核状态', row.review_status || '未提供'],
       ]"

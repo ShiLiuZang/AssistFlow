@@ -26,6 +26,7 @@ export const router = createRouter({
     page('/quality', 'RAG 质量', 'admin', () => import('./pages/QualityPage.vue'), true),
     page('/observability', '观测与成本', 'admin', () => import('./pages/ObservabilityPage.vue'), true),
     page('/topics', '咨询主题', 'admin', () => import('./pages/TopicsPage.vue'), true),
+    page('/topics/questions', '类目问题明细', 'admin', () => import('./pages/TopicsPage.vue'), true),
     page('/models', '分类器管理', 'admin', () => import('./pages/ModelsPage.vue'), true),
     page('/jobs', '作业中心', 'admin', () => import('./pages/JobsPage.vue'), true),
     // 管理后台：演示页
@@ -37,9 +38,12 @@ export const router = createRouter({
     page('/customers', '客户资料', 'service', () => import('./pages/demo/CustomersPage.vue')),
     page('/products', '商品与订单', 'service', () => import('./pages/demo/ProductsPage.vue')),
     // 客户咨询页
-    page('/client', '客户咨询页', 'client', () => import('./pages/demo/ClientPage.vue')),
+    page('/client', '客户咨询页', 'client', () => import('./pages/ClientPage.vue'), true),
     { path: '/:pathMatch(.*)*', redirect: '/workbench' },
   ],
+  scrollBehavior(to, from, saved) {
+    return saved || (to.path !== from.path ? { top: 0 } : undefined)
+  },
 })
 
 router.afterEach((to) => {

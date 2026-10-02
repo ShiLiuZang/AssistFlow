@@ -38,7 +38,7 @@ const fields = computed<[string, unknown][]>(() => {
         <StatusPill color="neutral">#{{ row.id }}</StatusPill>
         <StatusPill color="neutral">{{ typeName(row.content_type) }}</StatusPill>
         <StatusPill :color="vector(row.status)[1]">{{ vector(row.status)[0] }}</StatusPill>
-        <StatusPill v-if="row.is_key_clause">关键条款</StatusPill>
+        <span v-if="row.is_key_clause" class="key-clause-label">关键条款</span>
       </div>
       <h3>{{ row.questions || '未标注问法' }}</h3>
       <RecordFields :fields="fields" />

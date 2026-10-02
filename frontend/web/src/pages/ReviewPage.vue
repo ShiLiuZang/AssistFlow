@@ -3,7 +3,8 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
-import { getAdminOverview, listReviews } from '../api/endpoints'
+import { listReviews } from '../api/endpoints'
+import { get } from '../api/client'
 import DataPage from '../components/DataPage.vue'
 import DataState from '../components/DataState.vue'
 import Icon from '../components/Icon.vue'
@@ -19,6 +20,7 @@ import ReviewDetailModal from './workflows/ReviewDetailModal.vue'
 import { listStamp, reviewApiStatus, reviewColor, reviewLabels } from './workflows/shared'
 
 const router = useRouter()
+const pipeline = useQuery({ queryKey: ['review', 'stats'], queryFn: () => get<{ saved_turns: number; pool_total: number; unmerged: number; reviews: Record<string, number> }>('/api/review/stats') })
 const filter = useUrlState('status', 'pending')
 const query = useUrlState('q', '')
 const page = useUrlNumber('page', 1)
@@ -39,12 +41,11 @@ const list = useQuery({
 })
 watch(list.dataUpdatedAt, reportDataTime, { immediate: true })
 
-// 顶部计数取自管理总览的审核模块（全量统计）
-const admin = useQuery({ queryKey: ['admin', 'overview'], queryFn: getAdminOverview })
+// 与问题池进度共用全量统计，不依赖当前列表的筛选条件。
 const counts = computed(() => {
-  const card = admin.data.value?.modules.find((m) => m.key === 'review')
-  const get = (label: string) => (card?.status === 'error' ? null : (card?.metrics.find((m) => m.label === label)?.value ?? null))
-  return { pending: get('待审'), publishing: get('发布中'), approved: get('已通过'), rejected: get('已驳回') }
+  const stats = pipeline.data.value
+  const get = (status: string) => stats ? stats.reviews[status] ?? 0 : null
+  return { pending: get('pending'), publishing: get('publishing'), approved: get('approved'), rejected: get('rejected') }
 })
 
 function setFilter(key: string) {
@@ -88,7 +89,7 @@ const processLive = () =>
 <template>
   <DataPage page="review">
     <template #actions>
-      <button class="btn soft" @click="processLive">归并待处理问题</button>
+      <button class="btn soft" :disabled="!pipeline.data.value?.unmerged" @click="processLive">归并待处理问题<span v-if="pipeline.data.value?.unmerged"> · {{ pipeline.data.value.unmerged }}</span></button>
       <button class="btn primary" @click="nextReview">核对下一条</button>
     </template>
 
@@ -98,9 +99,13 @@ const processLive = () =>
       <VStat label="已通过" :value="counts.approved" unit="条" foot="审核及发布已完成" />
       <VStat label="已驳回" :value="counts.rejected" unit="条" foot="保留记录，不新增知识" />
     </div>
-    <div class="wf-review-guide">
-      <VPanel title="飞轮待审 · 人工审核三道关">
-        <template #extra><StatusPill color="neutral">审核指引</StatusPill></template>
+    <div v-if="pipeline.data.value" class="review-pipeline">
+      <span>对话快照 <strong>{{ pipeline.data.value.saved_turns }}</strong></span><span>→ 问题池 <strong>{{ pipeline.data.value.pool_total }}</strong></span><span>→ 待归并 <strong>{{ pipeline.data.value.unmerged }}</strong></span><span>→ 人工审核</span>
+      <RouterLink class="text-button" to="/client">进入真实聊天 →</RouterLink>
+    </div>
+    <p v-if="pipeline.error.value" class="notice amber">问题池统计读取失败，可刷新重试。</p>
+    <details class="wf-review-guide compact-guide">
+        <summary><strong>人工审核三道关</strong>垃圾过滤 → 时效 → 频次 · 展开指引</summary>
         <div class="wf-review-gates">
           <article v-for="[no, title, detail, tip] in gates" :key="no">
             <span class="wf-gate-no">{{ no }}</span>
@@ -112,8 +117,7 @@ const processLive = () =>
         <p class="field-hint panel-pad wf-review-guide-note">
           这是人工审核提示。剩余问题需核对可信依据、适用范围和完整答案，确认后再发布；提示不代表后端已自动执行这三项筛选。
         </p>
-      </VPanel>
-    </div>
+    </details>
     <div class="workflow-scope">
       <span><Icon name="info" />知识缺口来自未解决的问题；候选问答是另一条材料审核队列。</span>
       <button class="text-button" @click="router.push('/knowledge?tab=mining')">查看候选问答 <Icon name="arrow" /></button>
@@ -166,7 +170,12 @@ const processLive = () =>
               </td>
             </tr>
             <tr v-if="!list.data.value.items.length">
-              <td colspan="7"><div class="empty">尚无审核记录</div></td>
+              <td colspan="7"><div class="empty">
+                <strong>当前筛选下没有审核记录</strong>
+                <p v-if="pipeline.data.value?.unmerged">问题池有 {{ pipeline.data.value.unmerged }} 条尚未归并，可点击上方“归并待处理问题”。</p>
+                <p v-else-if="pipeline.data.value?.pool_total === 0">尚未采集到低置信度或负反馈问题。真实聊天中的拒答、低置信度或“未解决”反馈会先进入问题池。</p>
+                <p v-else>可切换“全部”查看历史审核记录，或等待新的未解决问题。</p>
+              </div></td>
             </tr>
           </tbody>
         </table>

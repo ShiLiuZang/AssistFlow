@@ -106,7 +106,7 @@ const openGuide = () => openModal({ title: '作业运行流程', view: SimpleMod
         <table class="workflow-job-table">
           <thead>
             <tr>
-              <th v-for="h in ['作业名称', '执行条件', '本次状态', '开始时间', '结束时间', '操作']" :key="h">{{ h }}</th>
+              <th v-for="h in ['作业名称', '执行条件', '本次状态', '本次执行时间', '操作']" :key="h">{{ h }}</th>
             </tr>
           </thead>
           <tbody id="wf-job-rows">
@@ -121,14 +121,17 @@ const openGuide = () => openModal({ title: '作业运行流程', view: SimpleMod
                 <StatusPill :color="jobColor(row.status)">{{ jobLabels[row.status] || row.status || '未知' }}</StatusPill
                 ><span v-if="row.status === 'idle' && row.log_mtime" class="table-sub">有既存日志</span>
               </td>
-              <td class="data-time-cell">{{ listStamp(row.started_at) }}</td>
-              <td class="data-time-cell">{{ listStamp(row.finished_at) }}</td>
+              <td class="data-time-cell">
+                <span v-if="row.started_at">开始 {{ listStamp(row.started_at) }}</span>
+                <span v-if="row.finished_at">结束 {{ listStamp(row.finished_at) }}</span>
+                <span v-if="!row.started_at && !row.finished_at">—</span>
+              </td>
               <td>
-                <button class="table-actions" @click="openJob(row.name)">查看日志 <Icon name="arrow" /></button>
+                <button class="table-actions" @click="openJob(row.name)">详情与运行 <Icon name="arrow" /></button>
               </td>
             </tr>
             <tr v-if="!shown.length">
-              <td colspan="6"><div class="empty">当前筛选下没有作业</div></td>
+              <td colspan="5"><div class="empty">当前筛选下没有作业</div></td>
             </tr>
           </tbody>
         </table>

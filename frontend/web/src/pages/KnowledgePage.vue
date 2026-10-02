@@ -1,6 +1,7 @@
 <!-- 知识中心（对应 V2 admin-data.js）：五个分区，当前分区写在 URL 的 ?tab= 上 -->
 <script setup lang="ts">
 import { nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import { getKbOverview } from '../api/endpoints'
 import DataPage from '../components/DataPage.vue'
@@ -22,11 +23,13 @@ const tabs: [string, string][] = [
   ['search', '检索自测'],
 ]
 const tab = useUrlState('tab', 'content')
+const route = useRoute()
+const router = useRouter()
 const overview = useQuery({ queryKey: ['kb', 'overview'], queryFn: getKbOverview })
 watch(overview.dataUpdatedAt, reportDataTime, { immediate: true })
 
 async function openMaterials() {
-  tab.value = 'import'
+  await router.replace({ query: { ...route.query, tab: 'import' } })
   await nextTick()
   const el = document.getElementById('data-source-materials')
   if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 16, behavior: 'smooth' })
@@ -37,6 +40,7 @@ const busy = () => kb.ingestBusy || kb.vectorChecking || kb.vectorStarting
 <template>
   <DataPage page="knowledge" :busy="busy()">
     <template #actions>
+      <button class="btn soft" @click="tab = 'index'">向量化<span v-if="overview.data.value?.chunks.pending"> · {{ overview.data.value.chunks.pending }} 待补</span></button>
       <button class="btn soft" @click="openMaterials">建库材料</button>
       <button class="btn primary" @click="tab = 'import'"><Icon name="plus" />录入内容</button>
     </template>

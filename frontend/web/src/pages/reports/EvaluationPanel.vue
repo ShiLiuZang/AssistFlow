@@ -4,7 +4,6 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getEvalState } from '../../api/endpoints'
-import VPanel from '../../components/VPanel.vue'
 import { actionBusy, evaluationAction } from '../../composables/useAdminActions'
 import { closeModal } from '../../composables/useModal'
 
@@ -34,7 +33,8 @@ const submit = () =>
 </script>
 
 <template>
-  <VPanel title="运行固定题集评估">
+  <details class="compact-guide evaluation-settings" :open="state.data.value?.running || !!state.error.value">
+    <summary><strong>运行固定题集评估</strong>{{ state.data.value?.running ? '正在运行 · 查看状态' : state.error.value ? '状态读取失败' : state.data.value ? '当前空闲 · 展开运行设置' : '正在读取状态…' }}</summary>
     <div class="panel-pad">
       <p class="small muted">
         {{
@@ -47,5 +47,5 @@ const submit = () =>
         <button class="btn primary" type="submit" :disabled="!state.data.value || state.data.value.running || actionBusy">核对并运行评估</button>
       </form>
     </div>
-  </VPanel>
+  </details>
 </template>

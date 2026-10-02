@@ -13,6 +13,9 @@ import './styles/v2/admin-workflows.css'
 import './styles/v2/admin-reports.css'
 import './styles/v2/admin-classification.css'
 import './styles/fixes.css'
+import './styles/admin-layout.css'
+import './styles/refinements.css'
+import './styles/live-chat.css'
 
 
 createApp(App).use(router).use(VueQueryPlugin, { queryClient }).mount('#app')

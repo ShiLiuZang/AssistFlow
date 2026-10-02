@@ -206,7 +206,7 @@ const showChunk = (id: number) => openModal({ title: '知识块详情', view: Ch
     <span>已有源文件？在下方建库材料中查看清单与切块。</span>
     <button class="btn soft" @click="emit('materials')">查看建库材料</button>
   </div>
-  <div class="split-panels data-import-panels">
+  <div class="split-panels data-import-panels" :class="{ 'has-preview': !!kb.preview }">
     <VPanel title="录入内容">
       <form id="data-preview-form" class="panel-pad" @submit.prevent="preview">
         <label class="field"
@@ -229,7 +229,7 @@ const showChunk = (id: number) => openModal({ title: '知识块详情', view: Ch
         <label class="field"
           >Markdown / TXT 正文<textarea
             id="data-import-text"
-            class="large-textarea"
+            class="knowledge-import-editor"
             required
             maxlength="40000"
             placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…"

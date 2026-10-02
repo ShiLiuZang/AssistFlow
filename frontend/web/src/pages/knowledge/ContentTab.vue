@@ -103,28 +103,23 @@ const data = computed(() => props.overview.data.value)
       <table class="data-chunk-table">
         <thead>
           <tr>
-            <th v-for="h in ['ID', '问法与答案摘要', '类型 / 分类', '向量状态', '录入时间', '操作']" :key="h">{{ h }}</th>
+            <th v-for="h in ['ID', '类型', '章节', '问法', '正文摘要', '状态 / 标记', '操作']" :key="h">{{ h }}</th>
           </tr>
         </thead>
         <tbody id="data-chunk-rows">
-          <tr v-for="row in list.data.value.items" :key="row.id">
+          <tr v-for="row in list.data.value.items" :key="row.id" :class="{ 'knowledge-pending': row.status === 'pending' }">
             <td class="mono muted">#{{ row.id }}</td>
-            <td class="data-content-cell">
-              <strong>{{ row.questions || row.section_path || '未标注问法' }}</strong>
-              <p class="data-answer-preview">{{ row.answer }}</p>
-              <span class="table-sub">{{ row.section_path || '未标注章节' }}{{ row.is_key_clause ? ' · 关键条款' : '' }}</span>
-            </td>
-            <td>
-              {{ typeName(row.content_type) }}<span class="table-sub">{{ row.category || '未标注分类' }}</span>
-            </td>
-            <td><StatusPill :color="vector(row.status)[1]">{{ vector(row.status)[0] }}</StatusPill></td>
-            <td class="data-time-cell">{{ listStamp(row.created_at) }}</td>
+            <td>{{ typeName(row.content_type) }}</td>
+            <td>{{ row.section_path || row.category || '未标注章节' }}</td>
+            <td><strong>{{ row.questions || '未标注问法' }}</strong></td>
+            <td><p class="knowledge-answer">{{ row.answer }}</p></td>
+            <td class="knowledge-markers"><StatusPill :color="vector(row.status)[1]">{{ vector(row.status)[0] }}</StatusPill><span v-if="row.is_key_clause" class="key-clause-label">关键条款</span><small class="table-sub">{{ listStamp(row.created_at) }}</small></td>
             <td>
               <button class="table-actions" @click="showChunk(row.id)">查看全文 <Icon name="arrow" /></button>
             </td>
           </tr>
           <tr v-if="!list.data.value.items.length">
-            <td colspan="6"><div class="empty">{{ emptyText }}</div></td>
+            <td colspan="7"><div class="empty">{{ emptyText }}</div></td>
           </tr>
         </tbody>
       </table>

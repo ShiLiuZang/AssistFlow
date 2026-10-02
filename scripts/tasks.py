@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = {
+    "kb-mine": "scripts.mine_kb",
     "kb-preview": "scripts.preview_kb",
     "kb-build": "scripts.build_kb",
     "kb-vectorize": "scripts.vectorize_kb",

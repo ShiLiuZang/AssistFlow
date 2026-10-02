@@ -58,6 +58,11 @@ const current = computed(() => d.value?.threshold_in_use)
       <VStat label="micro-F1" :value="dec(e.micro?.f1)" foot="汇总全部标签判断" />
       <VStat label="macro-F1" :value="dec(e.macro?.f1)" foot="各类指标平均" />
     </div>
+    <div v-if="!missing && e?.red_line_passed === false" class="cls-redline-summary" role="status">
+      <strong>容错红线未全部达标</strong>
+      <span>{{ e.classes?.filter(c => c.passed === false).map(c => c.name).join('、') || '请核对下方类目报告' }}</span>
+      <span>查看红色行及错例；总分不能替代单类验收。</span>
+    </div>
     <VPanel title="总分 · micro 与 macro 一起看">
       <div class="panel-pad">
         <Note v-if="missing" alert>{{ missing }}</Note>
@@ -74,17 +79,19 @@ const current = computed(() => d.value?.threshold_in_use)
             </div>
           </article>
         </div>
-        <p class="field-hint section-gap">micro 汇总全部标签判断；macro 对各类指标分别平均。整体成绩不能代替单类红线。</p>
-        <JobButtons :jobs="['finetune-eval']" />
+        <div class="cls-score-footer">
+          <p class="field-hint">micro 汇总全部标签判断；macro 对各类指标分别平均。</p>
+          <JobButtons :jobs="['finetune-eval']" />
+        </div>
       </div>
     </VPanel>
     <VPanel title="各类指标与容错红线">
+      <template v-if="!missing && e" #extra>
+        <StatusPill :color="e.red_line_passed === false ? 'red' : e.red_line_passed === true ? '' : 'neutral'">{{ e.red_line_passed === true ? '单类红线全部达标' : e.red_line_passed === false ? '红色行未达标' : '未返回红线结论' }}</StatusPill>
+      </template>
       <div v-if="missing" class="panel-pad"><Note alert>{{ missing }}</Note></div>
       <template v-else-if="e">
         <div class="panel-pad">
-          <Note :alert="e.red_line_passed === false">{{
-            e.red_line_passed === true ? '报告中的类目红线全部达标。' : e.red_line_passed === false ? '有类目跌破红线，请先核对红色行及错例。' : '未返回红线结论。'
-          }}</Note>
           <MetaRow
             :items="[
               ['评测时间', e.ran_at],

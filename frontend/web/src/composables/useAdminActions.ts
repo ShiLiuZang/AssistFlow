@@ -224,6 +224,7 @@ export function reviewAction(
 
 /* ---------- 作业：启动 / 停止 ---------- */
 export const jobEffects: Record<string, string> = {
+  'kb-mine': '读取最近 20 个有回复的会话，脱敏后调用聊天模型；仅保留可信材料中的原文答案，去重后写候选暂存区，不自动发布或向量化。',
   'kb-preview': '读取现有材料并输出切块预览日志，不写知识库、不调用模型。',
   'kb-build': '读取现有材料并写入 MySQL pending 原文，之后另行补齐向量。',
   'kb-vectorize': '处理启动时全库 pending 原文，调用嵌入服务并写入 Milvus。',

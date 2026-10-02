@@ -972,6 +972,18 @@ async def list_unmatched_questions(limit: int = 100) -> list[dict]:
         ]
 
 
+async def flywheel_stats() -> dict:
+    """只读全量计数，区分尚未采集和已经采集但尚未归并。"""
+    async with SessionLocal() as session:
+        pool = await session.scalar(select(func.count()).select_from(LowConfidenceQuestion))
+        unmatched = await session.scalar(select(func.count()).select_from(LowConfidenceQuestion).where(
+            LowConfidenceQuestion.review_id.is_(None)))
+        turns = await session.scalar(select(func.count()).select_from(Turn))
+        reviews = dict((await session.execute(select(Review.status, func.count()).group_by(Review.status))).all())
+    return {"saved_turns": int(turns or 0), "pool_total": int(pool or 0),
+            "unmerged": int(unmatched or 0), "reviews": reviews}
+
+
 async def list_review_candidates(limit: int = 101) -> list[dict]:
     """
     查询所有待审核项作为匹配候选
