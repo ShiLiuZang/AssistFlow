@@ -47,6 +47,26 @@ class TestHistoryTopics:
         assert history_topics.save(rows) == 0
         assert history_topics.existing_ids() == {1, 2}
 
+    def test_connections_are_closed(self, history_db, monkeypatch):
+        import sqlite3
+
+        opened = []
+        real_connect = sqlite3.connect
+
+        def connect(*args, **kwargs):
+            opened.append(real_connect(*args, **kwargs))
+            return opened[-1]
+
+        monkeypatch.setattr(history_topics.sqlite3, "connect", connect)
+        history_topics.save([{"message_id": 1, "text": "到哪了", "labels": ["物流"]}])
+        history_topics.existing_ids()
+        history_topics.distribution()
+
+        assert len(opened) >= 3
+        for db in opened:
+            with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+                db.execute("SELECT 1")
+
     @pytest.mark.parametrize(
         "rows",
         [

@@ -240,10 +240,11 @@ class TestObservability:
         (paths / "calibration.json").write_text(content, encoding="utf-8")
         assert observability.read_calibration()["status"] == "error"
 
-    @pytest.mark.xfail(strict=True, raises=KeyError,
-                       reason="已知缺陷：缺少 recommended 时 KeyError 发生在 try 之外，/overview 会返回 500")
-    def test_calibration_without_recommendation(self, paths):
+    @pytest.mark.parametrize("recommended", [None, {}, []])
+    def test_calibration_without_recommendation(self, paths, recommended):
         content = {k: v for k, v in CALIBRATION.items() if k != "recommended"}
+        if recommended is not None:
+            content["recommended"] = recommended
         (paths / "calibration.json").write_text(json.dumps(content), encoding="utf-8")
         assert observability.read_calibration()["status"] == "error"
 

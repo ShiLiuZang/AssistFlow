@@ -173,6 +173,9 @@ def read_calibration() -> dict:
         if not answerable or not absent:
             raise ValueError("calibration classes missing")
 
+        # 推荐阈值也属于必要字段，缺失时同样按损坏处理
+        in_sync = report["recommended"]["threshold"] == settings.evidence_min_confidence
+
     except FileNotFoundError:
         return {"present": False, "status": "missing", "hint": "尚未运行真实校准脚本。", "can_run": False}
     except (OSError, ValueError, KeyError, TypeError):
@@ -185,7 +188,7 @@ def read_calibration() -> dict:
         "status": "ok",
         "can_run": False,
         "in_use": settings.evidence_min_confidence,  # 当前使用的阈值
-        "in_sync": report["recommended"]["threshold"] == settings.evidence_min_confidence,  # 是否与推荐值同步
+        "in_sync": in_sync,  # 是否与推荐值同步
         "distribution": {
             "answerable": _distribution(answerable),
             "absent": _distribution(absent),
