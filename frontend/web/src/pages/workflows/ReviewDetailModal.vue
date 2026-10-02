@@ -46,6 +46,8 @@ const steps = computed(() => {
   ] as [string, boolean][]
 })
 
+// 快照里存的是精排分 rerank_score（app/core/confidence.py），旧数据兼容 score
+const scoreText = (v?: number | null) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—')
 const reopen = () => openModal({ title: '审核依据与处理结果', view: ReviewDetailModal, props: { id: props.id, preserve: true }, cls: 'workflow-dialog' })
 const approve = () => reviewAction(props.id, 'approve', reviewDraft.answer, reviewDraft.source, reopen)
 const reject = () => reviewAction(props.id, 'reject', reviewDraft.answer, reviewDraft.source, reopen)
@@ -100,7 +102,7 @@ function toKnowledge() {
               <div v-for="(chunk, i) in raw.retrieved_chunks ?? []" v-else :key="i" class="workflow-hit">
                 <strong>{{ chunk.question || chunk.section_path || '未标注问法' }}</strong>
                 <p>{{ chunk.answer || '未提供内容' }}</p>
-                <span class="small muted">检索分数 {{ chunk.score ?? '—' }}</span>
+                <span class="small muted">精排分 {{ scoreText(chunk.rerank_score ?? chunk.score) }}<template v-if="chunk.question && chunk.section_path"> · {{ chunk.section_path }}</template></span>
               </div>
             </details>
           </article>

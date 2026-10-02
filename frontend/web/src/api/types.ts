@@ -197,7 +197,7 @@ export interface ReviewItem {
     source: string | null
     reason: string | null
     created_at: string | null
-    retrieved_chunks?: { question?: string; section_path?: string; answer?: string; score?: number | null }[] | null
+    retrieved_chunks?: { question?: string; section_path?: string; answer?: string; rerank_score?: number | null; score?: number | null }[] | null
   }[]
 }
 export interface ProcessResult {
