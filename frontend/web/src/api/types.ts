@@ -73,6 +73,7 @@ export interface KbSource {
   mtime?: string
   chunks?: number
   key_clause?: number
+  features?: SourceFeatures
 }
 export interface KbOverview {
   chunks: KbChunkStats
@@ -97,6 +98,8 @@ export interface StoredChunk {
   created_at: string | null
   vector_id?: string | null
   review_id?: number | null
+  prev_chunk_id?: number | null
+  next_chunk_id?: number | null
 }
 export interface PreviewChunk {
   seq: number
@@ -116,10 +119,18 @@ export interface PreviewResult {
   total: number
   duplicates: number
   key_clause: number
+  features?: SourceFeatures
   chunks: PreviewChunk[]
   dedup_known: boolean
 }
+export interface SourceFeatures {
+  sections: number
+  table_split: boolean
+  overlap: boolean
+  multi_piece_sections?: string[]
+}
 export interface IngestResult {
+  ids: number[]
   chunks: number
   inserted: number
   skipped: number
@@ -159,6 +170,7 @@ export interface StagingDetail extends StagingRow {
     text: string | null
     valid: boolean | null
     reason: string | null
+    sha256?: string | null
   }
 }
 

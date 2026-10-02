@@ -6,8 +6,9 @@ import { useRoute } from 'vue-router'
 import { useIsFetching, useQueryClient } from '@tanstack/vue-query'
 import Icon from './Icon.vue'
 import { dataTime } from '../composables/useDataTime'
+import { actionBusy, actionNotice } from '../composables/useAdminActions'
 
-const props = defineProps<{ page: string; busy?: boolean; notice?: string }>()
+const props = defineProps<{ page: string; busy?: boolean }>()
 const route = useRoute()
 const client = useQueryClient()
 const fetching = useIsFetching()
@@ -40,7 +41,7 @@ const sourceText = computed(() =>
 
 // 与 V2 一致：刷新读数会清空本页所有缓存并重新读取
 function refresh() {
-  if (props.busy) return
+  if (props.busy || actionBusy.value) return
   client.invalidateQueries()
 }
 </script>
@@ -54,7 +55,7 @@ function refresh() {
         <p>{{ desc[page] }}</p>
       </div>
       <div class="page-actions">
-        <button class="btn" :disabled="busy || fetching > 0" @click="refresh"><Icon name="clock" />刷新读数</button>
+        <button class="btn" :disabled="busy || actionBusy || fetching > 0" @click="refresh"><Icon name="clock" />刷新读数</button>
         <slot name="actions" />
       </div>
     </div>
@@ -63,7 +64,7 @@ function refresh() {
         <span class="dot"></span><strong>{{ page === 'observability' ? '实时接口 · 只读' : '实时接口' }}</strong><span>{{ sourceText }}</span>
       </div>
     </div>
-    <div v-if="notice" class="notice data-alert" role="status">{{ notice }}</div>
+    <div v-if="actionNotice" class="notice data-alert" role="status">{{ actionNotice }}</div>
     <slot />
     <p class="source-line">
       <Icon name="file" />当前项目接口 · {{ dataTime ? `本次读取 ${dataTime}` : '等待读取' }}<template v-if="page === 'knowledge'"> · 文档版本与发布生命周期尚无对应数据</template>

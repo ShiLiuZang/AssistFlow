@@ -1,275 +1,285 @@
-<!-- 录入与切块：粘贴或选择 Markdown/TXT → 预览切块与查重 → 确认后入库；下方是建库材料清单 -->
+<!-- 录入与切块（对应 V2 importPage）：填写原文 → 预览与查重 → 核对后入库（只存原文，不向量化） -->
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { ingestText, previewFile, previewText } from '../../api/endpoints'
-import type { IngestResult, KbOverview, PreviewResult } from '../../api/types'
-import Panel from '../../components/Panel.vue'
-import Pill from '../../components/Pill.vue'
-import { confirm } from '../../composables/useConfirm'
-import { errorText, toast } from '../../composables/useToast'
-import { contentTypeNames } from '../../utils/labels'
-import { dateTime, num } from '../../utils/format'
+import { computed } from 'vue'
+import { useQueryClient, type UseQueryReturnType } from '@tanstack/vue-query'
+import { useRouter } from 'vue-router'
+import { request } from '../../api/client'
+import type { KbOverview, PreviewResult } from '../../api/types'
+import Icon from '../../components/Icon.vue'
+import StatusPill from '../../components/StatusPill.vue'
+import VPanel from '../../components/VPanel.vue'
+import { actionBusy } from '../../composables/useAdminActions'
+import { openModal } from '../../composables/useModal'
+import { useUrlState } from '../../composables/useUrlState'
+import ChunkDetailModal from './ChunkDetailModal.vue'
+import IngestConfirmModal from './IngestConfirmModal.vue'
+import MaterialsPanel from './MaterialsPanel.vue'
+import PreviewChunkHead from './PreviewChunkHead.vue'
+import { exampleText, invalidatePreview, kb, typeName } from './state'
 
-const props = defineProps<{ overview?: KbOverview }>()
+const props = defineProps<{ overview: UseQueryReturnType<KbOverview, Error> }>()
+const emit = defineEmits<{ materials: [] }>()
+const router = useRouter()
 const client = useQueryClient()
+const tab = useUrlState('tab', 'content')
+const data = computed(() => props.overview.data.value)
+const busy = computed(() => kb.ingestBusy || kb.vectorChecking || kb.vectorStarting || actionBusy.value)
 
-const MAX_CHARS = 40000
-const text = ref('')
-const contentType = ref('faq')
-const vectorize = ref(true)
-const fileNote = ref('')
-const preview = ref<PreviewResult | null>(null)
-const previewSource = ref<'text' | 'file'>('text')
-const result = ref<IngestResult | null>(null)
+function onText(value: string) {
+  if (busy.value) return
+  kb.text = value
+  invalidatePreview()
+  if (kb.fileName) kb.fileNotice = '已修改正文，入库以编辑器内容为准。'
+}
+function onType(value: string) {
+  kb.importType = value
+  invalidatePreview()
+}
+function fillExample() {
+  if (busy.value) return
+  kb.text = exampleText
+  kb.importType = 'policy'
+  invalidatePreview()
+}
 
-const typeOptions = computed(() =>
-  (props.overview?.content_types ?? ['faq', 'policy', 'manual', 'spec'].map((key) => ({ key, desc: '' }))).map((t) => ({
-    key: t.key,
-    label: contentTypeNames[t.key] ?? t.key,
-    desc: t.desc,
-  })),
-)
-
-// 正文或类型变了，旧的预览就作废，必须重新预览才能入库
-watch([text, contentType], () => {
-  if (previewSource.value === 'text') preview.value = null
-  result.value = null
-})
-
-async function onFile(event: Event) {
+/* 选择文件：只载入编辑器，不自动预览或入库 */
+async function loadFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
+  if (!file || busy.value) return
+  const token = ++kb.fileVersion
+  kb.fileReading = false
   if (!/\.(md|markdown|txt)$/i.test(file.name)) {
-    fileNote.value = `只支持 UTF-8 编码的 Markdown 或 TXT，${file.name} 未载入。`
+    kb.fileNotice = '请选择 Markdown 或 TXT 文件；原正文已保留。'
     return
   }
+  if (file.size > 1024 * 1024) {
+    kb.fileNotice = '文件过大，请选择不超过 1 MB 且正文不超过 40,000 字符的材料；原正文已保留。'
+    return
+  }
+  kb.fileReading = true
+  kb.fileNotice = `正在读取 ${file.name}，读取完成后可编辑并手动预览。`
   try {
-    const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
-    if (content.length > MAX_CHARS) {
-      fileNote.value = `${file.name} 共 ${content.length} 字，超过单次上限 ${MAX_CHARS} 字，请拆开录入。`
-      return
-    }
-    text.value = content
-    previewSource.value = 'text'
-    fileNote.value = `已载入 ${file.name}，可在下方编辑，入库以编辑器内容为准。`
-  } catch {
-    fileNote.value = `${file.name} 不是有效的 UTF-8 文本，未载入。`
+    const buffer = await file.arrayBuffer()
+    if (token !== kb.fileVersion) return
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(buffer).replace(/^﻿/, '').replace(/\r\n?/g, '\n')
+    if (!text.trim()) throw new Error('文件没有正文')
+    if (text.length > 40000) throw new Error('正文超过 40,000 字符')
+    if (text.includes('\u0000')) throw new Error('文件包含非文本内容')
+    kb.text = text
+    invalidatePreview()
+    kb.fileName = file.name
+    kb.fileNotice = `已载入 ${text.length.toLocaleString('zh-CN')} 字符，可修改正文后预览；尚未入库。`
+  } catch (error: any) {
+    if (token !== kb.fileVersion) return
+    kb.fileNotice = `${error.name === 'TypeError' ? '文件不是有效的 UTF-8 文本，请转换编码后重试' : error.message || '文件读取失败'}；原正文已保留。`
+  } finally {
+    if (token === kb.fileVersion) kb.fileReading = false
   }
 }
 
-const previewMut = useMutation({
-  mutationFn: () => previewText(text.value, contentType.value),
-  onSuccess: (data) => {
-    preview.value = data
-    previewSource.value = 'text'
-  },
-  onError: (err) => toast(errorText(err), 'error'),
-})
-
-const filePreviewMut = useMutation({
-  mutationFn: (file: string) => previewFile(file),
-  onSuccess: (data) => {
-    preview.value = data
-    previewSource.value = 'file'
-    result.value = null
-  },
-  onError: (err) => toast(errorText(err), 'error'),
-})
-
-const ingestMut = useMutation({
-  mutationFn: () => ingestText(text.value, contentType.value, vectorize.value),
-  onSuccess: (data) => {
-    result.value = data
-    toast(`已入库 ${data.inserted} 块，跳过重复 ${data.skipped} 块`)
-    client.invalidateQueries({ queryKey: ['kb'] })
-  },
-  onError: (err) => toast(errorText(err), 'error'),
-})
+/* 预览切块 */
+async function preview() {
+  if (kb.previewBusy || kb.fileReading || busy.value) return
+  const text = kb.text
+  const contentType = kb.importType
+  const version = ++kb.previewVersion
+  kb.previewBusy = true
+  kb.preview = null
+  kb.previewError = ''
+  try {
+    const result = await request<PreviewResult>('/api/kb/preview', { method: 'POST', body: { text, content_type: contentType } })
+    if (
+      !Array.isArray(result.chunks) ||
+      !Number.isInteger(result.total) ||
+      result.total !== result.chunks.length ||
+      !Number.isInteger(result.duplicates) ||
+      result.duplicates < 0 ||
+      result.duplicates > result.total
+    )
+      throw new Error('切块结果不完整，请重新预览。')
+    if (version === kb.previewVersion) {
+      kb.preview = result
+      kb.ingestResult = null
+      if (result.dedup_known) kb.ingestError = null
+    }
+  } catch (error: any) {
+    if (version === kb.previewVersion) kb.previewError = error.message
+  } finally {
+    if (version === kb.previewVersion) kb.previewBusy = false
+  }
+}
 
 const canIngest = computed(
-  () => preview.value && previewSource.value === 'text' && preview.value.total > 0 && !ingestMut.isPending.value,
+  () =>
+    !kb.previewBusy &&
+    !kb.fileReading &&
+    !busy.value &&
+    !kb.ingestResult &&
+    !kb.ingestError &&
+    !!kb.preview?.dedup_known &&
+    kb.preview.total > kb.preview.duplicates,
 )
-
-async function doIngest() {
-  if (!preview.value) return
-  const p = preview.value
-  const ok = await confirm({
-    title: '确认入库',
-    body: `将切出 ${p.total} 块，其中疑似重复 ${p.duplicates} 块（入库时自动跳过）、关键条款 ${p.key_clause} 块。\n${
-      vectorize.value ? '入库后立即向量化（会调用嵌入服务）。' : '只写入 MySQL，向量化稍后在"索引状态"补齐。'
-    }`,
-    confirmText: '确认入库',
+const previewNote = computed(() => {
+  const p = kb.preview
+  if (!p) return ''
+  return kb.ingestBusy
+    ? '正在保存原文，请等待返回结果。'
+    : kb.ingestResult
+      ? '本次录入已返回结果；再次录入前请重新预览。'
+      : !p.total
+        ? '没有切出正文，请补充内容。'
+        : !p.dedup_known
+          ? '查重未完成，请恢复数据服务后重新预览。'
+          : p.total === p.duplicates
+            ? '内容全部重复，本次无需新增。'
+            : '预览尚未写入；提交时后端会再次查重，实际新增数量以返回结果为准。'
+})
+function confirmIngest() {
+  if (!canIngest.value || !kb.preview) return
+  openModal({
+    title: '核对本次录入',
+    view: IngestConfirmModal,
+    props: { text: kb.text, contentType: kb.importType, version: kb.previewVersion },
+    cls: 'knowledge-dialog',
   })
-  if (ok) ingestMut.mutate()
 }
+
+/* 录入结果的后续操作 */
+function toInventory() {
+  router.replace({ query: { tab: 'content' } })
+  client.invalidateQueries()
+}
+function ingestNext() {
+  if (busy.value) return
+  kb.text = ''
+  kb.ingestResult = null
+  kb.ingestError = null
+  invalidatePreview()
+}
+const showChunk = (id: number) => openModal({ title: '知识块详情', view: ChunkDetailModal, props: { id }, cls: 'knowledge-dialog' })
 </script>
 
 <template>
-  <div class="grid-2">
-    <Panel title="录入正文">
-      <div class="toolbar">
-        <select v-model="contentType" aria-label="内容类型">
-          <option v-for="t in typeOptions" :key="t.key" :value="t.key">{{ t.label }}</option>
-        </select>
-        <label class="btn small file">
-          选择文件
-          <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" @change="onFile" />
-        </label>
-        <label class="check"><input v-model="vectorize" type="checkbox" /> 入库后立即向量化</label>
+  <div v-if="kb.ingestBusy" class="notice data-ingest-status" role="status">正在保存原文，请勿重复提交。录入结果返回后会重新读取库存。</div>
+  <div v-else-if="kb.ingestError" class="data-ingest-result">
+    <VPanel :title="kb.ingestError.uncertain ? '录入结果待核对' : '录入未完成'">
+      <div class="panel-pad">
+        <div class="notice data-alert" :class="kb.ingestError.uncertain ? 'amber' : 'data-ingest-error'" role="alert">{{ kb.ingestError.message }}</div>
+        <p class="field-hint">
+          {{ kb.ingestError.uncertain ? '请求可能已写入原文，请先查看库存，再重新预览查重；不要直接重复提交。' : '原文仍保留在表单中，请检查内容后重新预览。' }}
+        </p>
+        <div class="form-actions"><button class="btn soft" @click="toInventory">查看知识库存</button></div>
       </div>
-      <p v-if="fileNote" class="notice warn">{{ fileNote }}</p>
-      <textarea
-        v-model="text"
-        rows="14"
-        aria-label="Markdown 正文"
-        placeholder="粘贴 Markdown，例如：## 退货运费…"
-        :maxlength="MAX_CHARS"
-        spellcheck="false"
-      />
-      <div class="foot">
-        <span class="small muted">{{ num(text.length) }} / {{ num(MAX_CHARS) }} 字</span>
-        <div class="buttons">
-          <button class="btn" type="button" :disabled="!text.trim() || previewMut.isPending.value" @click="previewMut.mutate()">
-            {{ previewMut.isPending.value ? '预览中…' : '预览切块' }}
-          </button>
-          <button class="btn primary" type="button" :disabled="!canIngest" @click="doIngest">
-            {{ ingestMut.isPending.value ? '入库中…' : '确认入库' }}
-          </button>
+    </VPanel>
+  </div>
+  <div v-else-if="kb.ingestResult" class="data-ingest-result">
+    <VPanel :title="kb.ingestResult.inserted ? '原文已入库' : '内容已存在，本次未新增'">
+      <template #extra><StatusPill>真实录入结果</StatusPill></template>
+      <div class="panel-pad">
+        <div class="data-ingest-counts">
+          <span>实际新增 <b>{{ kb.ingestResult.inserted }}</b> 块</span>
+          <span>跳过重复 <b>{{ kb.ingestResult.skipped }}</b> 块</span>
+          <span><StatusPill color="amber">本次未执行向量化</StatusPill></span>
+        </div>
+        <div v-if="kb.ingestResult.ids.length" class="data-ingest-ids">
+          <span class="muted">入库记录</span>
+          <button v-for="id in kb.ingestResult.ids" :key="id" class="btn soft" @click="showChunk(id)">#{{ id }}</button>
+        </div>
+        <p class="field-hint">
+          {{ kb.ingestResult.inserted ? '原文已保存，录入时为待向量化。点击记录核对完整正文和当前状态。' : '提交时再次查重，全部内容已存在。' }}
+        </p>
+        <div class="form-actions">
+          <button class="btn soft" @click="toInventory">查看知识库存</button>
+          <button v-if="kb.ingestResult.inserted" class="btn primary" @click="tab = 'index'">查看索引并补齐</button>
+          <button class="btn" @click="ingestNext">录入下一份</button>
         </div>
       </div>
-      <p v-if="!preview && text.trim()" class="small muted">入库前必须先预览，核对切块和查重结果。</p>
-
-      <div v-if="result" class="notice">
-        切出 {{ result.chunks }} 块，新增 {{ result.inserted }} 块，跳过重复 {{ result.skipped }} 块。
-        <template v-if="result.vectorized !== null">向量化 {{ result.vectorized }} 块。</template>
-        <template v-else>尚未向量化，可在"索引状态"补齐。</template>
-      </div>
-    </Panel>
-
-    <Panel :title="preview ? `切块预览 · ${preview.source}` : '切块预览'">
-      <p v-if="!preview" class="muted">点击"预览切块"后在这里核对每一块的内容。</p>
-      <template v-else>
-        <p class="summary">
-          共 {{ preview.total }} 块 · 关键条款 {{ preview.key_clause }} ·
-          <template v-if="preview.dedup_known">疑似重复 {{ preview.duplicates }}</template>
-          <template v-else>数据库不可用，未能查重</template>
-          <span v-if="previewSource === 'file'"> · 材料文件只读预览，正式建库请运行"离线建库"作业</span>
-        </p>
-        <ol class="chunks">
-          <li v-for="c in preview.chunks" :key="c.seq" :class="{ dup: c.duplicate }">
-            <div class="chunk-head">
-              <span class="mono">#{{ c.seq }}</span>
-              <strong>{{ c.questions }}</strong>
-              <Pill v-if="c.is_key_clause" tone="amber">关键条款</Pill>
-              <Pill v-if="c.is_table" tone="blue">表格</Pill>
-              <Pill v-if="c.duplicate" tone="red">重复</Pill>
-            </div>
-            <div class="small muted">{{ c.section_path }} · {{ c.chars }} 字</div>
-            <p class="clamp">{{ c.answer }}</p>
-          </li>
-        </ol>
-      </template>
-    </Panel>
+    </VPanel>
   </div>
 
-  <Panel title="建库材料">
-    <p v-if="!overview" class="muted">读取知识库概览后显示材料清单。</p>
-    <div v-else class="table-wrap">
-      <table class="data">
-        <thead>
-          <tr>
-            <th>文件</th>
-            <th>类型</th>
-            <th class="num">字数</th>
-            <th class="num">切块</th>
-            <th class="num">关键条款</th>
-            <th>修改时间</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in overview.sources" :key="s.file">
-            <td class="mono">{{ s.path }}</td>
-            <td>{{ contentTypeNames[s.content_type] ?? s.content_type }}</td>
-            <td class="num">{{ num(s.chars) }}</td>
-            <td class="num">{{ num(s.chunks) }}</td>
-            <td class="num">{{ num(s.key_clause) }}</td>
-            <td class="small">{{ s.present ? dateTime(s.mtime) : '文件不存在' }}</td>
-            <td>
-              <button
-                class="btn small ghost"
-                type="button"
-                :disabled="!s.present || filePreviewMut.isPending.value"
-                @click="filePreviewMut.mutate(s.file)"
-              >
-                预览切块
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </Panel>
+  <div class="data-import-steps" aria-label="录入流程">
+    <span>01 填写原文</span><Icon name="arrow" /><span>02 预览与查重</span><Icon name="arrow" /><span>03 核对后入库</span>
+  </div>
+  <div class="data-material-entry">
+    <span>已有源文件？在下方建库材料中查看清单与切块。</span>
+    <button class="btn soft" @click="emit('materials')">查看建库材料</button>
+  </div>
+  <div class="split-panels data-import-panels">
+    <VPanel title="录入内容">
+      <form id="data-preview-form" class="panel-pad" @submit.prevent="preview">
+        <label class="field"
+          >内容类型<select id="data-import-type" :value="kb.importType" :disabled="busy" @change="onType(($event.target as HTMLSelectElement).value)">
+            <option v-for="row in data?.content_types ?? []" :key="row.key" :value="row.key">{{ typeName(row.key) }}</option>
+          </select></label
+        >
+        <div class="data-file-picker">
+          <div class="form-actions">
+            <label class="btn soft" :class="{ disabled: busy }">
+              {{ kb.fileReading ? '正在读取文件…' : '选择文件' }}
+              <input id="data-import-file" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" hidden :disabled="busy" @change="loadFile" />
+            </label>
+            <span id="data-file-name">{{ kb.fileName || 'Markdown / TXT · UTF-8' }}</span>
+          </div>
+          <p id="data-file-notice" class="field-hint" aria-live="polite">
+            {{ kb.fileNotice || '文件载入下方编辑器，最多 40,000 字符；不会自动保存源文件或入库。PDF / Word 暂不支持。' }}
+          </p>
+        </div>
+        <label class="field"
+          >Markdown / TXT 正文<textarea
+            id="data-import-text"
+            class="large-textarea"
+            required
+            maxlength="40000"
+            placeholder="粘贴需要入库的完整材料，保留标题、适用范围和限制条件…"
+            :value="kb.text"
+            :disabled="busy"
+            @input="onText(($event.target as HTMLTextAreaElement).value)"
+          ></textarea
+        ></label>
+        <div class="form-actions">
+          <button class="btn primary" type="submit" :disabled="kb.previewBusy || kb.fileReading || busy"><Icon name="file" />{{ kb.previewBusy ? '正在预览…' : '预览切块' }}</button>
+          <button class="btn" type="button" :disabled="busy" @click="fillExample">填入示例材料</button>
+        </div>
+        <p id="data-preview-hint" class="field-hint">预览不会写入。确认入库后保存原文，状态为待向量化；此步骤不启动向量化。</p>
+      </form>
+    </VPanel>
+    <VPanel title="切块预览">
+      <div id="data-preview-result" class="panel-pad" aria-live="polite">
+        <div v-if="kb.previewBusy" class="data-empty-state compact" role="status">
+          <h2>正在切块与查重</h2>
+          <p>预览不写入知识库。</p>
+        </div>
+        <div v-else-if="kb.previewError" class="notice data-alert" role="alert">{{ kb.previewError }}</div>
+        <div v-else-if="!kb.preview" class="data-empty-state compact">
+          <Icon name="file" />
+          <h2>先预览，再核对</h2>
+          <p>切块结果会保留章节、关键条款和查重状态。</p>
+        </div>
+        <template v-else>
+          <div class="data-preview-summary">
+            <span>切块 <b>{{ kb.preview.total }}</b></span>
+            <span>关键条款 <b>{{ kb.preview.key_clause }}</b></span>
+            <span v-if="kb.preview.dedup_known">重复 <b>{{ kb.preview.duplicates }}</b></span>
+            <span v-else>查重状态：未知</span>
+          </div>
+          <div class="data-preview-list">
+            <article v-for="row in kb.preview.chunks" :key="row.seq" class="data-preview-chunk" :class="{ 'is-key-clause': row.is_key_clause }">
+              <PreviewChunkHead :row="row" />
+              <p>{{ row.answer }}</p>
+              <div class="small muted">{{ row.chars }} 字</div>
+            </article>
+          </div>
+          <div class="data-import-next">
+            <p class="field-hint">{{ previewNote }}</p>
+            <button class="btn primary" :disabled="!canIngest" @click="confirmIngest">{{ kb.ingestBusy ? '正在入库…' : '核对并入库' }}</button>
+          </div>
+        </template>
+      </div>
+    </VPanel>
+  </div>
+  <div id="data-source-materials" class="section-gap">
+    <MaterialsPanel :data="data" />
+  </div>
 </template>
-
-<style scoped>
-textarea {
-  width: 100%;
-}
-.file {
-  position: relative;
-  overflow: hidden;
-}
-.file input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.buttons {
-  display: flex;
-  gap: 8px;
-}
-.summary {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.chunks {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-  max-height: 560px;
-  overflow: auto;
-}
-.chunks li {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.chunks li.dup {
-  background: var(--red-soft);
-}
-.chunk-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.chunks p {
-  margin: 6px 0 0;
-  font-size: 13px;
-}
-</style>

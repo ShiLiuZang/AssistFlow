@@ -19,3 +19,4 @@ data/graph-checkpoints.sqlite*
 # 本地预览产物（Claude 截图用，不入库）
 frontend/minihelp-v2/_vue-preview/
 _vue-preview.tgz
+_sync.tgz
