@@ -329,6 +329,15 @@ uv run --group ml python -m scripts.tasks classifier-up
 python -m compileall -q app scripts migrations
 ```
 
+### 运行单元测试
+
+单元测试位于 `tests/`，LLM、Milvus、MySQL 均以替身代替，无需 `.env` 或外部服务。
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
 ### 数据库迁移
 
 ```bash
