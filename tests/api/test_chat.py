@@ -6,6 +6,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.api import graph_chat, sse
+from app.graph import turns
 from app.main import app
 from app.schemas.chat import ChatRequest
 from tests.api.conftest import conversation, sse_frames
@@ -26,7 +27,6 @@ class TestSseHelpers:
     @pytest.mark.parametrize(
         "event,expected",
         [
-            ({"event": "end"}, "data: [DONE]\n\n"),
             ({"event": "error", "message": "x"}, 'event: error\ndata: {"message":"图执行失败，请重试"}\n\n'),
             ({"event": "citations", "citations": [1]}, 'data: {"event": "citations", "items": [1]}\n\n'),
             ({"event": "done", "request_id": "r"}, 'data: {"event": "done", "request_id": "r", "conversation_id": 7}\n\n'),
@@ -34,18 +34,21 @@ class TestSseHelpers:
             ({"delta": "x"}, 'data: {"delta": "x"}\n\n'),
         ],
     )
-    def test_graph_event_to_sse(self, event, expected):
-        assert sse.graph_event_to_sse(event, 7) == expected
+    def test_event_to_sse(self, event, expected):
+        assert sse.event_to_sse(turns.normalize_event(event, 7)) == expected
+
+    def test_end_event_dropped(self):
+        assert turns.normalize_event({"event": "end"}, 7) is None
 
     @pytest.mark.parametrize(
         "content,status",
         [('{"found": true}', "success"), ('{"error": "x"}', "error"), ("not json", "error"), ("[1]", "error")],
     )
     def test_restored_tool_status(self, content, status):
-        assert sse.restored_tool_status(content) == status
+        assert turns.restored_tool_status(content) == status
 
     def test_restore_messages(self):
-        messages = sse.restore_messages([
+        messages = turns.restore_messages([
             row(1, "user", "查订单"),
             row(2, "assistant", None, tool_calls=[CALL], turn_message_id="m1"),
             row(3, "tool", '{"found": true}', tool_call_id="c1"),
@@ -75,11 +78,11 @@ class TestCountCoveredMessages:
 
     @pytest.mark.parametrize("cursor,count", [(0, 0), (3, 3), (5, 4)])
     def test_counts_up_to_cursor(self, cursor, count):
-        assert graph_chat.count_covered_messages(self.RECORDS, self.MESSAGES, cursor) == count
+        assert turns.count_covered_messages(self.RECORDS, self.MESSAGES, cursor) == count
 
     def test_db_longer_than_graph(self):
         with pytest.raises(ValueError, match="比图历史长"):
-            graph_chat.count_covered_messages(self.RECORDS, self.MESSAGES[:2], 0)
+            turns.count_covered_messages(self.RECORDS, self.MESSAGES[:2], 0)
 
     @pytest.mark.parametrize(
         "index,replacement",
@@ -94,11 +97,11 @@ class TestCountCoveredMessages:
         messages = list(self.MESSAGES)
         messages[index] = replacement
         with pytest.raises(ValueError, match="不一致"):
-            graph_chat.count_covered_messages(self.RECORDS, messages, 0)
+            turns.count_covered_messages(self.RECORDS, messages, 0)
 
     def test_cursor_must_point_to_model_message(self):
         with pytest.raises(ValueError, match="游标"):
-            graph_chat.count_covered_messages(self.RECORDS, self.MESSAGES, 4)
+            turns.count_covered_messages(self.RECORDS, self.MESSAGES, 4)
 
 
 class FakeGraph:
@@ -143,7 +146,7 @@ def graph_repo(repo, monkeypatch):
     repo.set("create_conversation", return_value=42)
     repo.set("get_pending_ticket_call", return_value=None)
     repo.schedule = Mock()
-    monkeypatch.setattr(graph_chat, "schedule_persisted_summary", repo.schedule)
+    monkeypatch.setattr(turns, "schedule_persisted_summary", repo.schedule)
     return repo
 
 

@@ -1,25 +1,20 @@
 """渠道调度：去重、合并连发、安抚、人工接待、文字确认、坐席回复回发、补处理、会话轮换。"""
 import asyncio
-import json
 from datetime import timedelta
 
 import pytest
 from sqlalchemy import select, update
 
 from app.channels import dispatcher as dispatcher_module, store
-from app.channels.dispatcher import BUSY_TEXT, HOLD_TEXT, MEDIA_TEXT, Dispatcher, parse_frames, render
+from app.channels.dispatcher import BUSY_TEXT, HOLD_TEXT, MEDIA_TEXT, Dispatcher, render
 from app.channels.pinduoduo import PddInbound
 from app.channels.sender import SendError
 from app.core import handoff
 from app.core.realtime import Hub
+from app.graph import turns
 from app.db.models import ChannelMessage, ChannelSession, Handoff
 
 ORDER = "231003-123456789012345"
-
-
-def sse(data, event=None):
-    head = f"event: {event}\n" if event else ""
-    return f"{head}data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 class FakeSender:
@@ -40,26 +35,23 @@ class FakeSender:
 
 
 class FakeGraph:
-    """替代 stream_graph_chat：记录收到的消息，按脚本输出 SSE 帧。"""
+    """替代 turns.chat_turn：记录收到的消息，按脚本返回事件。"""
 
-    def __init__(self, answer="您好，有什么可以帮您？", delay=0.0, frames=None):
+    def __init__(self, answer="您好，有什么可以帮您？", delay=0.0, events=None):
         self.calls = []
-        self.answer, self.delay, self.frames = answer, delay, frames
+        self.answer, self.delay, self.events = answer, delay, events
 
     async def __call__(self, request, conversation_id, runtime):
         self.calls.append((request.user_id, conversation_id, request.message))
-        yield sse({"event": "conversation", "conversation_id": conversation_id})
         if self.delay:
             await asyncio.sleep(self.delay)
-        for frame in self.frames or [sse({"delta": self.answer}), sse({"event": "done"})]:
-            yield frame
-        yield "data: [DONE]\n\n"
+        return self.events or [{"delta": self.answer}, {"event": "done"}]
 
 
 @pytest.fixture
 def graph(monkeypatch):
     fake = FakeGraph()
-    monkeypatch.setattr(dispatcher_module, "stream_graph_chat", fake)
+    monkeypatch.setattr(dispatcher_module, "chat_turn", fake)
     return fake
 
 
@@ -67,10 +59,10 @@ def graph(monkeypatch):
 def pending(monkeypatch):
     state = {"value": None}
 
-    async def fake_pending(self, runtime, user_id, conversation_id):
+    async def fake_pending(runtime, user_id, conversation_id):
         return state["value"]
 
-    monkeypatch.setattr(Dispatcher, "_pending", fake_pending)
+    monkeypatch.setattr(dispatcher_module, "pending_interrupt", fake_pending)
     return state
 
 
@@ -110,10 +102,6 @@ async def rows(factory, direction):
 
 
 class TestFrames:
-    def test_parse_frames(self):
-        frames = [sse({"delta": "a"}), 'event: error\ndata: {"message":"x"}\n\n', ": ping\n\n", "data: [DONE]\n\n"]
-        assert parse_frames(frames) == [{"delta": "a"}, {"message": "x", "event": "error"}]
-
     def test_render(self):
         assert render([{"delta": "你好"}, {"delta": "呀"}, {"event": "done"}]) == [("answer", "你好呀")]
         routed = [{"event": "conversation"}, {"event": "handoff", "handoff": {"status": "queued"}, "message": {}},
@@ -207,7 +195,7 @@ class TestInboundFlow:
         assert await store.order_owner("pinduoduo", ORDER) == {"user_id": user_id, "goods_name": "保温杯"}
 
     async def test_graph_error_sends_busy_text(self, make, sender, graph):
-        graph.frames = ['event: error\ndata: {"message":"图执行失败"}\n\n']
+        graph.events = [{"event": "error", "message": "图执行失败"}]
         dispatcher = make()
         await dispatcher.receive(inbound({"msg_id": "m1", "text": "在吗"}))
         await settle(dispatcher)
@@ -265,11 +253,10 @@ class TestPendingActions:
 
         async def fake_decision(request, tool_call, runtime):
             decisions.append((request.confirmed, request.tool_call_id, tool_call["id"], request.user_id))
-            yield sse({"delta": "工单已创建，工单号：T1"})
-            yield "data: [DONE]\n\n"
+            return [{"delta": "工单已创建，工单号：T1"}]
 
-        monkeypatch.setattr(dispatcher_module.repository, "list_messages", fake_list)
-        monkeypatch.setattr(dispatcher_module, "stream_ticket_decision", fake_decision)
+        monkeypatch.setattr(turns.repository, "list_messages", fake_list)
+        monkeypatch.setattr(dispatcher_module, "ticket_decision_turn", fake_decision)
 
         await dispatcher.receive(inbound({"msg_id": "m1", "text": "运费谁出"}))
         await settle(dispatcher)
@@ -290,9 +277,9 @@ class TestPendingActions:
 
         async def fake_select(request, runtime):
             selections.append((request.request_id, request.order_id, request.cancelled))
-            yield sse({"delta": "这笔订单已发货"})
+            return [{"delta": "这笔订单已发货"}]
 
-        monkeypatch.setattr(dispatcher_module, "stream_order_selection", fake_select)
+        monkeypatch.setattr(dispatcher_module, "order_selection_turn", fake_select)
         await dispatcher.receive(inbound({"msg_id": "m1", "text": "哪个都不是"}))
         await settle(dispatcher)
         assert "没看懂" in sender.texts[-1] and selections == []

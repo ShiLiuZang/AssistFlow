@@ -10,21 +10,18 @@
 5. 出站：转成纯文本、去掉站外链接和联系方式、按长度拆分后经渠道桥发出
 6. 人工：坐席在工作台的回复和接入、结束提示，经实时推送回调发回平台
 
-图的执行复用网页聊天的流程（stream_graph_chat / stream_ticket_decision / stream_order_selection），
-这里只解析它们输出的 SSE 帧，保证两个入口的行为一致。
+图的执行与网页聊天共用 app.graph.turns（chat_turn / ticket_decision_turn / order_selection_turn），
+这里只把它们返回的事件转成纯文本，保证两个入口的行为一致。
 
 调度状态在进程内存里，只支持单实例（与阶段 2 的实时推送相同，阶段 4 再换）。
 进程重启时，最近还没处理的入站消息会补处理。
 """
 
 import asyncio
-import json
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
-from app.api.actions import _interrupt, stream_order_selection, stream_ticket_decision
-from app.api.graph_chat import _thread_config, stream_graph_chat
 from app.channels import store
 from app.channels.pinduoduo import CHANNEL, USER_PREFIX, PddInbound, event_text, sanitize
 from app.channels.sender import send_with_retry
@@ -33,8 +30,9 @@ from app.channels.text import (
 )
 from app.core import handoff
 from app.core.intent import Intent, quick_intent
-from app.core.conversation_lock import conversation_lock
-from app.db import repository
+from app.graph.turns import (
+    chat_turn, find_ticket_call, order_selection_turn, pending_interrupt, ticket_decision_turn,
+)
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.schemas.chat import ChatRequest
 
@@ -48,32 +46,10 @@ RECOVER_MINUTES = 10
 TEXT_KINDS = {"text", "goods", "order"}
 
 
-def parse_frames(frames: list[str]) -> list[dict]:
-    """把聊天接口输出的 SSE 帧还原成事件字典（跳过 [DONE] 和心跳）。"""
-    events = []
-    for frame in frames:
-        name = data = None
-        for line in frame.splitlines():
-            if line.startswith("event:"):
-                name = line[6:].strip()
-            elif line.startswith("data:"):
-                data = line[5:].strip()
-        if not data or data == "[DONE]":
-            continue
-        try:
-            payload = json.loads(data)
-        except ValueError:
-            continue
-        if name and "event" not in payload:
-            payload["event"] = name
-        events.append(payload)
-    return events
-
-
 def render(events: list[dict]) -> list[tuple[str, str]]:
     """一轮事件转成要发给买家的消息 [(类型, 文本)]。"""
     if any(e.get("event") == "done" and e.get("handoff") is True for e in events):
-        return []  # 人工接待中，消息已进坐席队列（graph_chat 在 done 里带 handoff: true）
+        return []  # 人工接待中，消息已进坐席队列（chat_turn 在 done 里带 handoff: True）
     answer = "".join(str(e["delta"]) for e in events if "delta" in e).strip()
     replies = [("answer", answer)] if answer else []
     interrupt = next((e for e in events if e.get("event") == "interrupt"), None)
@@ -187,51 +163,37 @@ class Dispatcher:
         if runtime is None:
             return [("notice", BUSY_TEXT)]
 
-        pending = await self._pending(runtime, user_id, conversation_id)
+        pending = await pending_interrupt(runtime, user_id, conversation_id)
         if pending is not None and pending.get("kind") == "select_order":
             orders = pending.get("orders") or []
             choice = parse_order_choice(message, orders)
             if choice is None:
                 return [("answer", "没看懂您选的是哪一笔订单。\n" + order_prompt(orders))]
-            frames = stream_order_selection(SelectOrderRequest(
+            turn = order_selection_turn(SelectOrderRequest(
                 conversation_id=conversation_id, user_id=user_id, request_id=pending["request_id"],
                 order_id=choice or None, cancelled=choice is False), runtime)
         elif pending is not None:
             decision = parse_confirmation(message)
             if decision is None:
                 return [("answer", "请先处理这张工单，再继续其他问题。\n" + ticket_prompt(pending.get("preview") or {}))]
-            tool_call = await self._ticket_call(conversation_id, pending["tool_call_id"])
+            tool_call = await find_ticket_call(conversation_id, pending["tool_call_id"])
             if tool_call is None:
                 return [("notice", BUSY_TEXT)]
-            frames = stream_ticket_decision(ResumeTicketRequest(
+            turn = ticket_decision_turn(ResumeTicketRequest(
                 conversation_id=conversation_id, user_id=user_id, confirmed=decision,
                 tool_call_id=pending["tool_call_id"]), tool_call, runtime)
         else:
             request = ChatRequest(message=message, conversation_id=conversation_id, user_id=user_id)
-            frames = stream_graph_chat(request, conversation_id, runtime)
-        return render(await self._collect(session, frames))
+            turn = chat_turn(request, conversation_id, runtime)
+        return render(await self._collect(session, turn))
 
-    async def _pending(self, runtime, user_id: str, conversation_id: int) -> dict | None:
-        async with conversation_lock(user_id, conversation_id):
-            snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
-            return _interrupt(snapshot)
-
-    @staticmethod
-    async def _ticket_call(conversation_id: int, call_id: str) -> dict | None:
-        records = await repository.list_messages(conversation_id)
-        return next((call for record in reversed(records) for call in record.tool_calls or []
-                     if call.get("id") == call_id and call.get("name") == "create_ticket"), None)
-
-    async def _collect(self, session: dict, frames: AsyncIterator[str]) -> list[dict]:
-        async def collect() -> list[str]:
-            return [frame async for frame in frames]
-
-        task = asyncio.create_task(collect())
+    async def _collect(self, session: dict, turn: Awaitable[list[dict]]) -> list[dict]:
+        task = asyncio.ensure_future(turn)
         if self.hold_seconds > 0:
             done, _ = await asyncio.wait({task}, timeout=self.hold_seconds)
             if not done:
                 await self._deliver(session, [("hold", HOLD_TEXT)])
-        return parse_frames(await task)
+        return await task
 
     # ==================== 出站 ====================
 
