@@ -34,7 +34,7 @@ from langchain_core.messages import ToolMessage
 from app.graph.state import ConversationState
 from langchain_core.messages import AIMessage
 from app.core.coref import entities, resolve
-from app.core.retrieval import retrieve_policy_detailed
+from app.kb.retrieval import retrieve_policy_detailed
 from app.tools.context import ToolContext
 from app.tools.engine import (
     check_tool_call,

@@ -19,11 +19,11 @@ Services 容器：
 import json
 from app.config import settings
 from typing import Literal
-from app.core.rerank import rerank_hits
+from app.kb.rerank import rerank_hits
 from app.core.llm import get_chat_model
 from app.tools.context import ToolContext
 from pydantic import BaseModel
-from app.core.retrieval import (
+from app.kb.retrieval import (
     search_knowledge,
     search_knowledge_detailed,
 )

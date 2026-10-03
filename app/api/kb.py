@@ -10,11 +10,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from app.core import jobs, retrieval
+from app.core import jobs
+from app.kb import retrieval
 from app.db import knowledge_repo, staging_repo
 from app.kb import chunking, dedup, documents, dualwrite, milvus_client
 from app.kb.sources import CONTENT_TYPE_DESC, CONTENT_TYPES, KB_DIR, SOURCE_TYPES
-from app.core.trusted_sources import validate_review_source
+from app.kb.trusted_sources import validate_review_source
 from app.core.auth import current_staff, require_admin, require_reviewer
 
 logger = logging.getLogger(__name__)

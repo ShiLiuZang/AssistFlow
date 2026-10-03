@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core import evaluation, flywheel
+from app.core import flywheel
+from app.kb import evaluation
 from app.core.flywheel_evaluation import calibrate, comparable
 from app.core.intent_evaluation import evaluate_intent
 

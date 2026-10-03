@@ -6,7 +6,8 @@ import httpx
 import pytest
 
 from app.config import settings
-from app.core import intent, rerank, retrieval
+from app.core import intent
+from app.kb import rerank, retrieval
 from app.core.intent import Intent
 from app.graph import adapters, prefetch
 from tests.graph.conftest import ANSWER, GOOD_HIT, make_services, runtime_for

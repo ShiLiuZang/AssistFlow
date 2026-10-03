@@ -3,7 +3,7 @@
 import logging
 
 from app.core import embeddings
-from app.core.trusted_sources import validate_review_source
+from app.kb.trusted_sources import validate_review_source
 from app.db import review_repo
 from app.kb import milvus_client
 from app.kb.sources import SOURCE_TYPES

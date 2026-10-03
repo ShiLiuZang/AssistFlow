@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core import history_topics, jobs, taxonomy, topic_views, trusted_sources
+from app.core import history_topics, jobs, taxonomy, topic_views
+from app.kb import trusted_sources
 from app.kb.sources import KB_DIR, SOURCE_TYPES
 
 

@@ -295,7 +295,7 @@ class FakeIndex:
 class TestPublishReview:
     @pytest.fixture
     def repo(self, monkeypatch):
-        from app.core.trusted_sources import validate_review_source
+        from app.kb.trusted_sources import validate_review_source
 
         answer = verbatim(SOURCE)
         digest = validate_review_source("怎么退货", answer, SOURCE)

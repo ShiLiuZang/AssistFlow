@@ -5,7 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from app.core.evaluation import evaluate
+from app.kb.evaluation import evaluate
 from app.db import trace_repo
 
 

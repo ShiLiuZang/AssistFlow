@@ -1,11 +1,11 @@
-"""app.core.rerank：重排结果映射、接口地址、重试策略（HTTP 用 MockTransport）。"""
+"""app.kb.rerank：重排结果映射、接口地址、重试策略（HTTP 用 MockTransport）。"""
 import json
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
-from app.core import rerank
+from app.kb import rerank
 
 HITS = [{"id": i, "question": f"q{i}", "answer": f"a{i}", "score": 0.1 * i} for i in range(3)]
 

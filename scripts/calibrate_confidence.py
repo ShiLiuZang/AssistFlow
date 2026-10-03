@@ -9,7 +9,7 @@ from pathlib import Path
 from app.config import settings
 from app.core.confidence import compute_evidence_confidence
 from app.core.flywheel_evaluation import calibrate
-from app.core.retrieval import search_knowledge
+from app.kb.retrieval import search_knowledge
 
 
 async def run(dataset: Path, output: Path, version: str) -> dict:

@@ -43,7 +43,7 @@ from app.api.channels import router as channels_router  # 外部渠道（拼多�
 from app.channels import service as channels  # 外部渠道接入
 from app.config import settings  # 配置管理
 from app.core import auth  # 认证配置校验
-from app.core import rerank  # 精排服务（关闭连接池）
+from app.kb import rerank  # 精排服务（关闭连接池）
 from app.core.instance_lock import single_instance  # 单进程保护
 from app.core.safety import install_log_redaction  # 日志脱敏
 from app.core.realtime import install_shutdown_hook  # 实时推送

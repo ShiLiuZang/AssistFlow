@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.core.flywheel import process_pending
-from app.core.trusted_sources import validate_review_source
+from app.kb.trusted_sources import validate_review_source
 from app.db import flywheel_repo, review_repo
 from app.kb.review_publish import publish_review
 from app.kb.sources import KB_DIR, SOURCE_TYPES

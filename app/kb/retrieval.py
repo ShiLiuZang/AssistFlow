@@ -7,7 +7,8 @@
 from app.config import settings
 from app.core import query_understanding
 from app.kb import milvus_client
-from app.core import embeddings, rerank
+from app.core import embeddings
+from app.kb import rerank
 import asyncio
 import re
 import math

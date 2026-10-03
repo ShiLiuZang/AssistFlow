@@ -1,9 +1,9 @@
-"""app.core.retrieval：检索编排。Milvus、向量化、问题改写、重排均为替身。"""
+"""app.kb.retrieval：检索编排。Milvus、向量化、问题改写、重排均为替身。"""
 from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core import retrieval
+from app.kb import retrieval
 from app.kb import milvus_client
 from tests.helpers import make_hit
 
