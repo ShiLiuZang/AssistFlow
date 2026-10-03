@@ -5,7 +5,8 @@
 - "staff"：所有在线坐席，推送队列变化和顾客新消息
 - "conversation:<id>"：该会话的顾客页面，推送坐席回复和接待状态
 
-只在单实例内有效；多实例部署（阶段 4）需要换成 Redis Pub/Sub。
+默认 Hub 只在单实例内有效；多实例部署（阶段 4）时在启动时用 use_hub() 换成共享实现
+（例如 Redis Pub/Sub），接口见 HubBackend。调用方通过 realtime.hub 访问，不在导入时绑定对象。
 订阅者处理不过来（队列满）时直接断开，客户端重连后重新拉取一次即可。
 add_listener 注册的回调会收到所有频道的事件（外部渠道据此把坐席回复发回平台）。
 
@@ -20,6 +21,7 @@ import signal
 import threading
 from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
+from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,22 @@ def conversation_channel(conversation_id: int) -> str:
     return f"conversation:{conversation_id}"
 
 
+class HubBackend(Protocol):
+    def publish(self, channel: str, event: dict) -> None: ...
+
+    def stream(self, channel: str, *, heartbeat: float = HEARTBEAT_SECONDS) -> AsyncIterator[str]:
+        """以 SSE 帧输出频道事件。"""
+
+    def add_listener(self, listener: Callable[[str, dict], None]) -> None: ...
+
+    def remove_listener(self, listener: Callable[[str, dict], None]) -> None: ...
+
+    def close_all_threadsafe(self) -> None: ...
+
+
 class Hub:
+    """进程内实现。"""
+
     def __init__(self) -> None:
         self._subscribers: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -118,7 +135,13 @@ class Hub:
             self._drop(channel, queue)
 
 
-hub = Hub()
+hub: HubBackend = Hub()
+
+
+def use_hub(backend: HubBackend) -> None:
+    """替换实时推送实现（启动时调用）。"""
+    global hub
+    hub = backend
 
 
 def install_shutdown_hook() -> None:

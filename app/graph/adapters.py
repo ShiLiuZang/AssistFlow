@@ -19,11 +19,11 @@ Services 容器：
 import json
 from app.config import settings
 from typing import Literal
-from app.core.rerank import rerank_hits
+from app.kb.rerank import rerank_hits
 from app.core.llm import get_chat_model
 from app.tools.context import ToolContext
 from pydantic import BaseModel
-from app.core.retrieval import (
+from app.kb.retrieval import (
     search_knowledge,
     search_knowledge_detailed,
 )
@@ -69,6 +69,8 @@ from app.core.intent import (
 )
 from functools import partial
 from app.tools.audit import AuditSink
+from app.core import handoff
+from app.db import flywheel_repo
 
 
 @dataclass
@@ -98,6 +100,10 @@ class Services:
         retrieve_detailed: 详细检索服务（带候选列表）
         check_sufficient: 证据充分性检查服务
         rerank_policy: 政策重排序服务
+        request_handoff: 转人工排队，返回给顾客的话术
+        save_turn: 保存回答快照（数据飞轮）
+        capture_low_confidence: 拒答或兜底的问题进入问题池
+        evidence_min_confidence: 证据置信度阈值
     """
     classify: Callable
     retrieve: Callable
@@ -115,6 +121,9 @@ class Services:
     check_sufficient: Callable | None = None
     rerank_policy: Callable | None = None
     request_handoff: Callable | None = None  # 转人工排队，见 app.core.handoff.request_from_graph
+    save_turn: Callable | None = None
+    capture_low_confidence: Callable | None = None
+    evidence_min_confidence: float = 0.5
     speculative_retrieve: bool = False  # 意图识别期间预取知识检索（见 app.graph.prefetch）
     speculative_answer: bool = False  # 证据检查期间预取回答
 
@@ -145,6 +154,10 @@ def make_services(registry: Registry | None = None) -> Services:
         retrieve_detailed=retrieve_detailed,
         check_sufficient=check_sufficient,
         rerank_policy=rerank_hits,
+        request_handoff=handoff.request_from_graph,
+        save_turn=flywheel_repo.save_turn,
+        capture_low_confidence=flywheel_repo.capture_low_confidence,
+        evidence_min_confidence=settings.evidence_min_confidence,
         speculative_retrieve=settings.speculative_retrieve,
         speculative_answer=settings.speculative_answer,
     )

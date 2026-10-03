@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 
 from app.core import handoff, tickets
 from app.core.auth import Staff, current_staff, require_agent
-from app.core.realtime import STAFF, hub
+from app.core import realtime
+from app.core.realtime import STAFF
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(current_staff), Depends(require_agent)])
@@ -150,7 +151,7 @@ async def staff_list() -> list[dict]:
 
 @router.get("/stream")
 async def stream() -> StreamingResponse:
-    return StreamingResponse(hub.stream(STAFF), media_type="text/event-stream", headers=SSE_HEADERS)
+    return StreamingResponse(realtime.hub.stream(STAFF), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 # ==================== 工单 ====================
@@ -177,7 +178,8 @@ async def create_ticket(body: TicketIn, staff: Staff = Depends(current_staff)) -
         )
     except Exception as exc:
         raise _fail(exc) from exc
-    hub.publish(STAFF, {"type": "ticket", "ticket_no": ticket["ticket_no"], "conversation_id": body.conversation_id})
+    realtime.hub.publish(STAFF, {"type": "ticket", "ticket_no": ticket["ticket_no"],
+                                 "conversation_id": body.conversation_id})
     return ticket
 
 
@@ -199,5 +201,6 @@ async def ticket_status(body: TicketStatusIn, ticket_no: str = Path(max_length=5
         row = await tickets.backend.transition(ticket_no, body.status, staff.username, body.note)
     except Exception as exc:
         raise _fail(exc) from exc
-    hub.publish(STAFF, {"type": "ticket", "ticket_no": ticket_no, "conversation_id": row["conversation_id"]})
+    realtime.hub.publish(STAFF, {"type": "ticket", "ticket_no": ticket_no,
+                                 "conversation_id": row["conversation_id"]})
     return row

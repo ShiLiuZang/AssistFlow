@@ -62,12 +62,12 @@ def test_lifespan_wires_runtime_and_cleans_up(monkeypatch, tmp_path):
     with TestClient(main.app) as client:
         assert client.app.state.graph_runtime is runtime
         assert client.app.state.langfuse_client is langfuse
-        assert observability._default_trace_sink is main.repository.insert_trace_span
+        assert observability._default_trace_sink is main.trace_repo.insert_trace_span
 
     transport, servers = discover.await_args.args
     assert servers == ["logistics"]
     assert transport._url("logistics") == "http://mcp.invalid/logistics"
-    assert services.audit_sink is main.repository.insert_tool_audit
+    assert services.audit_sink is main.trace_repo.insert_tool_audit
     assert opened == [(services, main.settings.graph_checkpoint_path)]
     summaries_closed.assert_awaited_once()
     closed.assert_awaited_once_with(langfuse)

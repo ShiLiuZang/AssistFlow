@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.core.retrieval import search_knowledge
+from app.kb.retrieval import search_knowledge
 from app.core.evidence import answer_from_hits
 from app.core.auth import current_staff, require_admin
 from app.core.ratelimit import limit_staff_model
@@ -102,7 +102,7 @@ async def run_evaluation(request: EvaluationRequest):
     为什么需要锁：
     评测是重量级操作，并发执行会导致资源争抢和结果混乱
     """
-    from app.core.evaluation import evaluate
+    from app.kb.evaluation import evaluate
 
     # 检查是否有评测正在运行
     if EVAL_LOCK.locked():

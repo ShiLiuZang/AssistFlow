@@ -47,6 +47,11 @@ class TestMakeServices:
         assert services.check_sufficient is not None
         assert services.rerank_policy is not None
         assert services.retrieve_detailed is adapters.retrieve_detailed
+        # 节点需要的数据飞轮写入、转人工和阈值都由这里装配，节点自己不引用 db / core.handoff / settings
+        assert services.save_turn is adapters.flywheel_repo.save_turn
+        assert services.capture_low_confidence is adapters.flywheel_repo.capture_low_confidence
+        assert services.request_handoff is adapters.handoff.request_from_graph
+        assert services.evidence_min_confidence == adapters.settings.evidence_min_confidence
 
     async def test_with_mcp_reports_issues(self):
         class Transport:

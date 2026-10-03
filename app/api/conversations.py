@@ -13,8 +13,9 @@ from fastapi.responses import StreamingResponse
 from app.core import handoff
 from app.core.auth import current_customer
 from app.core.ratelimit import limit_customer_chat
-from app.core.realtime import conversation_channel, hub
-from app.db import repository
+from app.core import realtime
+from app.core.realtime import conversation_channel
+from app.db import conversation_repo
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ async def list_conversations(user_id: str = Depends(current_customer)) -> list[d
 
     返回格式为字典列表，便于前端展示会话卡片
     """
-    conversations = await repository.list_conversations(user_id)
+    conversations = await conversation_repo.list_conversations(user_id)
 
     return [
         {
@@ -73,7 +74,7 @@ async def list_messages(
     - 会话不存在或不属于该用户时返回404
     """
     # 校验会话存在性和所属权
-    conversation = await repository.get_conversation(
+    conversation = await conversation_repo.get_conversation(
         conversation_id,
         user_id,
     )
@@ -85,7 +86,7 @@ async def list_messages(
         )
 
     # 查询对话消息（不包括tool角色）
-    messages = await repository.list_dialog_messages(conversation_id)
+    messages = await conversation_repo.list_dialog_messages(conversation_id)
 
     return [
         {
@@ -148,9 +149,9 @@ async def cancel_handoff(conversation_id: int, user_id: str = Depends(current_cu
 @router.get("/api/conversations/{conversation_id}/events")
 async def conversation_events(conversation_id: int, user_id: str = Depends(current_customer)) -> StreamingResponse:
     """SSE：推送坐席回复与接待状态变化。只在单实例内有效（阶段 4 换 Redis）。"""
-    if await repository.get_conversation(conversation_id, user_id) is None:
+    if await conversation_repo.get_conversation(conversation_id, user_id) is None:
         raise HTTPException(404, "会话不存在")
     return StreamingResponse(
-        hub.stream(conversation_channel(conversation_id)), media_type="text/event-stream",
+        realtime.hub.stream(conversation_channel(conversation_id)), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

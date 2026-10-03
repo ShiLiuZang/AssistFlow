@@ -113,6 +113,7 @@
 │   │   ├── routing.py        # 条件路由
 │   │   ├── build.py          # 图组装
 │   │   ├── runtime.py        # 执行运行时
+│   │   ├── turns.py          # 一轮对话的执行（网页与渠道共用）
 │   │   ├── checkpoint.py     # 持久化与恢复
 │   │   └── adapters.py       # 服务适配与消息窗口
 │   ├── tools/                # 工具系统（11 个模块）
@@ -131,10 +132,12 @@
 │   │   ├── milvus_client.py  # Milvus 操作
 │   │   ├── mining.py         # 从日志提取知识
 │   │   ├── review_publish.py # 审核与发布流程
+│   │   ├── retrieval.py      # 知识检索编排
+│   │   ├── rerank.py         # 精排
 │   │   └── ...
 │   ├── db/                   # 数据库层（4 个模块）
 │   │   ├── models.py         # SQLAlchemy 模型（13 张表）
-│   │   ├── repository.py     # 数据访问层
+│   │   ├── *_repo.py         # 按领域划分的数据访问（会话、工单、知识、审核等）
 │   │   └── database.py       # 异步会话工厂
 │   ├── schemas/              # Pydantic 数据模型
 │   ├── config.py             # 配置管理

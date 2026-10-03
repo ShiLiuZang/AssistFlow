@@ -10,11 +10,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from app.core import jobs, retrieval
-from app.db import repository
+from app.core import jobs
+from app.kb import retrieval
+from app.db import knowledge_repo, staging_repo
 from app.kb import chunking, dedup, documents, dualwrite, milvus_client
 from app.kb.sources import CONTENT_TYPE_DESC, CONTENT_TYPES, KB_DIR, SOURCE_TYPES
-from app.core.trusted_sources import validate_review_source
+from app.kb.trusted_sources import validate_review_source
 from app.core.auth import current_staff, require_admin, require_reviewer
 
 logger = logging.getLogger(__name__)
@@ -126,7 +127,7 @@ async def _existing_fingerprints() -> set[str] | None:
         前端会在duplicate列显示"未知"而非"重复/不重复"
     """
     try:
-        return {_fingerprint(q, a) for q, a in await repository.list_chunk_pairs()}
+        return {_fingerprint(q, a) for q, a in await knowledge_repo.list_chunk_pairs()}
     except Exception:
         return None
 
@@ -216,13 +217,13 @@ async def overview() -> dict:
     """
     milvus = await milvus_state()
     try:
-        stats = await repository.knowledge_stats()
+        stats = await knowledge_repo.knowledge_stats()
         recent = [{"id": r.id, "questions": r.questions, "answer": r.answer[:120],
                    "category": r.category, "section_path": r.section_path,
                    "content_type": r.content_type, "is_key_clause": bool(r.is_key_clause),
                    "status": r.vectorize_status,
                    "created_at": r.created_at.isoformat(timespec="seconds") if r.created_at else None}
-                  for r in await repository.list_recent_chunks(12)]
+                  for r in await knowledge_repo.list_recent_chunks(12)]
         db_err = None
     except Exception as e:
         stats = {"total": None, "pending": None, "done": None,
@@ -230,7 +231,7 @@ async def overview() -> dict:
         recent, staging, db_err = [], None, f"{type(e).__name__}: {e}"
     else:
         try:
-            staging = await repository.staging_stats()
+            staging = await staging_repo.staging_stats()
         except Exception:
             logger.warning("对话暂存表尚不可用", exc_info=True)
             staging = None
@@ -272,7 +273,7 @@ async def chunks(
     content_type: Literal["faq", "policy", "manual", "spec", "mined", "unmarked"] | None = None,
 ) -> dict:
     try:
-        result = await repository.list_knowledge_chunks(
+        result = await knowledge_repo.list_knowledge_chunks(
             page=page, size=size, q=q, status=status, content_type=content_type,
         )
     except Exception as exc:
@@ -283,7 +284,7 @@ async def chunks(
 @router.get("/chunks/{chunk_id}")
 async def chunk_detail(chunk_id: int = Path(ge=1)) -> dict:
     try:
-        row = await repository.get_knowledge_chunk(chunk_id)
+        row = await knowledge_repo.get_knowledge_chunk(chunk_id)
     except Exception as exc:
         raise HTTPException(503, "知识块暂时无法读取") from exc
     if row is None:
@@ -448,7 +449,7 @@ async def ingest(body: IngestIn) -> dict:
     return {"content_type": ctype, "chunks": len(chunks), "inserted": len(ids),
             "skipped": len(skipped), "skipped_samples": skipped[:5], "ids": ids,
             "vectorized": vectorized, "milvus": await milvus_state(),
-            "chunk_stats": await repository.knowledge_stats()}
+            "chunk_stats": await knowledge_repo.knowledge_stats()}
 
 
 @router.post("/vectorize", dependencies=[Depends(require_admin)])
@@ -476,7 +477,7 @@ async def vectorize() -> dict:
         n = await dualwrite.vectorize_pending()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"向量化失败:{type(e).__name__}: {e}") from e
-    return {"vectorized": n, "chunk_stats": await repository.knowledge_stats(),
+    return {"vectorized": n, "chunk_stats": await knowledge_repo.knowledge_stats(),
             "milvus": await milvus_state()}
 
 
@@ -559,12 +560,12 @@ async def staging(limit: int = Query(30, ge=1, le=100)) -> dict:
         kept列是待审队列，人工审核后变为approved或rejected
     """
     try:
-        stats = await repository.staging_stats()
+        stats = await staging_repo.staging_stats()
         rows = {}
         for st in ("extracted", "kept", "discarded", "approved", "rejected"):
             rows[st] = [{"id": r.id, "batch_no": r.batch_no, "source_ref": r.source_ref,
                          "question": r.question, "answer": r.answer[:160]}
-                        for r in await repository.list_staging_by_status(st, limit=limit)]
+                        for r in await staging_repo.list_staging_by_status(st, limit=limit)]
     except Exception as exc:
         raise HTTPException(status_code=503, detail="对话暂存表尚未迁移或无法读取") from exc
     return {"stats": stats, "rows": rows, "limit": limit}
@@ -596,7 +597,7 @@ def _candidate_material(question: str, answer: str, source_ref: str | None) -> d
 @router.get("/staging/{candidate_id}")
 async def staging_detail(candidate_id: int = Path(ge=1)) -> dict:
     try:
-        rows = await repository.list_staging_by_ids([candidate_id])
+        rows = await staging_repo.list_staging_by_ids([candidate_id])
     except Exception as exc:
         raise HTTPException(503, "候选问答暂时无法读取") from exc
     if not rows:
@@ -650,7 +651,7 @@ async def staging_approve(body: StagingReviewIn) -> dict:
         向量化失败时保留pending块，可重试
         重试时复用同一知识块，不会重复写MySQL
     """
-    rows = await repository.list_staging_by_ids(body.ids, status="kept")
+    rows = await staging_repo.list_staging_by_ids(body.ids, status="kept")
     if not rows:
         raise HTTPException(status_code=409, detail="这些行不在待审状态(可能已被处理过)")
 
@@ -678,7 +679,7 @@ async def staging_approve(body: StagingReviewIn) -> dict:
             detail=f"写回知识库失败({type(e).__name__}),已写块保留 pending,修好嵌入/Milvus 后可重试") from e
 
     # 更新暂存表状态
-    await repository.set_staging_status([r.id for r in rows], "approved")
+    await staging_repo.set_staging_status([r.id for r in rows], "approved")
     logger.info("挖知识人工采纳 staging=%s → knowledge_chunks %s", [r.id for r in rows], ids)
     return {"approved": len(rows), "chunk_ids": ids}
 
@@ -704,8 +705,8 @@ async def staging_reject(body: StagingReviewIn) -> dict:
     幂等设计:
         只认status='kept'的行，重复点击不会报错
     """
-    rows = await repository.list_staging_by_ids(body.ids, status="kept")
+    rows = await staging_repo.list_staging_by_ids(body.ids, status="kept")
     if not rows:
         raise HTTPException(status_code=409, detail="这些行不在待审状态(可能已被处理过)")
-    await repository.set_staging_status([r.id for r in rows], "rejected")
+    await staging_repo.set_staging_status([r.id for r in rows], "rejected")
     return {"rejected": len(rows)}

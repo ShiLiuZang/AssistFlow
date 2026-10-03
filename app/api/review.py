@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.core.flywheel import process_pending
-from app.core.trusted_sources import validate_review_source
-from app.db import repository
+from app.kb.trusted_sources import validate_review_source
+from app.db import flywheel_repo, review_repo
 from app.kb.review_publish import publish_review
 from app.kb.sources import KB_DIR, SOURCE_TYPES
 from app.core.auth import Staff, current_staff, require_reviewer
@@ -79,11 +79,11 @@ async def queue(
         raise HTTPException(status_code=400, detail="审核状态无效")
     if page is not None:
         try:
-            result = await repository.review_queue_page(STATUS_BY_LABEL.get(status), page=page, size=size, q=q)
+            result = await review_repo.review_queue_page(STATUS_BY_LABEL.get(status), page=page, size=size, q=q)
         except Exception as exc:
             raise HTTPException(503, "审核队列暂时无法读取") from exc
         return {**result, "items": [_display(row) for row in result["items"]]}
-    rows = await repository.list_review_queue(STATUS_BY_LABEL.get(status))
+    rows = await review_repo.list_review_queue(STATUS_BY_LABEL.get(status))
     return {"items": [_display(row) for row in rows]}
 
 
@@ -103,7 +103,7 @@ async def material(source_ref: str) -> dict:
 @router.get("/stats")
 async def stats() -> dict:
     try:
-        return await repository.flywheel_stats()
+        return await flywheel_repo.flywheel_stats()
     except Exception as exc:
         raise HTTPException(503, "问题池统计暂时无法读取") from exc
 
@@ -150,7 +150,7 @@ async def detail(
     异常:
         404: 审核项不存在
     """
-    row = await repository.get_review_detail(review_id)
+    row = await review_repo.get_review_detail(review_id)
     if row is None:
         raise HTTPException(status_code=404, detail="审核项不存在")
     return _display(row)
@@ -179,7 +179,7 @@ async def reject(
         409: 审核项状态冲突（已处理过）
     """
     try:
-        return _display(await repository.reject_review(review_id, staff.username))
+        return _display(await review_repo.reject_review(review_id, staff.username))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -222,7 +222,7 @@ async def approve(
     """
     answer = request.approved_answer.strip()
     source_ref = request.source_ref.strip()
-    row = await repository.get_review_detail(review_id)
+    row = await review_repo.get_review_detail(review_id)
     if row is None:
         raise HTTPException(status_code=404, detail="审核项不存在")
 
@@ -236,7 +236,7 @@ async def approve(
 
     # 保存审核结果
     try:
-        frozen = await repository.approve_review(
+        frozen = await review_repo.approve_review(
             review_id, staff.username, answer, source_ref, source_digest,
         )
     except ValueError as exc:
@@ -248,7 +248,7 @@ async def approve(
     except Exception:
         # 发布失败但审核记录已保存，返回202让前端稍后重试
         response.status_code = 202
-        current = await repository.get_review_detail(review_id)
+        current = await review_repo.get_review_detail(review_id)
         return _display(current or frozen)
 
 
@@ -286,7 +286,7 @@ async def retry_publish(
     except Exception:
         # 发布失败，返回202和当前状态
         response.status_code = 202
-        current = await repository.get_review_detail(review_id)
+        current = await review_repo.get_review_detail(review_id)
         if current is None:
             raise HTTPException(status_code=404, detail="审核项不存在")
         return _display(current)

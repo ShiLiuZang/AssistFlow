@@ -113,6 +113,7 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 │   │   ├── routing.py        # Conditional routing
 │   │   ├── build.py          # Graph assembly
 │   │   ├── runtime.py        # Execution runtime
+│   │   ├── turns.py          # One conversation turn (shared by web and channels)
 │   │   ├── checkpoint.py     # Persistence & recovery
 │   │   └── adapters.py       # Service wiring & message window
 │   ├── tools/                # Tool system (11 modules)
@@ -131,10 +132,12 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 │   │   ├── milvus_client.py  # Milvus operations
 │   │   ├── mining.py         # Knowledge extraction from logs
 │   │   ├── review_publish.py # Review & publish workflow
+│   │   ├── retrieval.py      # Retrieval orchestration
+│   │   ├── rerank.py         # Reranking
 │   │   └── ...
 │   ├── db/                   # Database layer (4 modules)
 │   │   ├── models.py         # SQLAlchemy models (13 tables)
-│   │   ├── repository.py     # Data access layer
+│   │   ├── *_repo.py         # Data access split by domain (conversations, tickets, knowledge, reviews...)
 │   │   └── database.py       # Async session factory
 │   ├── schemas/              # Pydantic models
 │   ├── config.py             # Configuration management

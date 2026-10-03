@@ -42,7 +42,7 @@ async def main():
     if args.local:
         print(f"本地标注检查通过：{len(cases)} 题；未运行真实检索")
         return
-    from app.core.evaluation import evaluate
+    from app.kb.evaluation import evaluate
     report = await evaluate(cases, k=args.top_k, generate=not args.skip_gen)
     report.update(created_at=datetime.now(timezone.utc).isoformat(), dataset=cases)
     output = ROOT / "reports/04.json"

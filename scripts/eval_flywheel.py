@@ -5,8 +5,8 @@ import asyncio
 import json
 from pathlib import Path
 
-from app.core.evaluation import evaluate
-from app.db import repository
+from app.kb.evaluation import evaluate
+from app.db import trace_repo
 
 
 async def run(dataset: Path, dataset_version: str, config_version: str, kb_revision: str, k: int) -> int:
@@ -42,7 +42,7 @@ async def run(dataset: Path, dataset_version: str, config_version: str, kb_revis
         "failures": summary["failures"],
         "cases": len(cases),
     }
-    return await repository.save_eval_run({
+    return await trace_repo.save_eval_run({
         "dataset_version": dataset_version,
         "case_ids": ids,
         "config_version": config_version,

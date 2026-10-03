@@ -3,8 +3,8 @@
 import logging
 
 from app.core import embeddings
-from app.core.trusted_sources import validate_review_source
-from app.db import repository
+from app.kb.trusted_sources import validate_review_source
+from app.db import review_repo
 from app.kb import milvus_client
 from app.kb.sources import SOURCE_TYPES
 
@@ -62,7 +62,7 @@ class MilvusReviewIndex:
 
 async def publish_review(review_id: int, index=None) -> dict:
     """SQL 准备、向量 upsert、可见性确认、SQL 完成四步可重放。"""
-    review = await repository.get_review_detail(review_id)
+    review = await review_repo.get_review_detail(review_id)
     if review is None:
         raise LookupError("review not found")
     if review["status"] not in {"publishing", "approved"}:
@@ -74,7 +74,7 @@ async def publish_review(review_id: int, index=None) -> dict:
         )
         if current_digest != review["source_digest"]:
             raise ValueError("可信材料版本已变化，停止发布")
-        chunk = await repository.prepare_review_chunk(
+        chunk = await review_repo.prepare_review_chunk(
             review_id,
             SOURCE_TYPES[review["source_ref"]],
         )
@@ -82,12 +82,12 @@ async def publish_review(review_id: int, index=None) -> dict:
         await target.upsert(chunk)
         if not await target.visible(chunk):
             raise RuntimeError("审核知识块尚未在向量库可见")
-        result = await repository.finish_review_publish(review_id, chunk["id"])
+        result = await review_repo.finish_review_publish(review_id, chunk["id"])
         return {**result, "chunk_id": chunk["id"]}
     except Exception as exc:
         code = type(exc).__name__
         try:
-            await repository.note_review_publish_error(review_id, code)
+            await review_repo.note_review_publish_error(review_id, code)
         except Exception:
             logger.exception("failed to record publish error for review %s", review_id)
         raise

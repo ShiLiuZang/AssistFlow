@@ -6,6 +6,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from app.api import actions
+from app.graph import turns
 from app.main import app
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from tests.api.conftest import conversation, sse_frames
@@ -27,7 +28,7 @@ def action_repo(repo, monkeypatch):
     repo.set("save_turn")
     repo.set("capture_low_confidence")
     repo.schedule = Mock()
-    monkeypatch.setattr(actions, "schedule_persisted_summary", repo.schedule)
+    monkeypatch.setattr(turns, "schedule_persisted_summary", repo.schedule)
     return repo
 
 
@@ -227,6 +228,6 @@ class TestSelectOrder:
         frames = sse_frames("".join([c async for c in actions.stream_order_selection(request, runtime)]))
 
         assert frames == [
-            (None, {"event": "error", "message": "订单选择或消息保存失败，请检查当前待处理状态"}),
+            ("error", {"message": "订单选择或消息保存失败，请检查当前待处理状态"}),
             (None, "[DONE]"),
         ]

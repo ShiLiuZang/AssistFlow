@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core import history_topics, jobs, taxonomy, topic_views, trusted_sources
+from app.core import history_topics, jobs, taxonomy, topic_views
+from app.kb import trusted_sources
 from app.kb.sources import KB_DIR, SOURCE_TYPES
 
 
@@ -109,8 +110,8 @@ class TestTopicViews:
     def repo(self, monkeypatch):
         dist = AsyncMock(return_value={"total": 3, "classes": []})
         questions = AsyncMock(return_value={"items": ["db"]})
-        monkeypatch.setattr(topic_views.repository, "topic_distribution", dist)
-        monkeypatch.setattr(topic_views.repository, "topic_questions", questions)
+        monkeypatch.setattr(topic_views.topic_repo, "topic_distribution", dist)
+        monkeypatch.setattr(topic_views.topic_repo, "topic_questions", questions)
         return dist, questions
 
     @pytest.fixture

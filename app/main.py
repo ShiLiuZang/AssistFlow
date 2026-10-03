@@ -42,13 +42,13 @@ from app.api.channels import router as channels_router  # 外部渠道（拼多�
 # 核心服务导入
 from app.channels import service as channels  # 外部渠道接入
 from app.config import settings  # 配置管理
-from app.core import auth, handoff  # 认证配置校验、转人工
-from app.core import rerank  # 精排服务（关闭连接池）
+from app.core import auth  # 认证配置校验
+from app.kb import rerank  # 精排服务（关闭连接池）
 from app.core.instance_lock import single_instance  # 单进程保护
 from app.core.safety import install_log_redaction  # 日志脱敏
 from app.core.realtime import install_shutdown_hook  # 实时推送
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
-from app.db import repository  # 数据库操作
+from app.db import trace_repo
 from app.graph.adapters import make_services_with_mcp  # 服务容器和 MCP 工具集成
 from app.graph.checkpoint import persistent_runtime  # 图运行时和检查点管理
 from app.tools.mcp_client import StreamableHTTPTransport  # MCP HTTP 传输层
@@ -116,9 +116,8 @@ async def _lifespan(app: FastAPI):
     # 3. 注入数据落库回调
     # audit_sink: 记录工具调用参数和结果，用于审计和重放（git commit ded9aed）
     # trace_sink: 记录执行追踪 span，用于性能分析和调试（git commit 805cba5）
-    services.audit_sink = repository.insert_tool_audit
-    services.trace_sink = repository.insert_trace_span
-    services.request_handoff = handoff.request_from_graph
+    services.audit_sink = trace_repo.insert_tool_audit
+    services.trace_sink = trace_repo.insert_trace_span
 
     # 4. 记录 MCP 工具发现异常
     for issue in issues:

@@ -10,7 +10,7 @@ from scripts import create_staff
 @pytest.fixture
 def saved(monkeypatch):
     upsert = AsyncMock()
-    monkeypatch.setattr(create_staff.repository, "upsert_staff_user", upsert)
+    monkeypatch.setattr(create_staff.staff_repo, "upsert_staff_user", upsert)
     monkeypatch.setattr(create_staff, "engine", type("E", (), {"dispose": AsyncMock()})())
     return upsert
 

@@ -8,7 +8,7 @@ from app.channels.dispatcher import Dispatcher
 from app.channels.pinduoduo import PddOrderProvider
 from app.channels.sender import BridgeSender, DryRunSender
 from app.config import settings
-from app.core.realtime import hub
+from app.core import realtime
 from app.tools import orders
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ async def running(runtime_getter: Callable):
         max_chars=settings.pdd_max_message_chars,
     )
     orders.register_provider(provider)
-    hub.add_listener(dispatcher.on_publish)
+    realtime.hub.add_listener(dispatcher.on_publish)
     try:
         try:
             recovered = await dispatcher.recover()
@@ -59,7 +59,7 @@ async def running(runtime_getter: Callable):
             logger.exception("拼多多渠道：补处理未完成消息失败")
         yield dispatcher
     finally:
-        hub.remove_listener(dispatcher.on_publish)
+        realtime.hub.remove_listener(dispatcher.on_publish)
         orders.unregister_provider(provider)
         await dispatcher.close()
         dispatcher = None

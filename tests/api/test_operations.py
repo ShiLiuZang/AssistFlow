@@ -149,7 +149,7 @@ class TestKnowledge:
     def test_report_missing_then_written_by_evaluate(self, client, report_path, monkeypatch):
         assert client.get("/api/rag-eval/report").json()["status"] == "not_evaluated"
         evaluate = AsyncMock(return_value={"status": "evaluated"})
-        monkeypatch.setattr("app.core.evaluation.evaluate", evaluate)
+        monkeypatch.setattr("app.kb.evaluation.evaluate", evaluate)
 
         result = client.post("/api/knowledge/evaluate", json={"top_k": 3}).json()
 
@@ -159,7 +159,7 @@ class TestKnowledge:
         assert client.get("/rag-eval").json() == result
 
     def test_evaluate_timeout_keeps_old_report(self, client, report_path, monkeypatch):
-        monkeypatch.setattr("app.core.evaluation.evaluate", AsyncMock(side_effect=TimeoutError()))
+        monkeypatch.setattr("app.kb.evaluation.evaluate", AsyncMock(side_effect=TimeoutError()))
         assert client.post("/api/knowledge/evaluate", json={}).status_code == 504
         assert not report_path.exists()
 

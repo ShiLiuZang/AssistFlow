@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.core.handoff import queue_reply
 from app.graph import nodes
 from app.graph.routing import confidence_gate, route_by_intent, should_continue
 from tests.graph.conftest import (
@@ -432,9 +433,9 @@ class TestHandoffNodes:
     async def test_queues_handoff_with_state(self, repo, route, reason):
         calls = []
 
-        async def request_handoff(state, why):
+        async def request_handoff(state, why, lead):
             calls.append((state, why))
-            return {"status": "queued", "position": 3}
+            return queue_reply({"status": "queued", "position": 3}, lead)
 
         services = make_services(route=route, request_handoff=request_handoff)
         result = await runtime_for(services).run_turn("我要找人工", "u1", "7")
@@ -444,21 +445,21 @@ class TestHandoffNodes:
         assert "已为您转接人工客服，前面还有 2 位顾客" in result["answer"]
 
     async def test_first_in_queue(self, repo):
-        async def request_handoff(state, why):
-            return {"status": "queued", "position": 1}
+        async def request_handoff(state, why, lead):
+            return queue_reply({"status": "queued", "position": 1}, lead)
 
         result = await runtime_for(make_services(route="human", request_handoff=request_handoff)).run_turn("转人工", "u1", "7")
         assert "您是下一位" in result["answer"]
 
     async def test_already_with_agent(self, repo):
-        async def request_handoff(state, why):
-            return {"status": "active", "position": None}
+        async def request_handoff(state, why, lead):
+            return queue_reply({"status": "active", "position": None}, lead)
 
         result = await runtime_for(make_services(route="human", request_handoff=request_handoff)).run_turn("转人工", "u1", "7")
         assert "人工客服正在为您服务" in result["answer"]
 
     async def test_falls_back_when_handoff_fails(self, repo):
-        async def request_handoff(state, why):
+        async def request_handoff(state, why, lead):
             raise RuntimeError("db down")
 
         result = await runtime_for(make_services(route="complaint", request_handoff=request_handoff)).run_turn("投诉", "u1", "7")

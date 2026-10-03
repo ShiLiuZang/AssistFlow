@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, StrictInt, field_validator
 
 from app.core.llm import get_chat_model
 from app.core.handoff import harvested_answer
-from app.db import repository
+from app.db import flywheel_repo
 
 
 logger = logging.getLogger(__name__)
@@ -75,9 +75,9 @@ async def process_pending(
         "skipped_reasons": {},
     }
 
-    for row in await repository.list_unmatched_questions(limit=batch_size):
+    for row in await flywheel_repo.list_unmatched_questions(limit=batch_size):
         try:
-            offered = await repository.list_review_candidates(limit=MAX_CANDIDATES + 1)
+            offered = await flywheel_repo.list_review_candidates(limit=MAX_CANDIDATES + 1)
             if len(offered) > MAX_CANDIDATES:
                 stats["candidate_truncated"] += 1
             candidates = offered[:MAX_CANDIDATES]
@@ -90,7 +90,7 @@ async def process_pending(
             staff_answer = harvested_answer(row)
             if staff_answer:
                 result.suggestion = staff_answer[:2000]
-            _, action = await repository.merge_question(
+            _, action = await flywheel_repo.merge_question(
                 pool_id=row["id"],
                 question=result.question,
                 suggestion=result.suggestion,

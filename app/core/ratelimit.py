@@ -1,12 +1,14 @@
 """
-进程内滑动窗口限流
+滑动窗口限流
 
-只在单实例内生效；多实例部署时换成 Redis 实现（路线图阶段 4），调用方只依赖 hit()。
+默认 RateLimiter 只在单实例内生效；多实例部署（路线图阶段 4）时在启动时用 use_limiter()
+换成共享实现（例如 Redis），接口见 LimiterBackend，下面的依赖函数不用改。
 """
 
 import time
 from collections import deque
 from collections.abc import Callable
+from typing import Protocol
 
 from fastapi import Depends, HTTPException, Request
 
@@ -14,7 +16,18 @@ from app.config import settings
 from app.core.auth import Staff, current_customer, current_staff
 
 
+class LimiterBackend(Protocol):
+    window: float
+
+    def hit(self, key: str, limit: int) -> bool:
+        """记录一次访问；窗口内已达上限时返回 False（本次不计入）。"""
+
+    def reset(self) -> None: ...
+
+
 class RateLimiter:
+    """进程内实现。"""
+
     def __init__(self, window_seconds: float = 60, clock: Callable[[], float] = time.monotonic):
         self.window = window_seconds
         self.clock = clock
@@ -43,7 +56,13 @@ class RateLimiter:
         self._hits.clear()
 
 
-limiter = RateLimiter()
+limiter: LimiterBackend = RateLimiter()
+
+
+def use_limiter(backend: LimiterBackend) -> None:
+    """替换限流实现（启动时调用）。"""
+    global limiter
+    limiter = backend
 
 
 def _deny(message: str) -> HTTPException:

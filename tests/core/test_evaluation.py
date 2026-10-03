@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core import evaluation, flywheel
+from app.core import flywheel
+from app.kb import evaluation
 from app.core.flywheel_evaluation import calibrate, comparable
 from app.core.intent_evaluation import evaluate_intent
 
@@ -181,7 +182,7 @@ class TestProcessPending:
             "merge_question": AsyncMock(return_value=(None, "created")),
         }
         for name, value in fake.items():
-            monkeypatch.setattr(flywheel.repository, name, value)
+            monkeypatch.setattr(flywheel.flywheel_repo, name, value)
         return fake
 
     async def test_counts_actions_and_skips(self, repo):

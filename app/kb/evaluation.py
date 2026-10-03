@@ -3,7 +3,7 @@
 # 支持多种检索策略对比、召回率计算、关键词覆盖度统计
 # 核心职责：量化检索和生成质量，指导策略优化
 
-from app.core.retrieval import STRATEGIES, search_knowledge
+from app.kb.retrieval import STRATEGIES, search_knowledge
 from app.core.evidence import answer_from_hits
 
 

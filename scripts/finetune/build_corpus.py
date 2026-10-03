@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.llm import get_chat_model
 from app.core.taxonomy import LABEL2ID, TOPIC_CLASSES, terminology_table
-from app.db import repository
+from app.db import topic_repo
 from scripts.finetune.corpus_lib import dedupe, desensitize
 from scripts.finetune.prelabel import prelabel_batch
 
@@ -102,10 +102,10 @@ async def simulate(name: str, need: int) -> list[dict]:
 
 async def main() -> None:
 
-    pool = await repository.list_pool_texts()
+    pool = await topic_repo.list_pool_texts()
     origin = "pool"
     if not pool:
-        pool = await repository.list_history_user_texts()
+        pool = await topic_repo.list_history_user_texts()
         origin = "conversation_history"
     if not pool:
         raise RuntimeError("低置信度问题池与历史用户提问均为空，无法构建 微调 语料")
