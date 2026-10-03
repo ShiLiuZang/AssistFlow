@@ -57,3 +57,53 @@ def list_user_orders(user_id: str) -> list[dict[str, str]]:
         for order in DEMO_ORDERS.values()
         if order["user_id"] == user_id
     ]
+
+
+# ==================== 外部订单来源 ====================
+# 外部渠道（如拼多多）的顾客查的是平台订单，不是演示数据。
+# 来源按顾客 ID / 订单号认领；都不认领时回到上面的演示数据。
+
+class OrderProvider:
+    def handles_user(self, user_id: str) -> bool:
+        return False
+
+    def handles_order(self, order_id: str) -> bool:
+        return False
+
+    async def get(self, order_id: str) -> dict | None:
+        """返回订单（含 user_id，节点据此做归属校验）；不存在或无权查询返回 None。"""
+        return None
+
+    async def list_for_user(self, user_id: str) -> list[dict]:
+        return []
+
+
+_providers: list[OrderProvider] = []
+
+
+def register_provider(provider: OrderProvider) -> None:
+    if provider not in _providers:
+        _providers.append(provider)
+
+
+def unregister_provider(provider: OrderProvider) -> None:
+    if provider in _providers:
+        _providers.remove(provider)
+
+
+def provider_for_order(order_id: str) -> OrderProvider | None:
+    return next((p for p in _providers if p.handles_order(order_id)), None)
+
+
+def provider_for_user(user_id: str) -> OrderProvider | None:
+    return next((p for p in _providers if p.handles_user(user_id)), None)
+
+
+async def find_order(order_id: str) -> dict | None:
+    provider = provider_for_order(order_id)
+    return await provider.get(order_id) if provider else get_order(order_id)
+
+
+async def find_user_orders(user_id: str) -> list[dict]:
+    provider = provider_for_user(user_id)
+    return await provider.list_for_user(user_id) if provider else list_user_orders(user_id)

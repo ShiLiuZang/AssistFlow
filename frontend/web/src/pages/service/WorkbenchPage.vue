@@ -14,7 +14,7 @@ import AgentMessages from './AgentMessages.vue'
 import NewTicketModal from './NewTicketModal.vue'
 import TransferModal from './TransferModal.vue'
 import {
-  acceptConversation, agentSummary, closeConversation, conversationDetail, listConversations, postMessage,
+  acceptConversation, agentSummary, channelText, closeConversation, conversationDetail, listConversations, postMessage,
   shortTime, statusColor, statusText, ticketColor, transferConversation, type ListView,
 } from '../../api/agent'
 
@@ -52,7 +52,7 @@ const tabs = computed<[ListView, string, number | string][]>(() => [
   ['closed', '已结束', ''],
 ])
 const filtered = computed(() =>
-  (list.data.value ?? []).filter((x) => `${x.user_id}#${x.conversation_id}${x.last_message?.content ?? ''}`.toLowerCase().includes(search.value.trim().toLowerCase())),
+  (list.data.value ?? []).filter((x) => `${x.user_id}#${x.conversation_id}${channelText[x.channel] ?? ''}${x.last_message?.content ?? ''}`.toLowerCase().includes(search.value.trim().toLowerCase())),
 )
 
 const d = computed(() => detail.data.value)
@@ -177,7 +177,7 @@ const orderLabels: Record<string, string> = { order_id: '订单号', product_nam
           </button>
         </div>
       </div>
-      <div class="queue-sub"><span>{{ view === 'queued' ? '按转入时间排序' : '最近活跃' }}</span><span>Web 渠道</span></div>
+      <div class="queue-sub"><span>{{ view === 'queued' ? '按转入时间排序' : '最近活跃' }}</span><span>网页 · 拼多多</span></div>
       <div class="conversation-list">
         <p v-if="list.error.value" class="notice amber" style="margin: 12px">{{ list.error.value.message }}</p>
         <button v-for="x in filtered" :key="x.conversation_id" class="conversation-item" :class="{ active: x.conversation_id === selected }" :aria-pressed="x.conversation_id === selected" @click="select(x.conversation_id)">
@@ -189,6 +189,7 @@ const orderLabels: Record<string, string> = { order_id: '订单号', product_nam
             <p>{{ x.last_message?.content || '（暂无消息）' }}</p>
             <div class="row">
               <StatusPill :color="statusColor(x.status)">{{ statusText[x.status] }}</StatusPill
+              ><StatusPill v-if="x.channel === 'pinduoduo'" color="red">{{ channelText[x.channel] }}</StatusPill
               ><span class="small muted">#{{ x.conversation_id }}<template v-if="x.handoff"> · {{ x.handoff.assignee ?? x.handoff.reason_label }}</template></span
               ><span v-if="x.status === 'queued'" class="unread" aria-label="待接待"></span>
             </div>
@@ -206,7 +207,7 @@ const orderLabels: Record<string, string> = { order_id: '订单号', product_nam
         <header class="chat-header">
           <Avatar :name="d.user_id" color="blue" />
           <div>
-            <h2>{{ d.user_id }} <span class="small muted">· 会话 #{{ d.conversation_id }}</span></h2>
+            <h2>{{ d.user_id }} <span class="small muted">· {{ channelText[d.channel] ?? '网页' }} · 会话 #{{ d.conversation_id }}</span></h2>
             <div class="chat-meta"><span class="dot" :class="{ amber: status === 'queued' }"></span>{{ headline }}</div>
           </div>
           <button v-if="status !== 'active'" class="btn primary" :disabled="busy" @click="accept"><Icon name="headset" />{{ status === 'queued' ? '接入会话' : '接管会话' }}</button>

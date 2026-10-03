@@ -708,7 +708,7 @@ def make_nodes(services):
         ids = [
             value
             for value in entities(state.get("resolved_query", state["query"]))
-            if value.startswith("ORD-")
+            if not value.startswith("MH-")  # 商品型号不是订单号
         ]
 
         if len(ids) > 1:

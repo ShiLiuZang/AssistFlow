@@ -7,6 +7,7 @@
 
 只在单实例内有效；多实例部署（阶段 4）需要换成 Redis Pub/Sub。
 订阅者处理不过来（队列满）时直接断开，客户端重连后重新拉取一次即可。
+add_listener 注册的回调会收到所有频道的事件（外部渠道据此把坐席回复发回平台）。
 
 长连接会让 uvicorn 退出时一直“等待连接关闭”，所以 install_shutdown_hook 在收到退出信号时
 主动结束所有事件流。
@@ -18,7 +19,7 @@ import logging
 import signal
 import threading
 from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,27 @@ class Hub:
     def __init__(self) -> None:
         self._subscribers: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._listeners: list[Callable[[str, dict], None]] = []
         self.closing = False
+
+    def add_listener(self, listener: Callable[[str, dict], None]) -> None:
+        """注册全频道回调（同步、不能阻塞；耗时工作自己丢到后台任务）。"""
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[str, dict], None]) -> None:
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
     def subscriber_count(self, channel: str) -> int:
         return len(self._subscribers.get(channel, ()))
 
     def publish(self, channel: str, event: dict) -> None:
+        for listener in list(self._listeners):
+            try:
+                listener(channel, event)
+            except Exception:
+                logger.exception("实时推送回调失败 channel=%s", channel)
         for queue in list(self._subscribers.get(channel, ())):
             try:
                 queue.put_nowait(event)

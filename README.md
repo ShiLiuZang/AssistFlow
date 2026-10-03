@@ -241,6 +241,8 @@ Back-office pages require staff login. Customer identity comes from tokens signe
 
 **Human handoff:** create `agent` accounts for customer-service staff. When a customer asks for a human (or complains, or clicks 转人工), the conversation enters the queue on `#/workbench`; once an agent accepts it the AI is paused until the agent ends the session. Real-time push uses in-process SSE, so run a single API instance for now. See [docs/phase2-human-handoff.md](docs/phase2-human-handoff.md).
 
+**Pinduoduo channel:** set `PDD_ENABLED=true` and `PDD_BRIDGE_SECRET` (32+ chars). Buyer messages arrive from a channel bridge at `POST /api/channels/pinduoduo/events` (HMAC-signed); replies, staff messages and handoff notices go back through `PDD_BRIDGE_SEND_URL` (left empty, replies are only recorded). Bursts are merged into one turn, a holding reply goes out when an answer is slow, and ticket confirmation / order selection work by text. Buyers can only query orders they sent as order cards; set `PDD_CLIENT_ID` / `PDD_CLIENT_SECRET` / `PDD_ACCESS_TOKEN` to look up live order status. See [docs/phase3-pinduoduo-channel.md](docs/phase3-pinduoduo-channel.md).
+
 ### 4. Initialize Knowledge Base
 
 ```bash
@@ -439,6 +441,8 @@ MCP tools are discovered at startup. Check logs for `"MCP 工具发现异常"` w
 | `topic_classifications` | 17-class topic labels |
 | `model_usage_logs` | Token usage by intent |
 | `cost_attribution` | Cost allocation |
+| `handoffs`, `ticket_events` | Human handoff and ticket workflow |
+| `channel_sessions`, `channel_messages`, `channel_orders` | Pinduoduo buyers, inbound/outbound log, order ownership |
 
 ---
 

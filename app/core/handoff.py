@@ -32,6 +32,17 @@ REASONS = {
     "staff_takeover": "坐席主动接管",
 }
 HANDOFF_ROLES = ("handoff_user", "staff", "staff_note", "handoff_event")
+# 顾客可见的系统提示
+EVENT_QUEUED = "已为您转接人工客服，正在排队"
+EVENT_CANCELLED = "已取消排队，继续由智能助手为您服务"
+EVENT_ACCEPTED = "人工客服已接入，接下来由客服为您服务"
+EVENT_CLOSED = "人工服务已结束，如还有问题可以继续咨询"
+# 外部渠道顾客的内部 ID 前缀（见 app/channels）；其余视为网页咨询
+CHANNEL_PREFIXES = {"pdd-": "pinduoduo"}
+
+
+def channel_of(user_id: str) -> str:
+    return next((name for prefix, name in CHANNEL_PREFIXES.items() if (user_id or "").startswith(prefix)), "web")
 # 回流到问题池时，坐席回复放在 reason 字段，以此前缀标识（归并作业据此取出建议答案）
 HARVEST_SOURCE = "human_handoff"
 HARVEST_PREFIX = "坐席回复："
@@ -269,7 +280,7 @@ async def request(conversation_id: int, user_id: str, reason: str, card: dict | 
                 card=card or await _card_from_db(session, conversation, reason, values),
             )
             session.add(handoff)
-            event = _event(conversation_id, "已为您转接人工客服，正在排队")
+            event = _event(conversation_id, EVENT_QUEUED)
             session.add(event)
             await session.flush()
             position = await _position(session, handoff)
@@ -334,7 +345,7 @@ async def cancel(conversation_id: int, user_id: str) -> dict:
             handoff.status = "cancelled"
             handoff.closed_at = _now()
             handoff.closed_by = f"customer:{user_id}"
-            event = _event(conversation_id, "已取消排队，继续由智能助手为您服务")
+            event = _event(conversation_id, EVENT_CANCELLED)
             session.add(event)
             await session.flush()
         _publish_state(handoff, None, [event])
@@ -363,7 +374,7 @@ async def accept(conversation_id: int, staff_name: str, values: dict | None = No
             handoff.status = "active"
             handoff.assignee = staff_name
             handoff.accepted_at = _now()
-            event = _event(conversation_id, "人工客服已接入，接下来由客服为您服务", staff_name)
+            event = _event(conversation_id, EVENT_ACCEPTED, staff_name)
             session.add(event)
             await session.flush()
         _publish_state(handoff, None, [event])
@@ -428,7 +439,7 @@ async def close(conversation_id: int, staff_name: str, *, is_admin: bool = False
             handoff.status = "closed"
             handoff.closed_at = _now()
             handoff.closed_by = staff_name
-            event = _event(conversation_id, "人工服务已结束，如还有问题可以继续咨询", staff_name)
+            event = _event(conversation_id, EVENT_CLOSED, staff_name)
             session.add(event)
             await session.flush()
         _publish_state(handoff, None, [event])
@@ -455,7 +466,7 @@ async def list_for_staff(view: str, staff_name: str, limit: int = 50) -> list[di
             items = []
             for conversation, _ in rows:
                 items.append({"conversation_id": conversation.id, "user_id": conversation.user_id,
-                              "status": "ai", "handoff": None,
+                              "channel": channel_of(conversation.user_id), "status": "ai", "handoff": None,
                               "last_message": await _last_message(session, conversation.id)})
             return items
 
@@ -473,7 +484,7 @@ async def list_for_staff(view: str, staff_name: str, limit: int = 50) -> list[di
         items = []
         for handoff in await session.scalars(statement.limit(limit)):
             items.append({"conversation_id": handoff.conversation_id, "user_id": handoff.user_id,
-                          "status": handoff.status,
+                          "channel": channel_of(handoff.user_id), "status": handoff.status,
                           "handoff": handoff_view(handoff, await _position(session, handoff)),
                           "last_message": await _last_message(session, handoff.conversation_id)})
         return items
@@ -514,7 +525,8 @@ async def detail(conversation_id: int) -> dict:
         messages = [view for row in rows if (view := message_view(row, audience="staff"))]
         position = await _position(session, handoff) if handoff is not None else None
     status = handoff.status if handoff is not None and handoff.status in OPEN else "ai"
-    return {"conversation_id": conversation_id, "user_id": conversation.user_id, "status": status,
+    return {"conversation_id": conversation_id, "user_id": conversation.user_id,
+            "channel": channel_of(conversation.user_id), "status": status,
             "handoff": handoff_view(handoff, position), "messages": messages}
 
 
