@@ -74,3 +74,15 @@ def sse_frames(text):
             data = json.loads(data)
         frames.append((event, data))
     return frames
+
+
+@pytest.fixture(autouse=True)
+def no_handoff(monkeypatch):
+    """聊天接口默认处于 AI 接待（没有转人工记录），不连数据库；人工客服在 test_handoff.py 中测试。"""
+    from app.core import handoff
+
+    async def none(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(handoff, "customer_message", none)
+    monkeypatch.setattr(handoff, "open_status", none)

@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useRoute, useRouter } from 'vue-router'
 import { get, post, request } from '../api/client'
 import { AUTH_EXPIRED_EVENT, authFetch, session, setCustomer } from '../auth/session'
 import { readChatStream } from '../api/chatStream'
+import { subscribe, type Subscription } from '../api/events'
 import Icon from '../components/Icon.vue'
 
-type Message = { role: string; content: string; message_id?: string | null; citations?: Record<string, any>[]; feedback?: string }
+type Message = { id?: number; role: string; content: string; message_id?: string | null; citations?: Record<string, any>[]; feedback?: string }
+// 人工客服状态：ai = 智能助手接待；queued = 排队中；active = 人工客服接待中
+type Handoff = { status: 'ai' | 'queued' | 'active' | 'closed' | 'cancelled'; position?: number | null }
 type Pending = { kind: string; tool_call_id?: string; request_id?: string; preview?: Record<string, unknown>; orders?: { order_id: string; product?: string; status?: string; amount?: number }[]; confirmed?: boolean | null }
 const catUrl = `${import.meta.env.BASE_URL}assets/minihelp-cat.svg`
 const client = useQueryClient()
@@ -21,13 +24,16 @@ const conversations = ref<{ id: number; created_at: string }[]>([])
 const conversationId = ref<number | null>(null)
 const messages = ref<Message[]>([])
 const pending = ref<Pending | null>(null)
+const handoff = ref<Handoff>({ status: 'ai' })
+const humanMode = computed(() => handoff.value.status === 'queued' || handoff.value.status === 'active')
+const handoffBusy = ref(false)
 const draft = ref(''), error = ref(''), historyError = ref('')
 const busy = ref(false), loading = ref(false), uncertain = ref(false), feedbackBusy = ref(false)
 const historyOpen = ref(false)
 const list = ref<HTMLElement | null>(null)
 let controller: AbortController | undefined
 let disposed = false
-const locked = computed(() => busy.value || loading.value || feedbackBusy.value)
+const locked = computed(() => busy.value || loading.value || feedbackBusy.value || handoffBusy.value)
 const canSend = computed(() => !!user.value && !locked.value && !uncertain.value && !pending.value && !!draft.value.trim())
 const key = () => `minihelp-web-conversation:${user.value}`
 function tokenSubject(token: string): string | null {
@@ -69,13 +75,15 @@ async function restore(id: number) {
   loading.value = true
   error.value = ''
   try {
-    const [rows, action] = await Promise.all([
+    const [rows, action, state] = await Promise.all([
       request<Message[]>(`/api/conversations/${id}/messages`),
       request<Pending | null>(`/api/actions/pending?conversation_id=${id}`),
+      request<Handoff>(`/api/conversations/${id}/handoff`),
     ])
     remember(id)
-    messages.value = rows.filter(r => ['user', 'assistant'].includes(r.role) && r.content)
+    messages.value = rows.filter(r => ['user', 'assistant', 'staff', 'system'].includes(r.role) && r.content)
     pending.value = action
+    handoff.value = state
     uncertain.value = false
     await scroll()
   } catch (e) { error.value = (e as Error).message; uncertain.value = true }
@@ -86,12 +94,14 @@ function fresh() {
   remember(null)
   messages.value = []
   pending.value = null
+  handoff.value = { status: 'ai' }
   draft.value = error.value = ''
   uncertain.value = false
 }
 async function load() {
   conversationId.value = null
   messages.value = []; pending.value = null; uncertain.value = false; error.value = ''; draft.value = ''
+  handoff.value = { status: 'ai' }
   loading.value = true
   await history()
   loading.value = false
@@ -123,6 +133,7 @@ async function run(path: string, extra: Record<string, unknown>) {
       if (event.conversation_id) remember(event.conversation_id)
       if (typeof event.delta === 'string') reply.value.content += event.delta
       if (event.event === 'citations') reply.value.citations = event.items || []
+      if (event.event === 'handoff' && event.handoff) handoff.value = event.handoff
       if (event.event === 'done') { reply.value.message_id = event.message_id; pending.value = null; completed = true }
       if (event.event === 'interrupt') {
         pending.value = event as Pending
@@ -132,7 +143,9 @@ async function run(path: string, extra: Record<string, unknown>) {
       scroll()
     })
     if (!completed) throw new Error('没有收到完成结果，请重新读取会话')
-    if (!reply.value.content) reply.value.content = '本次未返回回复正文。'
+    // 排队或人工接待中的消息直接交给客服，不会有智能助手的回复
+    if (!reply.value.content && humanMode.value) messages.value.splice(messages.value.indexOf(reply.value), 1)
+    else if (!reply.value.content) reply.value.content = '本次未返回回复正文。'
     client.invalidateQueries({ queryKey: ['review'] })
   } catch (e) {
     uncertain.value = true
@@ -159,6 +172,42 @@ async function choose(orderId?: string) {
   await run('/api/actions/select-order', { kind: 'select_order', request_id: pending.value.request_id,
     ...(orderId ? { order_id: orderId, cancelled: false } : { cancelled: true }) })
 }
+// 人工客服：转人工、取消排队，以及订阅客服回复
+async function requestHuman() {
+  if (!conversationId.value || locked.value) return
+  handoffBusy.value = true; error.value = ''
+  try {
+    handoff.value = await post<Handoff>(`/api/conversations/${conversationId.value}/handoff`)
+    await restore(conversationId.value)
+  } catch (e) { error.value = (e as Error).message }
+  finally { handoffBusy.value = false }
+}
+async function cancelHuman() {
+  if (!conversationId.value || locked.value) return
+  handoffBusy.value = true; error.value = ''
+  try {
+    handoff.value = await post<Handoff>(`/api/conversations/${conversationId.value}/handoff/cancel`)
+    await restore(conversationId.value)
+  } catch (e) { error.value = (e as Error).message }
+  finally { handoffBusy.value = false }
+}
+let live: Subscription | null = null
+function listen(id: number | null) {
+  live?.close(); live = null
+  if (!id || !user.value) return
+  live = subscribe(`/api/conversations/${id}/events`, { onEvent: event => {
+    if (event.type === 'handoff' && event.handoff) handoff.value = event.handoff
+    // 自己发的消息页面上已经有了，只追加客服回复和系统提示
+    if (event.type === 'message' && event.message && event.message.role !== 'customer' && !messages.value.some(m => m.id === event.message.id)) {
+      messages.value.push({ id: event.message.id, role: event.message.role, content: event.message.content })
+      scroll()
+    }
+  } })
+}
+watch(conversationId, listen)
+const handoffText = computed(() => handoff.value.status === 'queued'
+  ? (handoff.value.position && handoff.value.position > 1 ? `正在为您转接人工客服，前面还有 ${handoff.value.position - 1} 位` : '正在为您转接人工客服，您是下一位')
+  : handoff.value.status === 'active' ? '人工客服接待中' : '')
 async function feedback(message: Message, rating: 'up' | 'down') {
   if (!message.message_id || locked.value || message.feedback) return
   feedbackBusy.value = true
@@ -197,7 +246,7 @@ onMounted(async () => {
   await load()
 })
 onBeforeUnmount(() => {
-  disposed = true; controller?.abort()
+  disposed = true; controller?.abort(); live?.close()
   window.removeEventListener('message', onMessage)
   window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
 })
@@ -218,15 +267,18 @@ onBeforeUnmount(() => {
         <nav class="live-history" aria-label="历史会话"><button v-for="c in conversations" :key="c.id" :class="{ active: conversationId === c.id }" :disabled="locked" @click="restore(c.id)"><strong>会话 #{{ c.id }}</strong><small>{{ historyTime(c.created_at) }} · UTC+8</small></button><p v-if="!conversations.length && !historyError" class="muted">发送第一条消息后，会话会保存在这里。</p></nav>
       </aside>
       <section class="live-chat-window" aria-label="客户咨询窗口">
-        <header class="live-chat-heading"><span class="avatar green"><Icon name="spark" /></span><div><h2>Minihelp 助手</h2><p>{{ busy ? '正在处理您的问题…' : loading ? '正在读取会话…' : pending ? '等待您确认' : conversationId ? `会话 #${conversationId}` : '开始新的咨询' }}</p></div><button v-if="conversationId" class="btn soft" :disabled="locked" @click="restore(conversationId)">重新读取会话</button></header>
+        <header class="live-chat-heading"><span class="avatar green"><Icon name="spark" /></span><div><h2>Minihelp 助手</h2><p>{{ busy ? '正在处理您的问题…' : loading ? '正在读取会话…' : pending ? '等待您确认' : handoffText || (conversationId ? `会话 #${conversationId}` : '开始新的咨询') }}</p></div><button v-if="conversationId && handoff.status === 'queued'" class="btn soft" :disabled="locked" @click="cancelHuman">取消排队</button><button v-else-if="conversationId && !humanMode" class="btn soft" :disabled="locked" @click="requestHuman">转人工</button><button v-if="conversationId" class="btn soft" :disabled="locked" @click="restore(conversationId)">重新读取会话</button></header>
         <div ref="list" class="live-messages" aria-label="会话消息" :aria-busy="busy || loading">
           <div v-if="!user" class="live-chat-empty"><img :src="catUrl" alt="" /><h2>请先登录商城</h2><p>{{ devMode ? '开发模式：在左侧输入顾客 ID 模拟登录。' : '请从商城页面的「联系客服」入口进入咨询。' }}</p></div>
           <div v-else-if="!messages.length" class="live-chat-empty"><img :src="catUrl" alt="" /><h2>你好，有什么可以帮你？</h2><p>你可以描述遇到的问题，或从下面开始。</p><div><button class="btn soft" :disabled="locked" @click="send('无理由退货有什么条件？')">退换货条件</button><button class="btn soft" :disabled="locked" @click="send('帮我查一下我的订单')">查询订单</button></div></div>
-          <article v-for="(m, i) in messages" :key="i" class="live-message" :class="m.role">
-            <span class="live-speaker">{{ m.role === 'user' ? '我' : 'Minihelp' }}</span><div class="live-bubble">{{ m.content || '正在核对信息，请稍候…' }}</div>
+          <template v-for="(m, i) in messages" :key="i">
+          <p v-if="m.role === 'system'" class="live-system" role="status">{{ m.content }}</p>
+          <article v-else class="live-message" :class="m.role === 'staff' ? 'assistant staff' : m.role">
+            <span class="live-speaker">{{ m.role === 'user' ? '我' : m.role === 'staff' ? '人工客服' : 'Minihelp' }}</span><div class="live-bubble">{{ m.content || '正在核对信息，请稍候…' }}</div>
             <details v-if="m.citations?.length" class="live-citations"><summary>回复依据 · {{ m.citations.length }} 条</summary><div v-for="(c, n) in m.citations" :key="n"><strong>{{ c.section_path || c.title || c.source || `依据 ${n + 1}` }}</strong><p>{{ c.answer || c.text || c.content || c.quote || '' }}</p></div></details>
             <div v-if="m.role === 'assistant' && m.message_id" class="live-feedback"><span v-if="m.feedback" role="status">{{ m.feedback }}</span><template v-else><button :disabled="locked" @click="feedback(m, 'up')">有帮助</button><button :disabled="locked" @click="feedback(m, 'down')">未解决</button></template></div>
           </article>
+          </template>
           <section v-if="pending" class="live-pending" aria-label="待确认操作">
             <template v-if="pending.kind === 'confirm_ticket'"><h3>请核对工单信息</h3><dl><template v-for="(v, k) in pending.preview" :key="k"><dt>{{ ticketNames[String(k)] || k }}</dt><dd>{{ v }}</dd></template></dl><template v-if="pending.confirmed != null"><p>上次{{ pending.confirmed ? '确认' : '取消' }}已记录，可继续恢复该操作。</p><button class="btn primary" :disabled="locked || uncertain" @click="decide(pending.confirmed)">恢复上次操作</button></template><template v-else><p>确认后将提交工单。</p><button class="btn primary" :disabled="locked || uncertain" @click="decide(true)">确认提交</button><button class="btn" :disabled="locked || uncertain" @click="decide(false)">取消</button></template></template>
             <template v-else-if="pending.kind === 'select_order'"><h3>请选择要处理的订单</h3><button v-for="o in pending.orders" :key="o.order_id" class="live-order" :disabled="locked || uncertain" @click="choose(o.order_id)"><strong>{{ o.order_id }}</strong><span>{{ o.product }} · {{ o.status }}<template v-if="o.amount != null"> · ¥{{ o.amount }}</template></span></button><button class="btn" :disabled="locked || uncertain" @click="choose()">取消选择</button></template>
@@ -234,7 +286,7 @@ onBeforeUnmount(() => {
           </section>
         </div>
         <div v-if="error" class="live-chat-error" role="alert">{{ error }}<button v-if="conversationId" class="text-button" :disabled="locked" @click="restore(conversationId)">重新读取</button><button v-else class="text-button" :disabled="locked" @click="fresh">新建会话</button></div>
-        <form class="live-composer" @submit.prevent="send()"><textarea id="client-draft" v-model="draft" aria-label="咨询内容" :disabled="!user || loading || !!pending || uncertain" placeholder="说说你遇到的问题…" maxlength="2000" @keydown="onKey"></textarea><div><small>{{ pending ? '请先处理上方待确认操作' : 'Enter 发送 · Shift + Enter 换行' }}</small><button v-if="busy" class="btn" type="button" @click="controller?.abort()">停止接收</button><button v-else class="btn primary" :disabled="!canSend">发送 <Icon name="send" /></button></div></form>
+        <form class="live-composer" @submit.prevent="send()"><textarea id="client-draft" v-model="draft" aria-label="咨询内容" :disabled="!user || loading || !!pending || uncertain" placeholder="说说你遇到的问题…" maxlength="2000" @keydown="onKey"></textarea><div><small>{{ pending ? '请先处理上方待确认操作' : humanMode ? '消息会直接发给人工客服 · Enter 发送' : 'Enter 发送 · Shift + Enter 换行' }}</small><button v-if="busy" class="btn" type="button" @click="controller?.abort()">停止接收</button><button v-else class="btn primary" :disabled="!canSend">发送 <Icon name="send" /></button></div></form>
       </section>
     </div>
   </main>

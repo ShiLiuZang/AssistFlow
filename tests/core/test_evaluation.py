@@ -204,6 +204,17 @@ class TestProcessPending:
             "offered_ids": {10},
         }
 
+    async def test_staff_answer_becomes_suggestion(self, repo):
+        repo["list_unmatched_questions"].return_value = [
+            {"id": 3, "question": "能开发票吗", "source": "human_handoff", "reason": "坐席回复：在订单页申请电子发票"},
+        ]
+
+        async def normalize(question, candidates):
+            return {"question": "如何开发票", "suggestion": "模型草稿"}
+
+        await flywheel.process_pending(normalize)
+        assert repo["merge_question"].await_args.kwargs["suggestion"] == "在订单页申请电子发票"
+
     async def test_truncates_candidates(self, repo):
         repo["list_review_candidates"].return_value = [{"id": i} for i in range(flywheel.MAX_CANDIDATES + 1)]
         seen = []

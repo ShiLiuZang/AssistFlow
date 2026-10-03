@@ -33,9 +33,9 @@ export const router = createRouter({
     // 管理后台：演示页
     page('/migration', '原功能对照', 'admin', () => import('./pages/demo/MigrationPage.vue')),
     page('/settings', '设置与权限', 'admin', () => import('./pages/demo/SettingsPage.vue')),
-    // 客服工作台：演示页
-    page('/workbench', '会话工作台', 'service', () => import('./pages/demo/WorkbenchPage.vue')),
-    page('/tickets', '工单中心', 'service', () => import('./pages/demo/TicketsPage.vue')),
+    // 客服工作台：会话与工单接真实接口，客户资料与商品仍为演示页
+    page('/workbench', '会话工作台', 'service', () => import('./pages/service/WorkbenchPage.vue'), true),
+    page('/tickets', '工单中心', 'service', () => import('./pages/service/TicketsPage.vue'), true),
     page('/customers', '客户资料', 'service', () => import('./pages/demo/CustomersPage.vue')),
     page('/products', '商品与订单', 'service', () => import('./pages/demo/ProductsPage.vue')),
     // 员工登录

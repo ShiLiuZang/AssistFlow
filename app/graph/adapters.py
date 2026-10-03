@@ -111,6 +111,7 @@ class Services:
     retrieve_detailed: Callable | None = None
     check_sufficient: Callable | None = None
     rerank_policy: Callable | None = None
+    request_handoff: Callable | None = None  # 转人工排队，见 app.core.handoff.request_from_graph
 
 
 def make_services(registry: Registry | None = None) -> Services:

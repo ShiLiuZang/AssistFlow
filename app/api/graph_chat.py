@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.sse import TURN_TIMEOUT_SSE, collect_turn, graph_event_to_sse, restore_messages, make_sse
+from app.core import handoff
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
 from app.db import repository
 from app.core.conversation_lock import conversation_lock
@@ -104,6 +105,14 @@ async def stream_graph_chat(
 
         # 获取会话锁，防止并发修改图状态
         async with conversation_lock(request.user_id, conversation_id):
+            # 排队或人工接待中：消息直接交给坐席，不经过 AI
+            routed = await handoff.customer_message(conversation_id, request.user_id, request.message)
+            if routed is not None:
+                yield make_sse({"event": "handoff", "conversation_id": conversation_id, **routed})
+                yield make_sse({"event": "done", "conversation_id": conversation_id, "message_id": None,
+                                "handoff": True})
+                return
+
             config = _thread_config(request.user_id, conversation_id)
 
             # 获取图当前快照
@@ -163,6 +172,15 @@ async def stream_graph_chat(
                 conversation_id,
                 summarize_dialog,
             )
+
+        # 本轮转入了人工排队（human / complaint 节点），先告诉前端接待状态
+        try:
+            state = await handoff.open_status(conversation_id)
+        except Exception:
+            logger.warning("读取人工接待状态失败 conversation_id=%s", conversation_id, exc_info=True)
+            state = None
+        if state is not None:
+            yield make_sse({"event": "handoff", "conversation_id": conversation_id, "handoff": state})
 
         # 产出所有事件（跳过end事件，转换为SSE格式）
         for event in events:
