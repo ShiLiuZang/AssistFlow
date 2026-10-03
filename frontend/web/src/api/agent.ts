@@ -41,9 +41,14 @@ export interface AgentMessage {
   author?: string
 }
 
+export type Channel = 'web' | 'pinduoduo'
+
+export const channelText: Record<Channel, string> = { web: '网页', pinduoduo: '拼多多' }
+
 export interface ConversationItem {
   conversation_id: number
   user_id: string
+  channel: Channel
   status: ConvStatus
   handoff: Handoff | null
   last_message: AgentMessage | null
@@ -78,6 +83,7 @@ export const TICKET_NEXT: Record<TicketStatus, TicketStatus[]> = {
 export interface ConversationDetail {
   conversation_id: number
   user_id: string
+  channel: Channel
   status: ConvStatus
   handoff: Handoff | null
   messages: AgentMessage[]

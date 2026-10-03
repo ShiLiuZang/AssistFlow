@@ -15,6 +15,10 @@ PUBLIC = {
     ("GET", "/api/auth/config"),
     ("POST", "/api/auth/dev/customer-token"),
 }
+# 渠道桥回调用 HMAC 签名鉴权，不用令牌（见 tests/api/test_channels.py）
+SIGNED = {
+    ("POST", "/api/channels/pinduoduo/events"),
+}
 
 
 def bearer(token):
@@ -163,7 +167,7 @@ def api_routes():
     # 以 OpenAPI 文档为准：新增接口会自动进入清单
     for path, operations in app.openapi()["paths"].items():
         for method in operations:
-            if (method.upper(), path) not in PUBLIC:
+            if (method.upper(), path) not in PUBLIC | SIGNED:
                 yield method.upper(), path
 
 

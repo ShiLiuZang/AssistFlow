@@ -27,6 +27,7 @@ _TEST_ENV = {
     "AUTH_SECRET": "test-auth-secret-" + "x" * 32,
     "CUSTOMER_TOKEN_SECRET": "test-customer-secret-" + "y" * 32,
     "AUTH_DEV_MODE": "false",
+    "PDD_ENABLED": "false",
 }
 os.environ.update(_TEST_ENV)
 

@@ -96,6 +96,24 @@ class Settings(BaseSettings):
     rate_login_per_minute: int = Field(default=10, ge=1)  # 每个 IP 登录
     rate_staff_model_per_minute: int = Field(default=30, ge=1)  # 每个员工调用模型的试用接口
 
+    # ==================== 外部渠道：拼多多 ====================
+    # 见 docs/phase3-pinduoduo-channel.md。消息经“渠道桥”收发：桥负责对接拼多多客服消息，
+    # 用 HMAC 签名把买家消息推给本服务，并接收本服务的回复。
+    pdd_enabled: bool = False
+    pdd_bridge_secret: str = ""  # 与渠道桥共享的签名密钥（至少 32 字符）
+    pdd_bridge_send_url: str = ""  # 渠道桥的发送接口；为空时只记录不发送（演练模式）
+    pdd_client_id: str = ""  # 拼多多开放平台应用（查订单用，可选）
+    pdd_client_secret: str = ""
+    pdd_access_token: str = ""  # 店铺授权令牌
+    pdd_gateway_url: str = "https://gw-api.pinduoduo.com/api/router"
+    pdd_max_message_chars: int = Field(default=500, ge=50)  # 单条回复最长字数，超出按句子拆分
+
+    # 渠道消息处理
+    channel_merge_seconds: float = Field(default=1.5, ge=0)  # 买家连发多条时，静默多久后合并成一轮
+    channel_merge_max_seconds: float = Field(default=6, ge=0)  # 合并最多等待多久
+    channel_hold_seconds: float = Field(default=8, ge=0)  # 超过这个时间还没答完，先发一句安抚（0 关闭）
+    channel_idle_minutes: int = Field(default=1440, ge=1)  # 买家隔多久再来算新会话
+
     @property
     def langfuse_configured(self) -> bool:
         """

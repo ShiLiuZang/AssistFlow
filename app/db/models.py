@@ -10,6 +10,7 @@
 5. 观测数据：ToolAuditLog、TraceSpan、EvalRun
 6. 后台账号：StaffUser
 7. 人工坐席：Handoff、TicketEvent
+8. 外部渠道：ChannelSession、ChannelMessage、ChannelOrder
 
 数据库技术栈：
 - SQLAlchemy 2.0：ORM 框架，使用新的 Mapped 类型注解
@@ -158,6 +159,67 @@ class Handoff(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     closed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     harvested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # 是否已回流到问题池
+
+
+class ChannelSession(Base):
+    """
+    外部渠道（拼多多等）的买家会话映射
+
+    一个店铺里的一个买家对应一个内部顾客 ID（不含原始买家 ID，避免在会话、日志里出现平台账号），
+    conversation_id 指向当前会话，空闲太久后开新会话。见 docs/phase3-pinduoduo-channel.md。
+    """
+    __tablename__ = "channel_sessions"
+    __table_args__ = (UniqueConstraint("channel", "shop_id", "buyer_id", name="uq_channel_buyer"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel: Mapped[str] = mapped_column(String(16))  # pinduoduo
+    shop_id: Mapped[str] = mapped_column(String(64))
+    buyer_id: Mapped[str] = mapped_column(String(128))  # 平台买家 ID，只用于回发消息
+    user_id: Mapped[str] = mapped_column(String(64), unique=True)  # 内部顾客 ID，如 pdd-3f2a…
+    conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ChannelMessage(Base):
+    """
+    渠道收发记录
+
+    入站消息按平台消息 ID 去重（平台重试不会重复回答），进程重启后未处理的入站消息会补处理；
+    出站消息记录发送结果和重试次数。
+    """
+    __tablename__ = "channel_messages"
+    __table_args__ = (UniqueConstraint("channel", "direction", "external_id", name="uq_channel_message"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel: Mapped[str] = mapped_column(String(16))
+    session_id: Mapped[int] = mapped_column(ForeignKey("channel_sessions.id"), index=True)
+    direction: Mapped[str] = mapped_column(String(4))  # in / out
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)  # 入站为平台消息 ID
+    kind: Mapped[str] = mapped_column(String(16))  # 入站：text/image/goods/order；出站：answer/hold/staff/system/notice
+    content: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), index=True)  # 入站 pending/done/failed；出站 sent/failed/dry_run
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ChannelOrder(Base):
+    """
+    平台证明过归属的订单：买家在会话里发来的订单卡片（由平台带出，不是买家手打的订单号）。
+    渠道顾客只能查询这里登记在自己名下的订单。
+    """
+    __tablename__ = "channel_orders"
+    __table_args__ = (UniqueConstraint("channel", "order_id", name="uq_channel_order"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel: Mapped[str] = mapped_column(String(16))
+    order_id: Mapped[str] = mapped_column(String(64))
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    goods_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class KnowledgeChunk(Base):

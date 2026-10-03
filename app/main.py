@@ -37,8 +37,10 @@ from app.api.acceptance import router as acceptance_router  # 验收测试
 from app.api.topics import router as topics_router  # 话题管理
 from app.api.observability import router as observability_router  # 观测数据
 from app.api.agent import router as agent_router  # 人工坐席工作台
+from app.api.channels import router as channels_router  # 外部渠道（拼多多）
 
 # 核心服务导入
+from app.channels import service as channels  # 外部渠道接入
 from app.config import settings  # 配置管理
 from app.core import auth, handoff  # 认证配置校验、转人工
 from app.core.safety import install_log_redaction  # 日志脱敏
@@ -78,6 +80,7 @@ async def lifespan(app: FastAPI):
     """
     # 0. 认证密钥不满足要求时拒绝启动（开发模式除外）；日志统一脱敏
     auth.check_configuration()
+    channels.check_configuration()
     install_log_redaction()
     install_shutdown_hook()  # 退出时结束实时推送长连接
 
@@ -131,8 +134,9 @@ async def lifespan(app: FastAPI):
             app.state.graph_runtime = runtime
 
             try:
-                # 7. 应用启动完成，开始接受请求
-                yield
+                # 7. 外部渠道（拼多多）开启时启动消息调度，然后开始接受请求
+                async with channels.running(lambda: app.state.graph_runtime):
+                    yield
             finally:
                 # 8. 应用关闭时，先关闭后台摘要任务
                 # 确保滚动摘要写入数据库，避免丢失上下文压缩结果（git commit 22c8248）
@@ -184,6 +188,7 @@ app.include_router(admin_router)  # 管理后台
 app.include_router(acceptance_router)  # 验收测试
 app.include_router(topics_router)  # 话题管理
 app.include_router(agent_router)  # 人工坐席工作台与工单
+app.include_router(channels_router)  # 外部渠道（拼多多）
 
 
 @app.get("/api/health")

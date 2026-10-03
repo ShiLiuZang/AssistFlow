@@ -49,7 +49,7 @@ class PolicyQueries(BaseModel):
     queries: list[str]  # 改写后的查询列表
 
 
-from app.tools.orders import get_order, list_user_orders
+from app.tools.orders import find_order, find_user_orders, provider_for_order
 from app.core.evidence import answer_from_hits
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.memory import Message as ViewMessage, build_window
@@ -191,6 +191,14 @@ async def order_tool(
     Returns:
         订单查询结果
     """
+    order_id = str(args.get("order_id") or "")
+    if provider_for_order(order_id) is not None:
+        # 外部平台订单（如拼多多）：同样只返回属于当前顾客的订单
+        order = await find_order(order_id)
+        if order is None or order.get("user_id") != context.user_id:
+            return {"found": False, "error": "没有找到您的这笔订单", "code": "order_not_owned"}
+        return {"found": True, "order_id": order["order_id"], "product_name": order.get("product_name", ""),
+                "status": order.get("status", "")}
     return await query_order.ainvoke({
         **args,
         "user_id": context.user_id,  # 注入用户 ID（安全校验）
@@ -596,7 +604,7 @@ async def list_orders(user_id: str) -> list[dict[str, str]]:
     Returns:
         订单列表（简化信息，用于订单选择）
     """
-    return list_user_orders(user_id)
+    return await find_user_orders(user_id)
 
 
 async def get_verified_order(order_id: str) -> dict[str, str] | None:
@@ -611,7 +619,7 @@ async def get_verified_order(order_id: str) -> dict[str, str] | None:
 
     参考 git commit d4386aa (增加订单选择节点与归属校验)
     """
-    return get_order(order_id)
+    return await find_order(order_id)
 
 
 def make_tool_registry() -> Registry:
