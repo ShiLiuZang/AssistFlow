@@ -27,6 +27,7 @@
 参考 git commit 4d1384a (记录意图与选单接入审查)
 """
 
+import re
 from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 import json
@@ -81,6 +82,27 @@ class Prediction(BaseModel):
     )
     intent: Intent
     confidence: float = Field(ge=0, le=1, strict=True)
+
+
+# 明确的短句不需要模型判断：整句只有问候，或整句只是要人工（「不要人工」这类不会整句匹配）
+_GREETING = re.compile(
+    r"(你好|您好|在吗|在么|在不在|有人吗|有人在吗|亲|亲在吗|你好在吗|您好在吗|hi|hello|哈喽|嗨|"
+    r"早上好|上午好|中午好|下午好|晚上好)[呀啊吗么呢哈~～!！?？。.，, ]*",
+    re.I,
+)
+_HUMAN = re.compile(r"(我要|我想|请|麻烦|帮我|给我)?(转|找|接|转接)?(人工|真人)(客服|服务)?[~～!！。.，, ]*")
+
+
+def quick_intent(query: str) -> Prediction | None:
+    """规则识别明确的问候和转人工，命中时不调模型；没命中返回 None。"""
+    text = re.sub(r"\s+", "", query or "")
+    if not text or len(text) > 12:
+        return None
+    if _HUMAN.fullmatch(text):
+        return Prediction(intent=Intent.HUMAN, confidence=1.0)
+    if _GREETING.fullmatch(text):
+        return Prediction(intent=Intent.CHAT, confidence=1.0)
+    return None
 
 
 async def classify(query, predict, threshold=0.6):

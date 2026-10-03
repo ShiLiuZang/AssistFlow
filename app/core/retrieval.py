@@ -8,6 +8,7 @@ from app.config import settings
 from app.core import query_understanding
 from app.kb import milvus_client
 from app.core import embeddings, rerank
+import asyncio
 import re
 import math
 from app.core.coref import entities
@@ -126,6 +127,25 @@ def merge_round_robin(groups: list[list[dict]]) -> list[dict]:
             result.append(hit)
             seen.add(hit_id)
     return result
+
+async def gather_or_cancel(*awaitables):
+    """并行执行并按顺序返回结果；任一出错时取消其余的并抛出该错误（与串行执行时一样只得到一个错误）。"""
+    tasks = [asyncio.ensure_future(item) for item in awaitables]
+    if not tasks:
+        return []
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        for task in tasks:
+            if task.done() and not task.cancelled() and task.exception() is not None:
+                raise task.exception()
+        return [task.result() for task in tasks]
+    finally:
+        pending = [task for task in tasks if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
 
 async def search_knowledge_detailed(
     query: str,
@@ -498,14 +518,19 @@ async def retrieve_policy_detailed(
         简化版对每个查询独立排序可能导致不一致，详细版通过全局重排序
         确保所有候选在同一标准下比较，提供更准确的排序结果
     """
-    # 构建扩展查询列表
-    queries = await build_policy_queries(query, order, expand)
+    # 原问题的检索不依赖扩展结果：和扩展（一次模型调用）同时开始，扩展出的查询再并行检索
+    first = asyncio.ensure_future(search(query))
+    try:
+        queries = await build_policy_queries(query, order, expand)
+        results = await gather_or_cancel(first, *(search(item) for item in queries[1:]))
+    except BaseException:
+        first.cancel()
+        raise
     # 用于收集所有候选的字典
     merged = {}
 
-    # 对每个查询执行检索
-    for current_query in queries:
-        result = await search(current_query)
+    # 按查询顺序合并检索结果
+    for result in results:
 
         if not isinstance(result, dict):
             raise ValueError("详细政策检索结果必须是字典")

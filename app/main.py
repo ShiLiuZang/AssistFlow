@@ -43,6 +43,7 @@ from app.api.channels import router as channels_router  # 外部渠道（拼多�
 from app.channels import service as channels  # 外部渠道接入
 from app.config import settings  # 配置管理
 from app.core import auth, handoff  # 认证配置校验、转人工
+from app.core import rerank  # 精排服务（关闭连接池）
 from app.core.safety import install_log_redaction  # 日志脱敏
 from app.core.realtime import install_shutdown_hook  # 实时推送
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
@@ -149,6 +150,7 @@ async def lifespan(app: FastAPI):
         app.state.langfuse_client = None
         # 10. 关闭 Langfuse 客户端，刷新未上报的观测数据
         await close_langfuse_client(langfuse_client)
+        await rerank.close_client()  # 精排服务的连接池
 
 
 # Vue 前端构建产物（frontend/web 下执行 npm run build 生成）

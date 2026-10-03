@@ -46,6 +46,7 @@ from app.config import settings
 from app.core.safety import SAFE_REPLY, guard_reply
 from app.core.confidence import evidence_gate
 from app.db import repository
+from app.graph import prefetch
 
 # 置信度不足时的拒答模板
 REFUSAL = "现有知识库没有足够证据确认这个问题，请联系人工客服。"
@@ -98,7 +99,17 @@ def make_nodes(services):
             **values,
         }
 
-    async def assess_evidence(query: str, result: dict) -> dict:
+    def scope(state: ConversationState) -> str:
+        return str(state.get("conversation_id", ""))
+
+    def answer_inputs(state: ConversationState, evidence: list[dict]) -> tuple[str, dict, str]:
+        """回答服务的输入；预取和 answer 节点用同一份，key 一致才会用预取结果。"""
+        query = state.get("resolved_query") or state["query"]
+        kwargs = {"order": state.get("order"), "summary_text": state.get("summary_text", "")}
+        key = prefetch.make_key(state.get("request_id"), query, evidence, kwargs)
+        return query, kwargs, key
+
+    async def assess_evidence(query: str, result: dict, state: ConversationState | None = None) -> dict:
         """
         评估检索证据的置信度
 
@@ -139,15 +150,29 @@ def make_nodes(services):
         if not callable(check):
             raise ValueError("未配置证据充分性检查服务")
 
+        gate_check = check
+        if state is not None and getattr(services, "speculative_answer", False):
+            # 规则闸门（有证据、置信度达标）通过后才会调用充分性检查；
+            # 这时同时开始生成回答，检查不通过再取消，省掉一次串行的模型调用
+            answer_query, answer_kwargs, answer_key = answer_inputs(state, evidence)
+
+            async def gate_check(question, items):
+                prefetch.start(scope(state), "answer", answer_key,
+                               services.answer(answer_query, evidence, **answer_kwargs))
+                return await check(question, items)
+
         # 使用 span 记录执行追踪
         async with span("evidence_check", trace_sink):
             decision = await evidence_gate(
                 query,
                 candidates,
                 settings.evidence_min_confidence,
-                check,
+                gate_check,
                 evidence=evidence,
             )
+
+        if state is not None and not decision.allow:
+            prefetch.cancel(scope(state), "answer")
 
         return {
             "evidence": evidence if decision.allow else [],
@@ -193,12 +218,15 @@ def make_nodes(services):
         if not callable(retrieve_detailed):
             raise ValueError("未配置详细检索服务")
 
-        # 执行检索并记录 span
+        # 执行检索并记录 span；意图识别期间已经预取过的直接用
         async with span("retrieve", trace_sink):
-            result = await retrieve_detailed(query)
+            found, result = await prefetch.take(scope(state), "retrieve",
+                                                prefetch.make_key(state.get("request_id"), query))
+            if not found:
+                result = await retrieve_detailed(query)
 
         # 评估证据置信度
-        values = await assess_evidence(query, result)
+        values = await assess_evidence(query, result, state)
 
         return update(
             state,
@@ -226,17 +254,15 @@ def make_nodes(services):
 
         参考 git commit 4d1384a (记录意图与选单接入审查并生成长对话教学包)
         """
-        query = state.get("resolved_query") or state["query"]
         evidence = state["evidence"]
+        # 订单上下文（如有）和对话摘要；证据检查期间已经预取过的直接用
+        query, answer_kwargs, answer_key = answer_inputs(state, evidence)
 
         # 调用答案生成服务
         async with span("answer", trace_sink):
-            result = await services.answer(
-                query,
-                evidence,
-                order=state.get("order"),  # 订单上下文（如有）
-                summary_text=state.get("summary_text", ""),  # 对话摘要
-            )
+            found, result = await prefetch.take(scope(state), "answer", answer_key)
+            if not found:
+                result = await services.answer(query, evidence, **answer_kwargs)
 
             # 校验返回结果格式
             if not isinstance(result, dict):
@@ -631,12 +657,24 @@ def make_nodes(services):
             for message in uncovered[:-1]
             if message.type in {"human", "ai"} and message.content
         ][-4:]
+        query = state.get("resolved_query") or state["query"]
+        retrieve_detailed = getattr(services, "retrieve_detailed", None)
+        if getattr(services, "speculative_retrieve", False) and callable(retrieve_detailed):
+            # 意图识别要调一次模型；这段时间先把知识检索做了，不是知识咨询再取消
+            prefetch.start(scope(state), "retrieve", prefetch.make_key(state.get("request_id"), query),
+                           retrieve_detailed(query))
         async with span("classify", trace_sink) as record:
-            prediction, route = await services.classify(
-                state.get("resolved_query") or state["query"],
-                summary_text=state.get("summary_text", ""),
-                recent_context=recent_context,
-            )
+            try:
+                prediction, route = await services.classify(
+                    query,
+                    summary_text=state.get("summary_text", ""),
+                    recent_context=recent_context,
+                )
+            except BaseException:
+                prefetch.cancel(scope(state), "retrieve")
+                raise
+            if route != "knowledge":
+                prefetch.cancel(scope(state), "retrieve")
             record["intent"] = prediction.intent.value
             record["intent_confidence"] = prediction.confidence
         legacy = {
@@ -810,7 +848,7 @@ def make_nodes(services):
                 rerank_all,
             )
 
-        values = await assess_evidence(query, result)
+        values = await assess_evidence(query, result, state)
 
         return update(
             state,

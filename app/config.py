@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     rate_login_per_minute: int = Field(default=10, ge=1)  # 每个 IP 登录
     rate_staff_model_per_minute: int = Field(default=30, ge=1)  # 每个员工调用模型的试用接口
 
+    # ==================== 回复时延 ====================
+    # 见 docs/latency.md。预取不会改变回答内容，只在前一步的结果确认后才使用预取结果
+    speculative_retrieve: bool = True  # 意图识别期间先做知识检索（意图不是知识咨询时多一次检索和精排）
+    speculative_answer: bool = True  # 证据充分性检查期间先生成回答（检查不通过时多一次模型调用）
+    intent_rules: bool = True  # 「在吗」「转人工」这类明确的短句不调模型识别意图
+
     # ==================== 外部渠道：拼多多 ====================
     # 见 docs/phase3-pinduoduo-channel.md。消息经“渠道桥”收发：桥负责对接拼多多客服消息，
     # 用 HMAC 签名把买家消息推给本服务，并接收本服务的回复。

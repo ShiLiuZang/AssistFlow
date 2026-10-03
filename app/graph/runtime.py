@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from app.core.conversation_lock import conversation_lock
 from uuid import uuid4
 from app.core.observability import span
+from app.graph import prefetch
 
 class Runtime:
     """图运行时"""
@@ -24,6 +25,27 @@ class Runtime:
         self.trace_sink = trace_sink
 
     async def run_turn(
+            self,
+            query: str,
+            user_id: str,
+            conversation_id: str,
+            *,
+            resume=None,
+            summary_text: str = "",
+            summary_upto: int = 0,
+            covered_count: int = 0,
+    ):
+        """执行一轮对话（见 _run_turn）；结束时取消本轮没用上的预取（见 app.graph.prefetch）。"""
+        async with conversation_lock(user_id, conversation_id):  # 可重入，_run_turn 里再次获取不会阻塞
+            try:
+                return await self._run_turn(
+                    query, user_id, conversation_id, resume=resume, summary_text=summary_text,
+                    summary_upto=summary_upto, covered_count=covered_count,
+                )
+            finally:
+                prefetch.discard(str(conversation_id))
+
+    async def _run_turn(
             self,
             query: str,
             user_id: str,

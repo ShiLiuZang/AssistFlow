@@ -243,6 +243,8 @@ Back-office pages require staff login. Customer identity comes from tokens signe
 
 **Pinduoduo channel:** set `PDD_ENABLED=true` and `PDD_BRIDGE_SECRET` (32+ chars). Buyer messages arrive from a channel bridge at `POST /api/channels/pinduoduo/events` (HMAC-signed); replies, staff messages and handoff notices go back through `PDD_BRIDGE_SEND_URL` (left empty, replies are only recorded). Bursts are merged into one turn, a holding reply goes out when an answer is slow, and ticket confirmation / order selection work by text. Buyers can only query orders they sent as order cards; set `PDD_CLIENT_ID` / `PDD_CLIENT_SECRET` / `PDD_ACCESS_TOKEN` to look up live order status. See [docs/phase3-pinduoduo-channel.md](docs/phase3-pinduoduo-channel.md).
 
+**Reply latency:** simple greetings and "转人工" skip the intent model; knowledge retrieval starts while the intent is being classified, and the answer is generated while the evidence check runs (both discarded if not needed); policy queries are retrieved in parallel. `python -m scripts.latency_bench` compares before/after with simulated latencies. Each optimisation can be turned off (`SPECULATIVE_RETRIEVE`, `SPECULATIVE_ANSWER`, `INTENT_RULES`). See [docs/latency.md](docs/latency.md).
+
 ### 4. Initialize Knowledge Base
 
 ```bash
