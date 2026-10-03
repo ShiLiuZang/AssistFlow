@@ -32,6 +32,7 @@ from app.channels.text import (
     order_prompt, parse_confirmation, parse_order_choice, split_message, ticket_prompt,
 )
 from app.core import handoff
+from app.core.intent import Intent, quick_intent
 from app.core.conversation_lock import conversation_lock
 from app.db import repository
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
@@ -169,14 +170,22 @@ class Dispatcher:
     # ==================== 回答 ====================
 
     async def _answer(self, session: dict, message: str) -> list[tuple[str, str]]:
-        runtime = self.runtime_getter()
-        if runtime is None:
-            return [("notice", BUSY_TEXT)]
         user_id, conversation_id = session["user_id"], session["conversation_id"]
 
         # 人工接待中：消息进坐席队列，不回复
         if await handoff.customer_message(conversation_id, user_id, message) is not None:
             return []
+
+        # 明确要人工（「人工」「转人工」）：直接排队，不经过图。
+        # 渠道里没有网页那样的转人工按钮，模型或图出问题时买家也要能转出去；有待确认操作时同样放行。
+        quick = quick_intent(message)
+        if quick is not None and quick.intent == Intent.HUMAN:
+            return [("answer", handoff.queue_reply(await handoff.request(conversation_id, user_id, "human"),
+                                                   "好的，"))]
+
+        runtime = self.runtime_getter()
+        if runtime is None:
+            return [("notice", BUSY_TEXT)]
 
         pending = await self._pending(runtime, user_id, conversation_id)
         if pending is not None and pending.get("kind") == "select_order":

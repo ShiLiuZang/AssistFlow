@@ -8,12 +8,12 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.core import auth
-from app.core.ratelimit import limit_login
+from app.core.ratelimit import check_login_account, limit_login
 from app.db import repository
 
 logger = logging.getLogger(__name__)
@@ -30,8 +30,9 @@ class DevCustomerIn(BaseModel):
 
 
 @router.post("/login", dependencies=[Depends(limit_login)])
-async def login(body: LoginIn) -> dict:
+async def login(body: LoginIn, request: Request) -> dict:
     """校验账号密码并签发员工令牌；失败时不区分用户名错还是密码错。"""
+    check_login_account(request, body.username)
     try:
         user = await repository.get_staff_user(body.username.strip())
     except Exception as exc:

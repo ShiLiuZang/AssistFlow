@@ -324,6 +324,28 @@ class TestHandoff:
         assert detail["channel"] == "pinduoduo"
         assert [m["content"] for m in detail["messages"] if m["role"] == "customer"][-1] == "快点处理"
 
+    @pytest.mark.parametrize("runtime_ready", [True, False])
+    async def test_human_request_bypasses_graph(self, make, db, sender, graph, monkeypatch, runtime_ready):
+        monkeypatch.setattr(handoff, "hub", Hub())
+        dispatcher = make(runtime_getter=(lambda: object()) if runtime_ready else (lambda: None))
+        await dispatcher.receive(inbound({"msg_id": "m1", "text": "转人工"}))
+        await settle(dispatcher)
+        assert graph.calls == []
+        assert sender.texts == ["好的，已为您转接人工客服，您是下一位，客服接入后会在这里回复您。"]
+        row = await self._session(db)
+        detail = await handoff.detail(row.conversation_id)
+        assert detail["status"] == "queued" and detail["handoff"]["reason"] == "human"
+
+    async def test_human_request_while_ticket_pending(self, make, db, sender, graph, pending, monkeypatch):
+        monkeypatch.setattr(handoff, "hub", Hub())
+        pending["value"] = {"kind": "confirm_ticket", "tool_call_id": "c1", "preview": {}}
+        dispatcher = make()
+        await dispatcher.receive(inbound({"msg_id": "m1", "text": "人工"}))
+        await settle(dispatcher)
+        row = await self._session(db)
+        assert (await handoff.detail(row.conversation_id))["status"] == "queued"
+        assert "转接人工客服" in sender.texts[-1]
+
     async def test_staff_replies_forwarded_in_order(self, make, db, sender, monkeypatch):
         hub = Hub()
         monkeypatch.setattr(handoff, "hub", hub)

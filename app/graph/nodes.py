@@ -43,6 +43,7 @@ from app.tools.engine import (
 )
 from app.tools.audit import build_tool_audit, emit_tool_audit
 from app.config import settings
+from app.core.handoff import queue_reply
 from app.core.safety import SAFE_REPLY, guard_reply
 from app.core.confidence import evidence_gate
 from app.db import repository
@@ -711,11 +712,7 @@ def make_nodes(services):
         except Exception:
             logger.exception("转人工失败 conversation_id=%s", state.get("conversation_id"))
             return fallback_answer
-        if result.get("status") == "active":
-            return f"{lead}人工客服正在为您服务，请直接描述您的问题。"
-        ahead = max(int(result.get("position") or 1) - 1, 0)
-        queue = f"前面还有 {ahead} 位顾客" if ahead else "您是下一位"
-        return f"{lead}已为您转接人工客服，{queue}，客服接入后会在这里回复您。"
+        return queue_reply(result, lead)
 
     async def complaint(state: ConversationState):
         answer = await handoff(

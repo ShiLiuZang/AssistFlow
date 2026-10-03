@@ -65,9 +65,19 @@ async def limit_staff_model(staff: Staff = Depends(current_staff)) -> Staff:
 
 
 def client_ip(request: Request) -> str:
+    """连接方地址。部署在反向代理后面时要用 uvicorn --proxy-headers --forwarded-allow-ips 启动，
+    否则这里拿到的是代理地址，所有人共用一份登录额度。"""
     return request.client.host if request.client else "unknown"
 
 
 async def limit_login(request: Request) -> None:
-    if not limiter.hit(f"login:{client_ip(request)}", settings.rate_login_per_minute):
+    """每个 IP 的总登录次数（挡住换用户名的批量尝试）；单个账号的次数在 check_login_account 里限。"""
+    if not limiter.hit(f"login-ip:{client_ip(request)}", settings.rate_login_ip_per_minute):
+        raise _deny("登录尝试过于频繁，请稍后再试")
+
+
+def check_login_account(request: Request, username: str) -> None:
+    """同一 IP 下单个账号的登录次数：一个人连续输错只锁自己，不影响同一出口 IP 的其他员工。"""
+    key = f"login:{client_ip(request)}:{username.strip().lower()}"
+    if not limiter.hit(key, settings.rate_login_per_minute):
         raise _deny("登录尝试过于频繁，请稍后再试")

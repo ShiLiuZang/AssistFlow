@@ -289,6 +289,15 @@ async def request(conversation_id: int, user_id: str, reason: str, card: dict | 
         return {**handoff_view(handoff, position, audience="customer"), "created": True}
 
 
+def queue_reply(result: dict, lead: str = "") -> str:
+    """转人工后告诉顾客的话术（排队位置或已接入）。"""
+    if result.get("status") == "active":
+        return f"{lead}人工客服正在为您服务，请直接描述您的问题。"
+    ahead = max(int(result.get("position") or 1) - 1, 0)
+    queue = f"前面还有 {ahead} 位顾客" if ahead else "您是下一位"
+    return f"{lead}已为您转接人工客服，{queue}，客服接入后会在这里回复您。"
+
+
 async def request_from_graph(state: dict, reason: str) -> dict:
     """供图里的 human / complaint 节点调用。"""
     return await request(int(state["conversation_id"]), state["user_id"], reason, card_from_state(state, reason))

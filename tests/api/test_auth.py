@@ -139,9 +139,19 @@ class TestLogin:
         staff_repo.touch_staff_login.side_effect = RuntimeError()
         assert anon_client.post("/api/auth/login", json={"username": "alice", "password": "pw"}).status_code == 200
 
-    def test_rate_limited_per_ip(self, anon_client, staff_repo, monkeypatch):
+    def test_rate_limited_per_account(self, anon_client, staff_repo, monkeypatch):
         monkeypatch.setattr(settings, "rate_login_per_minute", 3)
         codes = [anon_client.post("/api/auth/login", json={"username": "alice", "password": "bad"}).status_code for _ in range(4)]
+        assert codes == [401, 401, 401, 429]
+        # 同一出口 IP 的其他员工不受影响（用户名大小写和空格视为同一账号）
+        assert anon_client.post("/api/auth/login", json={"username": " ALICE ", "password": "pw"}).status_code == 429
+        staff_repo.user.username = "bob"
+        assert anon_client.post("/api/auth/login", json={"username": "bob", "password": "pw"}).status_code == 200
+
+    def test_rate_limited_per_ip_across_accounts(self, anon_client, staff_repo, monkeypatch):
+        monkeypatch.setattr(settings, "rate_login_ip_per_minute", 3)
+        codes = [anon_client.post("/api/auth/login", json={"username": f"user{i}", "password": "bad"}).status_code
+                 for i in range(4)]
         assert codes == [401, 401, 401, 429]
 
 
