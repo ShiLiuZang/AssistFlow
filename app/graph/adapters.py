@@ -17,6 +17,7 @@ Services 容器：
 """
 
 import json
+from app.config import settings
 from typing import Literal
 from app.core.rerank import rerank_hits
 from app.core.llm import get_chat_model
@@ -61,6 +62,8 @@ from app.tools.ticket_tools import create_ticket
 from dataclasses import dataclass
 from typing import Callable
 from app.core.intent import (
+    ROUTES as INTENT_ROUTES,
+    quick_intent,
     classify as classify_intent,
     model_predictor,
 )
@@ -112,6 +115,8 @@ class Services:
     check_sufficient: Callable | None = None
     rerank_policy: Callable | None = None
     request_handoff: Callable | None = None  # 转人工排队，见 app.core.handoff.request_from_graph
+    speculative_retrieve: bool = False  # 意图识别期间预取知识检索（见 app.graph.prefetch）
+    speculative_answer: bool = False  # 证据检查期间预取回答
 
 
 def make_services(registry: Registry | None = None) -> Services:
@@ -140,6 +145,8 @@ def make_services(registry: Registry | None = None) -> Services:
         retrieve_detailed=retrieve_detailed,
         check_sufficient=check_sufficient,
         rerank_policy=rerank_hits,
+        speculative_retrieve=settings.speculative_retrieve,
+        speculative_answer=settings.speculative_answer,
     )
 
 
@@ -514,6 +521,13 @@ async def classify_detail(
 
     参考 git commit 4d1384a (记录意图与选单接入审查)
     """
+    if settings.intent_rules:
+        quick = quick_intent(query)
+        if quick is not None:
+            # 「在吗」「转人工」这类短句省掉一次模型调用
+            async with span("classify_rule") as record:
+                record["intent"] = quick.intent.value
+            return quick, INTENT_ROUTES[quick.intent]
     model = get_chat_model()
     predict = model_predictor(model, summary_text, recent_context)
     return await classify_intent(query, predict)

@@ -67,36 +67,55 @@ def rerank_url() -> str:
     suffix = "/reranks" if plural else "/rerank"
     return base + suffix
 
+_CLIENT: tuple[asyncio.AbstractEventLoop, httpx.AsyncClient] | None = None
+
+
+def _client() -> httpx.AsyncClient:
+    """复用一个连接池：每次新建客户端都要重新握手（HTTPS 往返几百毫秒）。按事件循环缓存。"""
+    global _CLIENT
+    loop = asyncio.get_running_loop()
+    if _CLIENT is None or _CLIENT[0] is not loop or _CLIENT[1].is_closed:
+        _CLIENT = (loop, httpx.AsyncClient(timeout=30))
+    return _CLIENT[1]
+
+
+async def close_client() -> None:
+    global _CLIENT
+    if _CLIENT is not None:
+        client, _CLIENT = _CLIENT[1], None
+        await client.aclose()
+
+
 async def post_with_retry(
     url:str,
     payload:dict,
 )->dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        for attempt in range(3):
-            try:
-                response = await client.post(
-                    url,
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {settings.rerank_api_key}",
-                    },
-                )
-                response.raise_for_status()
-                return response.json()
-            except (
-                    httpx.TransportError,
-                    httpx.HTTPStatusError,
-                ) as exc:
-                if isinstance(exc, httpx.TransportError):
-                    transient = True
-                else:
-                    status = exc.response.status_code
-                    transient = status == 429 or status >= 500
+    client = _client()
+    for attempt in range(3):
+        try:
+            response = await client.post(
+                url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.rerank_api_key}",
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+        except (
+                httpx.TransportError,
+                httpx.HTTPStatusError,
+            ) as exc:
+            if isinstance(exc, httpx.TransportError):
+                transient = True
+            else:
+                status = exc.response.status_code
+                transient = status == 429 or status >= 500
 
-                if not transient or attempt == 2:
-                    raise
+            if not transient or attempt == 2:
+                raise
 
-                await asyncio.sleep(0.5 * 2 ** attempt)
+            await asyncio.sleep(0.5 * 2 ** attempt)
 
 async def rerank_hits(
     query: str,
