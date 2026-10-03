@@ -42,11 +42,8 @@ from app.tools.engine import (
     make_tool_run,
 )
 from app.tools.audit import build_tool_audit, emit_tool_audit
-from app.config import settings
-from app.core.handoff import queue_reply
 from app.core.safety import SAFE_REPLY, guard_reply
 from app.core.confidence import evidence_gate
-from app.db import flywheel_repo
 from app.graph import prefetch
 
 # 置信度不足时的拒答模板
@@ -167,7 +164,7 @@ def make_nodes(services):
             decision = await evidence_gate(
                 query,
                 candidates,
-                settings.evidence_min_confidence,
+                services.evidence_min_confidence,
                 gate_check,
                 evidence=evidence,
             )
@@ -304,39 +301,8 @@ def make_nodes(services):
 
                 source = None
 
-            # 构建消息 ID（用于关联 Turn 快照）
-            message_id = f"msg_{state['conversation_id']}_{state['request_id']}"
-            snapshot = state.get("retrieved_snapshot")
-            turn_saved = False
-
-            # 保存回答快照到 Turn 表
-            try:
-                await flywheel_repo.save_turn(
-                    owner=state["user_id"],
-                    conversation=str(state["conversation_id"]),
-                    message_id=message_id,
-                    turn_id=state["request_id"],
-                    question=query,
-                    snapshot=snapshot,
-                )
-                turn_saved = True
-            except Exception as e:
-                # 快照保存失败不影响主流程（静默失败）
-                pass
-
-            # 如果拒答且快照已保存，记录到低置信度问题池
-            if refused and source and turn_saved:
-                try:
-                    await flywheel_repo.capture_low_confidence(
-                        owner=state["user_id"],
-                        conversation=str(state["conversation_id"]),
-                        message_id=message_id,
-                        source=source,
-                        reason=reason,
-                    )
-                except Exception as e:
-                    # 记录失败不影响主流程
-                    pass
+            # 保存回答快照；拒答时记录到低置信度问题池
+            message_id = await record_turn(state, query, source if refused else None, reason)
 
             return update(
                 state,
@@ -345,7 +311,7 @@ def make_nodes(services):
                 citations=[] if refused else result["citations"],  # 拒答时无引用
                 fallback_source=source,
                 fallback_reason=reason,
-                message_id=message_id if turn_saved else None,
+                message_id=message_id,
             )
 
     async def fallback(state: ConversationState):
@@ -376,43 +342,15 @@ def make_nodes(services):
             reason = state.get("fallback_reason", "unknown")
 
         query = state.get("resolved_query") or state["query"]
-        message_id = f"msg_{state['conversation_id']}_{state['request_id']}"
-        snapshot = state.get("retrieved_snapshot")
-        turn_saved = False
-
-        # 保存回答快照
-        try:
-            await flywheel_repo.save_turn(
-                owner=state["user_id"],
-                conversation=str(state["conversation_id"]),
-                message_id=message_id,
-                turn_id=state["request_id"],
-                question=query,
-                snapshot=snapshot,
-            )
-            turn_saved = True
-        except Exception as e:
-            pass
-
-        # 记录到低置信度问题池
-        if turn_saved:
-            try:
-                await flywheel_repo.capture_low_confidence(
-                    owner=state["user_id"],
-                    conversation=str(state["conversation_id"]),
-                    message_id=message_id,
-                    source=source,
-                    reason=reason,
-                )
-            except Exception as e:
-                pass
+        # 保存回答快照并记录到低置信度问题池
+        message_id = await record_turn(state, query, source, reason)
 
         return update(
             state,
             "fallback",
             answer=answer,
             citations=[],
-            message_id=message_id if turn_saved else None,
+            message_id=message_id,
         )
 
     async def agent(state: ConversationState):
@@ -702,17 +640,43 @@ def make_nodes(services):
             "chat",
             answer="你好，可以咨询商品知识、订单或售后问题。"
         )
+    async def record_turn(state: ConversationState, query: str, source: str | None, reason: str | None) -> str | None:
+        """
+        保存回答快照（数据飞轮）；source 不为空时再把问题放进低置信度问题池
+
+        返回快照的消息 ID；未配置存储服务或保存失败时返回 None（不影响回答，只记日志），
+        快照没保存成功就不进问题池。
+        """
+        save_turn = getattr(services, "save_turn", None)
+        if not callable(save_turn):
+            return None
+        conversation_id = state["conversation_id"]
+        message_id = f"msg_{conversation_id}_{state['request_id']}"
+        try:
+            await save_turn(owner=state["user_id"], conversation=str(conversation_id), message_id=message_id,
+                            turn_id=state["request_id"], question=query, snapshot=state.get("retrieved_snapshot"))
+        except Exception:
+            logger.warning("回答快照保存失败 conversation_id=%s", conversation_id, exc_info=True)
+            return None
+        capture = getattr(services, "capture_low_confidence", None)
+        if source and callable(capture):
+            try:
+                await capture(owner=state["user_id"], conversation=str(conversation_id), message_id=message_id,
+                              source=source, reason=reason)
+            except Exception:
+                logger.warning("低置信度问题记录失败 conversation_id=%s", conversation_id, exc_info=True)
+        return message_id
+
     async def handoff(state: ConversationState, reason: str, fallback_answer: str, lead: str) -> str:
         """转入人工排队并返回给顾客的话术；转人工服务不可用时退回原引导话术。"""
         request_handoff = getattr(services, "request_handoff", None)
         if not callable(request_handoff):
             return fallback_answer
         try:
-            result = await request_handoff(state, reason)
+            return await request_handoff(state, reason, lead)
         except Exception:
             logger.exception("转人工失败 conversation_id=%s", state.get("conversation_id"))
             return fallback_answer
-        return queue_reply(result, lead)
 
     async def complaint(state: ConversationState):
         answer = await handoff(

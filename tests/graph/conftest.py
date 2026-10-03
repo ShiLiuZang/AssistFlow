@@ -6,7 +6,6 @@ import pytest
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.graph import nodes
 from app.graph.build import build_graph
 from app.graph.runtime import Runtime
 from app.tools.registry import Registry, ToolSpec
@@ -100,6 +99,9 @@ def make_services(route="knowledge", **overrides):
         rerank_policy=AsyncMock(return_value=[GOOD_HIT]),
         registry=make_registry(),
         agent=scripted_agent(AIMessage(content="好的")),
+        save_turn=lambda **kwargs: STORE.save_turn(**kwargs),
+        capture_low_confidence=lambda **kwargs: STORE.capture_low_confidence(**kwargs),
+        evidence_min_confidence=0.5,
     )
     for key, value in overrides.items():
         setattr(services, key, value)
@@ -110,11 +112,12 @@ def runtime_for(services, checkpointer=None):
     return Runtime(build_graph(services, checkpointer=checkpointer or InMemorySaver()))
 
 
+# make_services 注入的数据飞轮写入（回答快照与低置信度问题池），每个测试由 repo 夹具换成新的替身
+STORE = SimpleNamespace(save_turn=AsyncMock(), capture_low_confidence=AsyncMock())
+
+
 @pytest.fixture
-def repo(monkeypatch):
-    """替换节点里的 MySQL 写入（回答快照与低置信度问题池）。"""
-    save_turn = AsyncMock()
-    capture = AsyncMock()
-    monkeypatch.setattr(nodes.flywheel_repo, "save_turn", save_turn)
-    monkeypatch.setattr(nodes.flywheel_repo, "capture_low_confidence", capture)
-    return SimpleNamespace(save_turn=save_turn, capture_low_confidence=capture)
+def repo():
+    """记录节点通过 services 写入的回答快照与低置信度问题。"""
+    STORE.save_turn, STORE.capture_low_confidence = AsyncMock(), AsyncMock()
+    return STORE

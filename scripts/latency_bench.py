@@ -17,7 +17,6 @@ for name in ("CHAT_MODEL", "CHAT_BASE_URL", "CHAT_API_KEY", "EMBED_MODEL", "EMBE
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 
 from app.core import intent  # noqa: E402
-from app.graph import nodes  # noqa: E402
 from app.graph.adapters import Services  # noqa: E402
 from app.graph.build import build_graph  # noqa: E402
 from app.graph.runtime import Runtime  # noqa: E402
@@ -98,29 +97,21 @@ def make_services(scale: float, optimized: bool, serial_policy: bool = False) ->
         classify=classify, retrieve=unused, answer=answer, agent=unused, tools={}, list_orders=list_orders,
         get_order=get_order, expand_policy=expand_policy, retrieve_detailed=retrieve_detailed,
         check_sufficient=check_sufficient, rerank_policy=rerank_policy,
-        speculative_retrieve=optimized, speculative_answer=optimized,
+        speculative_retrieve=optimized, speculative_answer=optimized,  # 不注入 save_turn：不写数据库
     )
 
 
 async def run(scale: float) -> list[tuple[str, float, float]]:
-    async def noop(**kwargs):
-        return None
-
-    saved = nodes.flywheel_repo.save_turn, nodes.flywheel_repo.capture_low_confidence
-    nodes.flywheel_repo.save_turn = nodes.flywheel_repo.capture_low_confidence = noop  # 不写数据库
     rows = []
-    try:
-        for label, query in SCENARIOS:
-            timings = []
-            for optimized in (False, True):
-                services = make_services(scale, optimized, serial_policy=not optimized and label == "退款政策")
-                runtime = Runtime(build_graph(services, checkpointer=InMemorySaver()))
-                started = time.perf_counter()
-                await runtime.run_turn(query, "u1", f"bench-{label}-{optimized}")
-                timings.append(time.perf_counter() - started)
-            rows.append((label, *timings))
-    finally:
-        nodes.flywheel_repo.save_turn, nodes.flywheel_repo.capture_low_confidence = saved
+    for label, query in SCENARIOS:
+        timings = []
+        for optimized in (False, True):
+            services = make_services(scale, optimized, serial_policy=not optimized and label == "退款政策")
+            runtime = Runtime(build_graph(services, checkpointer=InMemorySaver()))
+            started = time.perf_counter()
+            await runtime.run_turn(query, "u1", f"bench-{label}-{optimized}")
+            timings.append(time.perf_counter() - started)
+        rows.append((label, *timings))
     return rows
 
 

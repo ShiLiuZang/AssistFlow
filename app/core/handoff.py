@@ -298,9 +298,10 @@ def queue_reply(result: dict, lead: str = "") -> str:
     return f"{lead}已为您转接人工客服，{queue}，客服接入后会在这里回复您。"
 
 
-async def request_from_graph(state: dict, reason: str) -> dict:
-    """供图里的 human / complaint 节点调用。"""
-    return await request(int(state["conversation_id"]), state["user_id"], reason, card_from_state(state, reason))
+async def request_from_graph(state: dict, reason: str, lead: str = "") -> str:
+    """供图里的 human / complaint 节点调用，返回给顾客的话术。"""
+    result = await request(int(state["conversation_id"]), state["user_id"], reason, card_from_state(state, reason))
+    return queue_reply(result, lead)
 
 
 async def customer_status(conversation_id: int, user_id: str) -> dict | None:

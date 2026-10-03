@@ -42,7 +42,7 @@ from app.api.channels import router as channels_router  # 外部渠道（拼多�
 # 核心服务导入
 from app.channels import service as channels  # 外部渠道接入
 from app.config import settings  # 配置管理
-from app.core import auth, handoff  # 认证配置校验、转人工
+from app.core import auth  # 认证配置校验
 from app.core import rerank  # 精排服务（关闭连接池）
 from app.core.instance_lock import single_instance  # 单进程保护
 from app.core.safety import install_log_redaction  # 日志脱敏
@@ -118,7 +118,6 @@ async def _lifespan(app: FastAPI):
     # trace_sink: 记录执行追踪 span，用于性能分析和调试（git commit 805cba5）
     services.audit_sink = trace_repo.insert_tool_audit
     services.trace_sink = trace_repo.insert_trace_span
-    services.request_handoff = handoff.request_from_graph
 
     # 4. 记录 MCP 工具发现异常
     for issue in issues:
