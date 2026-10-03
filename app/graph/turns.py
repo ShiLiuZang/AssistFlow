@@ -26,7 +26,7 @@ from app.core import handoff
 from app.core.conversation_lock import conversation_lock
 from app.core.observability import span
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
-from app.db import repository
+from app.db import conversation_repo, ticket_repo, trace_repo
 from app.graph.runtime import Runtime
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.schemas.chat import ChatRequest
@@ -63,7 +63,7 @@ async def pending_interrupt(runtime: Runtime, user_id: str, conversation_id: int
 
 async def find_ticket_call(conversation_id: int, call_id: str) -> dict | None:
     """从消息历史里找到对应的 create_ticket 工具调用。"""
-    records = await repository.list_messages(conversation_id)
+    records = await conversation_repo.list_messages(conversation_id)
     return next((call for record in reversed(records) for call in record.tool_calls or []
                  if call.get("id") == call_id and call.get("name") == "create_ticket"), None)
 
@@ -81,7 +81,7 @@ def call_in_current_turn(snapshot, call_id: str) -> bool:
 async def persist_graph_messages(runtime: Runtime, user_id: str, conversation_id: int) -> None:
     """把图状态里的消息同步到数据库（图是真实来源）。"""
     snapshot = await runtime.graph.aget_state(thread_config(user_id, conversation_id))
-    await repository.persist_graph_messages(conversation_id, user_id, snapshot.values.get("messages", []))
+    await conversation_repo.persist_graph_messages(conversation_id, user_id, snapshot.values.get("messages", []))
 
 
 async def collect_turn(events) -> list[dict]:
@@ -190,10 +190,10 @@ async def chat_turn(request: ChatRequest, conversation_id: int, runtime: Runtime
 
             config = thread_config(request.user_id, conversation_id)
             snapshot = await runtime.graph.aget_state(config)
-            conversation = await repository.get_conversation(conversation_id, request.user_id)
+            conversation = await conversation_repo.get_conversation(conversation_id, request.user_id)
             if conversation is None:
                 raise ValueError("会话不存在")
-            records = await repository.list_messages(conversation_id)
+            records = await conversation_repo.list_messages(conversation_id)
             graph_messages = (restore_messages(records) if not snapshot.values
                               else snapshot.values.get("messages", []))
             covered_count = count_covered_messages(records, graph_messages, conversation.summary_upto or 0)
@@ -240,7 +240,7 @@ async def ticket_decision_turn(
     """
     try:
         async with (
-            span("ticket_action", repository.insert_trace_span),
+            span("ticket_action", trace_repo.insert_trace_span),
             conversation_lock(request.user_id, request.conversation_id),
         ):
             call_id = str(tool_call["id"])
@@ -250,16 +250,16 @@ async def ticket_decision_turn(
                 snapshot = await runtime.graph.aget_state(config)
                 pending = snapshot_interrupt(snapshot)
 
-            saved = await repository.get_ticket_decision(request.conversation_id, call_id)
+            saved = await ticket_repo.get_ticket_decision(request.conversation_id, call_id)
             if pending and pending.get("tool_call_id") != call_id and saved is None:
                 raise ValueError("确认调用与当前中断不匹配")
             is_graph = bool(snapshot and snapshot.values)
             if is_graph and saved is None and not pending:
                 raise ValueError("没有待恢复的工单中断")
 
-            async with span("ticket_decision", repository.insert_trace_span):
+            async with span("ticket_decision", trace_repo.insert_trace_span):
                 started = time.monotonic()
-                result = await repository.decide_ticket(request.conversation_id, request.user_id, call_id,
+                result = await ticket_repo.decide_ticket(request.conversation_id, request.user_id, call_id,
                                                         request.confirmed, graph=is_graph)
                 duration_ms = int((time.monotonic() - started) * 1000)
 
@@ -268,7 +268,7 @@ async def ticket_decision_turn(
             except Exception as error:
                 logger.warning("工单审计记录构造失败：error_type=%s", type(error).__name__)
             else:
-                await emit_tool_audit(repository.insert_tool_audit, audit_record)
+                await emit_tool_audit(trace_repo.insert_tool_audit, audit_record)
 
             if pending and pending.get("tool_call_id") == call_id:
                 graph_result = await runtime.run_turn(
@@ -276,7 +276,7 @@ async def ticket_decision_turn(
                     resume={"tool_call_id": call_id, "tool_result": result},
                 )
             elif is_graph and snapshot.next and not pending and call_in_current_turn(snapshot, call_id):
-                async with span("graph_turn", repository.insert_trace_span):
+                async with span("graph_turn", trace_repo.insert_trace_span):
                     graph_result = await runtime.graph.ainvoke(None, config)
             elif is_graph:
                 graph_result = dict(snapshot.values)
@@ -291,7 +291,7 @@ async def ticket_decision_turn(
                 events = [normalize_event({"event": "interrupt", "preview": interrupts[0].value},
                                           request.conversation_id)]
             else:
-                events = [{"delta": repository.ticket_answer(result)},
+                events = [{"delta": ticket_repo.ticket_answer(result)},
                           {"event": "done", "conversation_id": request.conversation_id}]
 
             completed_graph_turn = False

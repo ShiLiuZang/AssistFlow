@@ -2,12 +2,12 @@
 
 from app.core import embeddings
 from app.kb import milvus_client
-from app.db import repository
+from app.db import knowledge_repo
 from app.kb.documents import Chunk
 async def write_pending(
     chunks: list[Chunk],
 ) -> list[int]:
-    return await repository.ensure_knowledge_chunks(chunks)
+    return await knowledge_repo.ensure_knowledge_chunks(chunks)
 def _batches(items: list, size: int):
     for start in range(0, len(items), size):
         yield items[start:start + size]
@@ -18,7 +18,7 @@ async def vectorize_pending(
 ) -> int:
     if batch_size < 1:
         raise ValueError("batch_size 必须为正数")
-    pending = await repository.list_pending_chunks()
+    pending = await knowledge_repo.list_pending_chunks()
     done = 0
 
     for batch in _batches(pending, batch_size):
@@ -84,7 +84,7 @@ async def vectorize_pending(
         await milvus_client.acall(work_upsert)
 
         for row in batch:
-            await repository.mark_chunk_vectorized(
+            await knowledge_repo.mark_chunk_vectorized(
                 row.id,
                 str(row.id),
             )

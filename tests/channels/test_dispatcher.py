@@ -255,7 +255,7 @@ class TestPendingActions:
             decisions.append((request.confirmed, request.tool_call_id, tool_call["id"], request.user_id))
             return [{"delta": "工单已创建，工单号：T1"}]
 
-        monkeypatch.setattr(turns.repository, "list_messages", fake_list)
+        monkeypatch.setattr(turns.conversation_repo, "list_messages", fake_list)
         monkeypatch.setattr(dispatcher_module, "ticket_decision_turn", fake_decision)
 
         await dispatcher.receive(inbound({"msg_id": "m1", "text": "运费谁出"}))

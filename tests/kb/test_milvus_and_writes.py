@@ -175,15 +175,15 @@ class Row:
 class TestDualwrite:
     async def test_write_pending_delegates(self, monkeypatch):
         ensure = AsyncMock(return_value=[1, 2])
-        monkeypatch.setattr(dualwrite.repository, "ensure_knowledge_chunks", ensure)
+        monkeypatch.setattr(dualwrite.knowledge_repo, "ensure_knowledge_chunks", ensure)
         chunks = [Chunk("c", "q", "a", "p", "faq")]
         assert await dualwrite.write_pending(chunks) == [1, 2]
         ensure.assert_awaited_once_with(chunks)
 
     async def test_vectorize_in_batches(self, monkeypatch, fake_milvus):
-        monkeypatch.setattr(dualwrite.repository, "list_pending_chunks", AsyncMock(return_value=[Row(i) for i in range(5)]))
+        monkeypatch.setattr(dualwrite.knowledge_repo, "list_pending_chunks", AsyncMock(return_value=[Row(i) for i in range(5)]))
         mark = AsyncMock()
-        monkeypatch.setattr(dualwrite.repository, "mark_chunk_vectorized", mark)
+        monkeypatch.setattr(dualwrite.knowledge_repo, "mark_chunk_vectorized", mark)
         embed = AsyncMock(side_effect=lambda texts: [[0.0] * milvus_client.DIM for _ in texts])
         monkeypatch.setattr(dualwrite.embeddings, "embed_texts", embed)
 
@@ -201,7 +201,7 @@ class TestDualwrite:
         [([[0.0] * milvus_client.DIM], "数量"), ([[0.0], [0.0]], "维度")],
     )
     async def test_vectorize_rejects_bad_embeddings(self, monkeypatch, fake_milvus, vectors, message):
-        monkeypatch.setattr(dualwrite.repository, "list_pending_chunks", AsyncMock(return_value=[Row(1), Row(2)]))
+        monkeypatch.setattr(dualwrite.knowledge_repo, "list_pending_chunks", AsyncMock(return_value=[Row(1), Row(2)]))
         monkeypatch.setattr(dualwrite.embeddings, "embed_texts", AsyncMock(return_value=vectors))
         with pytest.raises(ValueError, match=message):
             await dualwrite.vectorize_pending()
@@ -306,7 +306,7 @@ class TestPublishReview:
             "note_review_publish_error": AsyncMock(),
         }
         for name, value in fake.items():
-            monkeypatch.setattr(review_publish.repository, name, value)
+            monkeypatch.setattr(review_publish.review_repo, name, value)
         return fake
 
     async def test_publishes(self, repo):

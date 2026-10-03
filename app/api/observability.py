@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from app.schemas.cost_report import CostReport
 from app.config import settings
 from app.core.flywheel_evaluation import comparable
-from app.db import repository
+from app.db import trace_repo
 from app.core.auth import current_staff
 
 router = APIRouter(
@@ -221,7 +221,7 @@ async def read_trend() -> dict:
     """
     try:
         # 加载所有评测运行记录
-        runs = await repository.list_eval_runs()
+        runs = await trace_repo.list_eval_runs()
     except Exception:
         logger.exception("评测运行记录读取失败")
         return {"present": False, "status": "error", "hint": "评测运行记录读取失败。", "can_run": False}

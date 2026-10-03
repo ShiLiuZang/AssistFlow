@@ -109,8 +109,8 @@ class TestTopicViews:
     def repo(self, monkeypatch):
         dist = AsyncMock(return_value={"total": 3, "classes": []})
         questions = AsyncMock(return_value={"items": ["db"]})
-        monkeypatch.setattr(topic_views.repository, "topic_distribution", dist)
-        monkeypatch.setattr(topic_views.repository, "topic_questions", questions)
+        monkeypatch.setattr(topic_views.topic_repo, "topic_distribution", dist)
+        monkeypatch.setattr(topic_views.topic_repo, "topic_questions", questions)
         return dist, questions
 
     @pytest.fixture

@@ -11,7 +11,8 @@ import pathlib
 
 import httpx
 
-from app.db import repository
+from app.core.taxonomy import TOPIC_NAMES
+from app.db import topic_repo
 
 SERVICE = "http://127.0.0.1:8110"
 REPORTS = pathlib.Path("data/finetune/reports")
@@ -28,7 +29,7 @@ def _write_report(status: str, pending: int, written: int, counts: dict) -> None
 
 
 async def main(min_batch: int, force: bool) -> None:
-    rows = await repository.list_unclassified_questions(limit=500)
+    rows = await topic_repo.list_unclassified_questions(limit=500)
     if not rows:
         print("池里没有待归类问题")
         _write_report("empty", 0, 0, {})
@@ -44,9 +45,9 @@ async def main(min_batch: int, force: bool) -> None:
         results = r.json()["results"]
 
 
-    n = await repository.insert_topic_classifications(
+    n = await topic_repo.insert_topic_classifications(
         [{"question_id": x["question_id"], "labels": res["labels"]}
-         for x, res in zip(rows, results, strict=True)])
+         for x, res in zip(rows, results, strict=True)], TOPIC_NAMES)
     counts: dict[str, int] = {}
     for res in results:
         for lb in res["labels"]:

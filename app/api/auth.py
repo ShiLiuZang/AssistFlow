@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.core import auth
 from app.core.ratelimit import check_login_account, limit_login
-from app.db import repository
+from app.db import staff_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -34,7 +34,7 @@ async def login(body: LoginIn, request: Request) -> dict:
     """校验账号密码并签发员工令牌；失败时不区分用户名错还是密码错。"""
     check_login_account(request, body.username)
     try:
-        user = await repository.get_staff_user(body.username.strip())
+        user = await staff_repo.get_staff_user(body.username.strip())
     except Exception as exc:
         logger.exception("读取员工账号失败")
         raise HTTPException(503, "账号服务暂时不可用") from exc
@@ -45,7 +45,7 @@ async def login(body: LoginIn, request: Request) -> dict:
         raise HTTPException(401, "用户名或密码错误")
 
     try:
-        await repository.touch_staff_login(user.id)
+        await staff_repo.touch_staff_login(user.id)
     except Exception:
         logger.warning("记录登录时间失败 user=%s", user.username)
     return {

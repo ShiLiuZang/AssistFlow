@@ -1,4 +1,4 @@
-"""接口测试共用：真实 FastAPI 应用（不跑 lifespan，不连 MySQL/Milvus/模型）与 repository 替身。"""
+"""接口测试共用：真实 FastAPI 应用（不跑 lifespan，不连 MySQL/Milvus/模型）与数据库仓储替身。"""
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -8,10 +8,15 @@ from fastapi.testclient import TestClient
 
 from app.core import auth
 from app.core.auth import Staff
-from app.db import repository as repository_module
+from app.db import (
+    conversation_repo, flywheel_repo, knowledge_repo, review_repo, staff_repo, staging_repo, ticket_repo,
+    topic_repo, trace_repo,
+)
 from app.main import app
 
 
+REPO_MODULES = (conversation_repo, flywheel_repo, knowledge_repo, review_repo, staff_repo, staging_repo,
+                ticket_repo, topic_repo, trace_repo)
 CUSTOMER = "u1"
 STAFF = Staff(username="test-reviewer", role="admin")
 
@@ -44,12 +49,13 @@ def client(anon_client):
 
 @pytest.fixture
 def repo(monkeypatch):
-    """按需替换 app.db.repository 中的函数：repo.set(name, return_value=...)。"""
+    """按需替换 app.db.*_repo 中的函数：repo.set(name, return_value=...)，按函数名找到所在模块。"""
 
     class Repo:
         def set(self, name, **kwargs):
             mock = AsyncMock(**kwargs)
-            monkeypatch.setattr(repository_module, name, mock)
+            module = next(module for module in REPO_MODULES if hasattr(module, name))
+            monkeypatch.setattr(module, name, mock)
             setattr(self, name, mock)
             return mock
 

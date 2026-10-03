@@ -115,6 +115,6 @@ def repo(monkeypatch):
     """替换节点里的 MySQL 写入（回答快照与低置信度问题池）。"""
     save_turn = AsyncMock()
     capture = AsyncMock()
-    monkeypatch.setattr(nodes.repository, "save_turn", save_turn)
-    monkeypatch.setattr(nodes.repository, "capture_low_confidence", capture)
+    monkeypatch.setattr(nodes.flywheel_repo, "save_turn", save_turn)
+    monkeypatch.setattr(nodes.flywheel_repo, "capture_low_confidence", capture)
     return SimpleNamespace(save_turn=save_turn, capture_low_confidence=capture)

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.sse import DONE_SSE, event_to_sse, make_sse
-from app.db import repository
+from app.db import conversation_repo, ticket_repo
 from app.graph import turns
 from app.graph.runtime import Runtime
 from app.core.ratelimit import limit_customer_chat
@@ -78,10 +78,10 @@ async def graph_chat(
 
     # 首次聊天，创建新会话
     if request.conversation_id is None:
-        conversation_id = await repository.create_conversation(request.user_id)
+        conversation_id = await conversation_repo.create_conversation(request.user_id)
     else:
         # 续聊，校验会话存在性
-        conversation = await repository.get_conversation(
+        conversation = await conversation_repo.get_conversation(
             request.conversation_id,
             request.user_id,
         )
@@ -91,7 +91,7 @@ async def graph_chat(
         conversation_id = conversation.id
 
         # 检查是否有待确认的工单
-        if await repository.get_pending_ticket_call(conversation_id) is not None:
+        if await ticket_repo.get_pending_ticket_call(conversation_id) is not None:
             raise HTTPException(status_code=409, detail="请先确认或取消待处理工单")
 
     # 返回流式响应

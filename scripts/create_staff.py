@@ -8,7 +8,7 @@ import getpass
 import os
 
 from app.core.auth import ROLES, hash_password
-from app.db import repository
+from app.db import staff_repo
 from app.db.database import engine
 
 MIN_PASSWORD_LENGTH = 8
@@ -27,7 +27,7 @@ def read_password() -> str:
 
 async def run(username: str, role: str, password: str, active: bool) -> None:
     try:
-        await repository.upsert_staff_user(username, hash_password(password), role, active)
+        await staff_repo.upsert_staff_user(username, hash_password(password), role, active)
     finally:
         await engine.dispose()
 

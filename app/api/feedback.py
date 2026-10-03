@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.core.auth import current_customer
 
-from app.db import repository
+from app.db import conversation_repo, flywheel_repo
 
 
 router = APIRouter(tags=["feedback"])
@@ -50,13 +50,13 @@ async def submit_feedback(
     核心逻辑：
     1. 校验rating字段只能是up或down
     2. 校验会话存在性和所属权
-    3. 调用repository.submit_feedback提交反馈
+    3. 调用flywheel_repo.submit_feedback提交反馈
     4. 如果是down评分，返回问题池ID；up评分不处理
 
     边界情况：
     - rating非法时返回400
     - 会话不存在或无权访问时返回404
-    - 消息不存在或无权访问时返回403（repository抛出PermissionError）
+    - 消息不存在或无权访问时返回403（flywheel_repo 抛出 PermissionError）
     - 其他参数错误时返回400
     - 未知异常时返回500
 
@@ -73,7 +73,7 @@ async def submit_feedback(
         )
 
     # 校验会话存在性和所属权
-    conversation = await repository.get_conversation(
+    conversation = await conversation_repo.get_conversation(
         request.conversation_id,
         request.user_id,
     )
@@ -86,7 +86,7 @@ async def submit_feedback(
 
     try:
         # 提交反馈
-        pool_id = await repository.submit_feedback(
+        pool_id = await flywheel_repo.submit_feedback(
             owner=request.user_id,
             conversation=str(request.conversation_id),
             message_id=request.message_id,

@@ -106,8 +106,8 @@ async def run(scale: float) -> list[tuple[str, float, float]]:
     async def noop(**kwargs):
         return None
 
-    saved = nodes.repository.save_turn, nodes.repository.capture_low_confidence
-    nodes.repository.save_turn = nodes.repository.capture_low_confidence = noop  # 不写数据库
+    saved = nodes.flywheel_repo.save_turn, nodes.flywheel_repo.capture_low_confidence
+    nodes.flywheel_repo.save_turn = nodes.flywheel_repo.capture_low_confidence = noop  # 不写数据库
     rows = []
     try:
         for label, query in SCENARIOS:
@@ -120,7 +120,7 @@ async def run(scale: float) -> list[tuple[str, float, float]]:
                 timings.append(time.perf_counter() - started)
             rows.append((label, *timings))
     finally:
-        nodes.repository.save_turn, nodes.repository.capture_low_confidence = saved
+        nodes.flywheel_repo.save_turn, nodes.flywheel_repo.capture_low_confidence = saved
     return rows
 
 

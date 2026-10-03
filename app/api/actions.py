@@ -16,7 +16,7 @@ from app.core.ratelimit import limit_customer_chat
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.api.sse import DONE_SSE, event_to_sse
 from app.core.conversation_lock import conversation_lock
-from app.db import repository
+from app.db import conversation_repo, ticket_repo
 from app.graph import turns
 from app.graph.runtime import Runtime
 
@@ -72,7 +72,7 @@ async def pending_ticket(
     避免在查询待处理操作时，其他请求修改图状态
     """
     # 校验会话存在性
-    if await repository.get_conversation(conversation_id, user_id) is None:
+    if await conversation_repo.get_conversation(conversation_id, user_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
     async with conversation_lock(user_id, conversation_id):
@@ -91,16 +91,16 @@ async def pending_ticket(
 
             # 工单确认中断
             if pending:
-                saved = await repository.get_ticket_decision(conversation_id, pending["tool_call_id"])
+                saved = await ticket_repo.get_ticket_decision(conversation_id, pending["tool_call_id"])
                 return {**pending, "conversation_id": conversation_id,
                         "confirmed": saved["confirmed"] if saved else None}
 
         # 图中无中断，查询数据库中的待确认工单
-        call = await repository.get_pending_ticket_call(conversation_id)
+        call = await ticket_repo.get_pending_ticket_call(conversation_id)
         if call is None:
             return None
 
-        saved = await repository.get_ticket_decision(conversation_id, call["id"])
+        saved = await ticket_repo.get_ticket_decision(conversation_id, call["id"])
         return {"kind": "confirm_ticket", "conversation_id": conversation_id,
                 "tool_call_id": call["id"], "preview": call["args"],
                 "confirmed": saved["confirmed"] if saved else None}
@@ -139,7 +139,7 @@ async def resume_ticket(
     request.user_id = user_id
 
     # 校验会话存在性
-    conversation = await repository.get_conversation(request.conversation_id, request.user_id)
+    conversation = await conversation_repo.get_conversation(request.conversation_id, request.user_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -155,7 +155,7 @@ async def resume_ticket(
 
     # 如果未携带tool_call_id，从数据库查询
     if call_id is None:
-        pending = await repository.get_pending_ticket_call(request.conversation_id)
+        pending = await ticket_repo.get_pending_ticket_call(request.conversation_id)
         if pending is None:
             raise HTTPException(status_code=409, detail="没有待确认的工单")
         call_id = str(pending["id"])
@@ -199,7 +199,7 @@ async def select_order(
     request.user_id = user_id
 
     # 校验会话存在性
-    conversation = await repository.get_conversation(
+    conversation = await conversation_repo.get_conversation(
         request.conversation_id,
         request.user_id,
     )

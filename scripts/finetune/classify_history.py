@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 from app.core import history_topics
-from app.db import repository
+from app.db import topic_repo
 from scripts.finetune.corpus_lib import dedupe, desensitize
 
 
@@ -18,7 +18,7 @@ REPORT = Path("data/finetune/reports/history_classify_run.json")
 
 
 async def main() -> None:
-    source = await repository.list_history_user_texts()
+    source = await topic_repo.list_history_user_texts()
     rows = dedupe([{"message_id": row["message_id"],
                     "text": desensitize(row["text"]),
                     "asked_at": row["asked_at"]}

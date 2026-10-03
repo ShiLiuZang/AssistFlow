@@ -46,7 +46,7 @@ from app.config import settings
 from app.core.handoff import queue_reply
 from app.core.safety import SAFE_REPLY, guard_reply
 from app.core.confidence import evidence_gate
-from app.db import repository
+from app.db import flywheel_repo
 from app.graph import prefetch
 
 # 置信度不足时的拒答模板
@@ -311,7 +311,7 @@ def make_nodes(services):
 
             # 保存回答快照到 Turn 表
             try:
-                await repository.save_turn(
+                await flywheel_repo.save_turn(
                     owner=state["user_id"],
                     conversation=str(state["conversation_id"]),
                     message_id=message_id,
@@ -327,7 +327,7 @@ def make_nodes(services):
             # 如果拒答且快照已保存，记录到低置信度问题池
             if refused and source and turn_saved:
                 try:
-                    await repository.capture_low_confidence(
+                    await flywheel_repo.capture_low_confidence(
                         owner=state["user_id"],
                         conversation=str(state["conversation_id"]),
                         message_id=message_id,
@@ -382,7 +382,7 @@ def make_nodes(services):
 
         # 保存回答快照
         try:
-            await repository.save_turn(
+            await flywheel_repo.save_turn(
                 owner=state["user_id"],
                 conversation=str(state["conversation_id"]),
                 message_id=message_id,
@@ -397,7 +397,7 @@ def make_nodes(services):
         # 记录到低置信度问题池
         if turn_saved:
             try:
-                await repository.capture_low_confidence(
+                await flywheel_repo.capture_low_confidence(
                     owner=state["user_id"],
                     conversation=str(state["conversation_id"]),
                     message_id=message_id,
