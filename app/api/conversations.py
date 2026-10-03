@@ -13,7 +13,8 @@ from fastapi.responses import StreamingResponse
 from app.core import handoff
 from app.core.auth import current_customer
 from app.core.ratelimit import limit_customer_chat
-from app.core.realtime import conversation_channel, hub
+from app.core import realtime
+from app.core.realtime import conversation_channel
 from app.db import conversation_repo
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,6 @@ async def conversation_events(conversation_id: int, user_id: str = Depends(curre
     if await conversation_repo.get_conversation(conversation_id, user_id) is None:
         raise HTTPException(404, "会话不存在")
     return StreamingResponse(
-        hub.stream(conversation_channel(conversation_id)), media_type="text/event-stream",
+        realtime.hub.stream(conversation_channel(conversation_id)), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

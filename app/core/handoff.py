@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from app.core.realtime import STAFF, conversation_channel, hub
+from app.core import realtime
+from app.core.realtime import STAFF, conversation_channel
 from app.core.safety import desensitize
 from app.db import database
 from app.db.models import Conversation, Handoff, LowConfidenceQuestion, Message, StaffUser
@@ -244,9 +245,9 @@ def _event(conversation_id: int, text: str, author: str | None = None) -> Messag
 
 
 def _publish_state(handoff: Handoff, position: int | None, messages: list[Message] = ()) -> None:
-    hub.publish(STAFF, {"type": "handoff", "conversation_id": handoff.conversation_id,
-                        "handoff": handoff_view(handoff, position)})
-    hub.publish(conversation_channel(handoff.conversation_id), {
+    realtime.hub.publish(STAFF, {"type": "handoff", "conversation_id": handoff.conversation_id,
+                                 "handoff": handoff_view(handoff, position)})
+    realtime.hub.publish(conversation_channel(handoff.conversation_id), {
         "type": "handoff", "handoff": handoff_view(handoff, position, audience="customer")})
     for message in messages:
         _publish_message(message)
@@ -255,10 +256,12 @@ def _publish_state(handoff: Handoff, position: int | None, messages: list[Messag
 def _publish_message(message: Message) -> None:
     staff_view = message_view(message, audience="staff")
     if staff_view:
-        hub.publish(STAFF, {"type": "message", "conversation_id": message.conversation_id, "message": staff_view})
+        realtime.hub.publish(STAFF, {"type": "message", "conversation_id": message.conversation_id,
+                                     "message": staff_view})
     customer_view = message_view(message, audience="customer")
     if customer_view:
-        hub.publish(conversation_channel(message.conversation_id), {"type": "message", "message": customer_view})
+        realtime.hub.publish(conversation_channel(message.conversation_id),
+                             {"type": "message", "message": customer_view})
 
 
 # ==================== 顾客侧 ====================

@@ -38,11 +38,11 @@ import pytest  # noqa: E402
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
     """限流计数是进程级的，测试之间互不影响。"""
-    from app.core.ratelimit import limiter
+    from app.core import ratelimit
 
-    limiter.reset()
+    ratelimit.limiter.reset()
     yield
-    limiter.reset()
+    ratelimit.limiter.reset()
 
 
 @pytest.fixture(autouse=True)

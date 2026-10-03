@@ -10,6 +10,7 @@ from app.channels.dispatcher import BUSY_TEXT, HOLD_TEXT, MEDIA_TEXT, Dispatcher
 from app.channels.pinduoduo import PddInbound
 from app.channels.sender import SendError
 from app.core import handoff
+from app.core import realtime
 from app.core.realtime import Hub
 from app.graph import turns
 from app.db.models import ChannelMessage, ChannelSession, Handoff
@@ -297,7 +298,7 @@ class TestHandoff:
             return (await session.scalars(select(ChannelSession))).one()
 
     async def test_messages_go_to_staff_during_handoff(self, make, db, sender, graph, monkeypatch):
-        monkeypatch.setattr(handoff, "hub", Hub())
+        monkeypatch.setattr(realtime, "hub", Hub())
         dispatcher = make()
         await dispatcher.receive(inbound({"msg_id": "m0", "text": "你好"}))
         await settle(dispatcher)
@@ -313,7 +314,7 @@ class TestHandoff:
 
     @pytest.mark.parametrize("runtime_ready", [True, False])
     async def test_human_request_bypasses_graph(self, make, db, sender, graph, monkeypatch, runtime_ready):
-        monkeypatch.setattr(handoff, "hub", Hub())
+        monkeypatch.setattr(realtime, "hub", Hub())
         dispatcher = make(runtime_getter=(lambda: object()) if runtime_ready else (lambda: None))
         await dispatcher.receive(inbound({"msg_id": "m1", "text": "转人工"}))
         await settle(dispatcher)
@@ -324,7 +325,7 @@ class TestHandoff:
         assert detail["status"] == "queued" and detail["handoff"]["reason"] == "human"
 
     async def test_human_request_while_ticket_pending(self, make, db, sender, graph, pending, monkeypatch):
-        monkeypatch.setattr(handoff, "hub", Hub())
+        monkeypatch.setattr(realtime, "hub", Hub())
         pending["value"] = {"kind": "confirm_ticket", "tool_call_id": "c1", "preview": {}}
         dispatcher = make()
         await dispatcher.receive(inbound({"msg_id": "m1", "text": "人工"}))
@@ -335,7 +336,7 @@ class TestHandoff:
 
     async def test_staff_replies_forwarded_in_order(self, make, db, sender, monkeypatch):
         hub = Hub()
-        monkeypatch.setattr(handoff, "hub", hub)
+        monkeypatch.setattr(realtime, "hub", hub)
         dispatcher = make()
         hub.add_listener(dispatcher.on_publish)
         await dispatcher.receive(inbound({"msg_id": "m0", "text": "你好"}))

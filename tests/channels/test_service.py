@@ -2,7 +2,7 @@
 from app.channels import service
 from app.channels.sender import BridgeSender, DryRunSender
 from app.config import settings
-from app.core.realtime import hub
+from app.core import realtime
 from app.tools import orders
 
 
@@ -18,10 +18,10 @@ async def test_lifecycle(monkeypatch, db):
     monkeypatch.setattr(settings, "pdd_bridge_send_url", "")
     async with service.running(lambda: None) as dispatcher:
         assert service.dispatcher is dispatcher and isinstance(dispatcher.sender, DryRunSender)
-        assert dispatcher.on_publish in hub._listeners
+        assert dispatcher.on_publish in realtime.hub._listeners
         assert orders.provider_for_user("pdd-x") is not None
     assert service.dispatcher is None
-    assert dispatcher.on_publish not in hub._listeners
+    assert dispatcher.on_publish not in realtime.hub._listeners
     assert orders.provider_for_user("pdd-x") is None
 
 
