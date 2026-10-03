@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.graph.checkpoint import persistent_runtime
+from app.graph.runtime import FAILED_TURN_REPLY, close_failed_turn
 from tests.graph.conftest import ANSWER, GOOD_HIT, ORDER, make_services, runtime_for
 
 
@@ -71,12 +72,77 @@ class TestRetryAfterFailure:
         with pytest.raises(RuntimeError):
             await runtime.run_turn("退货期限", "u1", "c1")
 
-        with pytest.raises(ValueError, match="重试失败"):
-            await runtime.run_turn("别的问题", "u1", "c1")
-
         result = await runtime.run_turn("退货期限", "u1", "c1")
         assert result["answer"] == ANSWER
         assert [m.type for m in result["messages"]] == ["human", "ai"]
+
+    async def test_new_question_after_failure_closes_failed_turn(self, repo):
+        calls = {"n": 0}
+
+        async def flaky(query):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("milvus down")
+            return {"candidates": [GOOD_HIT], "evidence": [GOOD_HIT]}
+
+        runtime = runtime_for(make_services(retrieve_detailed=flaky))
+        with pytest.raises(RuntimeError):
+            await runtime.run_turn("退货期限", "u1", "c1")
+
+        result = await runtime.run_turn("别的问题", "u1", "c1")
+        assert result["answer"] == ANSWER
+        assert [m.type for m in result["messages"]] == ["human", "ai", "human", "ai"]
+        assert result["messages"][1].content == FAILED_TURN_REPLY
+        assert result["messages"][2].content == "别的问题"
+
+    async def test_new_question_after_timeout(self, repo):
+        import asyncio
+
+        async def slow(query):
+            if query == "慢问题":
+                await asyncio.sleep(5)
+            return {"candidates": [GOOD_HIT], "evidence": [GOOD_HIT]}
+
+        runtime = runtime_for(make_services(retrieve_detailed=slow))
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(runtime.run_turn("慢问题", "u1", "c1"), timeout=0.2)
+
+        result = await runtime.run_turn("退货期限", "u1", "c1")
+        assert result["answer"] == ANSWER
+        assert result["messages"][1].content == FAILED_TURN_REPLY
+
+    async def test_empty_query_still_requires_retry(self, repo):
+        async def boom(query):
+            raise RuntimeError("milvus down")
+
+        runtime = runtime_for(make_services(retrieve_detailed=boom))
+        with pytest.raises(RuntimeError):
+            await runtime.run_turn("退货期限", "u1", "c1")
+        with pytest.raises(ValueError, match="重试失败"):
+            await runtime.run_turn("", "u1", "c1")
+
+
+class TestCloseFailedTurn:
+    def test_dangling_tool_calls_get_error_results(self):
+        from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+        messages = [
+            HumanMessage(content="旧问题"), AIMessage(content="旧回答"),
+            HumanMessage(content="查物流"),
+            AIMessage(content="", tool_calls=[{"id": "a", "name": "x", "args": {}},
+                                              {"id": "b", "name": "y", "args": {}}]),
+            ToolMessage(content="{}", tool_call_id="a"),
+        ]
+        closing = close_failed_turn(messages)
+        assert [(m.type, getattr(m, "tool_call_id", None)) for m in closing] == [("tool", "b"), ("ai", None)]
+        assert closing[0].status == "error"
+        assert closing[-1].content == FAILED_TURN_REPLY
+
+    def test_no_tool_calls(self):
+        from langchain_core.messages import HumanMessage
+
+        closing = close_failed_turn([HumanMessage(content="问题")])
+        assert [m.type for m in closing] == ["ai"]
 
 
 class TestIsolationAndState:

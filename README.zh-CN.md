@@ -269,6 +269,10 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 前端开发时可改用 `npm run dev`（http://localhost:5173，自动把 `/api` 转发到 8000 端口）。
 
+部署注意：
+- 只能运行一个进程（不要加 `--workers`）。会话锁、限流、实时推送和渠道调度都在进程内存里，启动时检测到同机已有进程会拒绝启动。
+- 放在 Nginx 等反向代理后面时加 `--proxy-headers --forwarded-allow-ips <代理地址>`，否则登录限流拿到的是代理地址。
+
 访问：**http://127.0.0.1:8000**
 
 ---

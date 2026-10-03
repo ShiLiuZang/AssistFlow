@@ -3,13 +3,42 @@
 # 支持订单选择等人机交互场景，确保状态一致性和并发安全
 # 核心职责：提供统一的图执行接口，隔离LangGraph复杂性
 
-from langchain_core.messages import HumanMessage
+import json
+
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 from collections.abc import AsyncIterator
 from app.core.conversation_lock import conversation_lock
 from uuid import uuid4
 from app.core.observability import span
 from app.graph import prefetch
+
+# 新问题到来时，上一轮失败（超时或节点出错）没答完，先用这句话把那一轮收尾
+FAILED_TURN_REPLY = "抱歉，上一个问题没有处理完成，如仍需要可以再问一次。"
+
+
+def close_failed_turn(messages: list) -> list:
+    """
+    给没跑完的一轮补上收尾消息：未得到结果的工具调用补一条失败的工具结果，最后补一条说明。
+
+    不补的话，带工具调用却没有工具结果的 AI 消息会让下一次模型调用直接报错。
+    """
+    start = max((i for i, m in enumerate(messages) if m.type == "human"), default=-1) + 1
+    turn = messages[start:]
+    answered = {m.tool_call_id for m in turn if m.type == "tool"}
+    closing = [
+        ToolMessage(
+            content=json.dumps({"error": "turn_failed", "message": "本轮处理失败，工具未执行完成"},
+                            ensure_ascii=False),
+            tool_call_id=call["id"],
+            status="error",
+        )
+        for message in turn if message.type == "ai"
+        for call in getattr(message, "tool_calls", None) or []
+        if call.get("id") and call["id"] not in answered
+    ]
+    return [*closing, AIMessage(content=FAILED_TURN_REPLY)]
+
 
 class Runtime:
     """图运行时"""
@@ -116,12 +145,19 @@ class Runtime:
             if resume is not None and not pending:
                 raise ValueError("没有待恢复的操作")
 
-            # 重试失败的问题
+            # 上一轮失败（超时或节点出错）停在中间节点
             if resume is None and snapshot.next:
-                if query != snapshot.values.get("query"):
+                # 同一个问题：从失败的节点接着跑
+                if query == snapshot.values.get("query"):
+                    return await self.graph.ainvoke(None, config=config)
+                if not query:
                     raise ValueError("请先重试失败的问题")
-
-                return await self.graph.ainvoke(None, config=config)
+                # 新问题：把失败的那一轮收尾后按新问题处理，不能让会话一直卡在失败的那一轮
+                await self.graph.aupdate_state(
+                    config,
+                    {"messages": close_failed_turn(snapshot.values.get("messages", []))},
+                    as_node="finish",
+                )
 
             # 恢复中断
             if resume is not None:

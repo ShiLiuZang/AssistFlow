@@ -273,6 +273,10 @@ cd frontend/web && npm install && npm run build && cd ../..   # requires Node.js
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+Deployment notes:
+- Run a single process (no `--workers`). Conversation locks, rate limits, real-time push and the channel dispatcher live in process memory; a second process on the same host refuses to start.
+- Behind a reverse proxy, add `--proxy-headers --forwarded-allow-ips <proxy address>` so the login rate limit sees real client addresses.
+
 For frontend development use `npm run dev` instead (http://localhost:5173, proxies `/api` to port 8000).
 
 Visit: **http://127.0.0.1:8000**

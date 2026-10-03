@@ -93,7 +93,8 @@ class Settings(BaseSettings):
 
     # ==================== 限流配置（每分钟次数） ====================
     rate_chat_per_minute: int = Field(default=20, ge=1)  # 每个顾客发消息
-    rate_login_per_minute: int = Field(default=10, ge=1)  # 每个 IP 登录
+    rate_login_per_minute: int = Field(default=10, ge=1)  # 同一 IP 下每个账号登录
+    rate_login_ip_per_minute: int = Field(default=60, ge=1)  # 每个 IP 登录总次数（不分账号）
     rate_staff_model_per_minute: int = Field(default=30, ge=1)  # 每个员工调用模型的试用接口
 
     # ==================== 回复时延 ====================

@@ -57,6 +57,7 @@ def test_lifespan_wires_runtime_and_cleans_up(monkeypatch, tmp_path):
         yield runtime
 
     monkeypatch.setattr(main, "persistent_runtime", persistent_runtime)
+    monkeypatch.setattr(main.settings, "graph_checkpoint_path", str(tmp_path / "checkpoints.sqlite"))
 
     with TestClient(main.app) as client:
         assert client.app.state.graph_runtime is runtime
@@ -72,3 +73,13 @@ def test_lifespan_wires_runtime_and_cleans_up(monkeypatch, tmp_path):
     closed.assert_awaited_once_with(langfuse)
     assert main.app.state.graph_runtime is None
     assert observability._default_trace_sink is None
+
+
+def test_lifespan_refuses_second_process(monkeypatch, tmp_path):
+    from app.core.instance_lock import InstanceLockError, single_instance
+
+    monkeypatch.setattr(main.settings, "graph_checkpoint_path", str(tmp_path / "checkpoints.sqlite"))
+    with single_instance(str(tmp_path / "checkpoints.sqlite.lock")):
+        with pytest.raises(InstanceLockError, match="--workers"):
+            with TestClient(main.app):
+                pass
