@@ -15,3 +15,8 @@ log/
 data/review/
 data/finetune/
 data/graph-checkpoints.sqlite*
+
+# Understand-Anything 临时文件
+.ua/.trash-*/
+.ua/intermediate/
+.ua/tmp/
