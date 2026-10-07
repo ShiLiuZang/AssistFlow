@@ -73,7 +73,7 @@ def test_schema_allows_local_defs_but_not_unresolved_external_refs(monkeypatch):
 def test_bad_ticket_args_are_rejected_before_interrupt(args, code, monkeypatch):
     """非法参数必须产生工具错误消息，不能进入工单确认中断。"""
     interrupt = AsyncMock(side_effect=AssertionError("非法参数不得请求确认"))
-    monkeypatch.setattr("app.graph.nodes.interrupt", interrupt)
+    monkeypatch.setattr("app.graph.nodes_agent.interrupt", interrupt)
     services = SimpleNamespace(max_steps=3, registry=make_tool_registry())
     message = AIMessage(content="", tool_calls=[{
         "id": "bad-ticket", "name": "create_ticket", "args": args,
