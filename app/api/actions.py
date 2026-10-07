@@ -16,11 +16,10 @@ from fastapi.responses import StreamingResponse
 from app.core.observability import span
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.api.sse import make_sse, graph_event_to_sse
-from app.api.graph_chat import _thread_config, _persist_graph_messages
+from app.api.graph_chat import _persist_graph_messages, schedule_graph_summary, stream_graph_events
 from app.core.conversation_lock import conversation_lock
 from app.db import repository
 from app.graph.runtime import Runtime
-from app.core.summarizer import schedule_persisted_summary, summarize_dialog
 from app.tools.audit import (
     build_ticket_decision_audit,
     emit_tool_audit,
@@ -28,21 +27,6 @@ from app.tools.audit import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/actions", tags=["actions"])
-
-
-def _interrupt(snapshot):
-    """
-    从图快照中提取当前中断信息
-
-    参数:
-        snapshot: LangGraph状态快照
-
-    返回:
-        中断对象（如果有），否则返回None
-
-    遍历所有任务的中断列表，返回第一个中断
-    """
-    return next((item.value for task in snapshot.tasks for item in task.interrupts), None)
 
 
 def _call_in_current_turn(snapshot, call_id: str) -> bool:
@@ -109,10 +93,8 @@ async def stream_ticket_decision(
         ):
             call_id = str(tool_call["id"])
             # 获取当前快照和中断
-            snapshot = await runtime.graph.aget_state(
-                _thread_config(request.user_id, request.conversation_id),
-            )
-            pending = _interrupt(snapshot)
+            snapshot = await runtime.get_state(request.user_id, request.conversation_id)
+            pending = await runtime.pending_interrupt(request.user_id, request.conversation_id)
 
             # 查询是否已有保存的决策
             saved = await repository.get_ticket_decision(request.conversation_id, call_id)
@@ -167,17 +149,7 @@ async def stream_ticket_decision(
                 )
             elif snapshot.next and not pending and _call_in_current_turn(snapshot, call_id):
                 # 图状态未完成且调用在当前轮次，继续执行图
-                async with span(
-                    "graph_turn",
-                    repository.insert_trace_span,
-                ):
-                    graph_result = await runtime.graph.ainvoke(
-                        None,
-                        _thread_config(
-                            request.user_id,
-                            request.conversation_id,
-                        ),
-                    )
+                graph_result = await runtime.continue_turn(request.user_id, request.conversation_id)
             else:
                 # 其他情况，使用当前图状态
                 graph_result = dict(snapshot.values)
@@ -207,18 +179,12 @@ async def stream_ticket_decision(
             # 判断图轮次是否完成
             completed_graph_turn = False
             if not interrupts:
-                latest = await runtime.graph.aget_state(
-                    _thread_config(request.user_id, request.conversation_id)
-                )
+                latest = await runtime.get_state(request.user_id, request.conversation_id)
                 completed_graph_turn = not latest.next
 
         # 如果图轮次完成，调度摘要任务
         if completed_graph_turn:
-            schedule_persisted_summary(
-                request.user_id,
-                request.conversation_id,
-                summarize_dialog,
-            )
+            schedule_graph_summary(request.user_id, request.conversation_id)
 
         # 产出所有事件帧
         for frame in frames:
@@ -256,55 +222,15 @@ async def stream_order_selection(
     订单选择中断由图节点触发，当查询到多个订单时需要用户澄清
     """
     try:
-        async with conversation_lock(
-            request.user_id,
-            request.conversation_id,
-        ):
-            # 构造恢复参数
-            resume = request.model_dump(
-                include={"kind", "request_id", "order_id", "cancelled"},
-                exclude_none=True,
-            )
-
-            # 恢复图执行
-            events = [
-                event
-                async for event in runtime.stream_turn(
-                    "",
-                    request.user_id,
-                    str(request.conversation_id),
-                    resume=resume,
-                )
-            ]
-
-            # 持久化图消息
-            await _persist_graph_messages(
-                runtime,
-                request.user_id,
-                request.conversation_id,
-            )
-
-        # 判断对话是否成功完成
-        completed = any(e.get("event") == "done" for e in events)
-        interrupted_or_failed = any(
-            e.get("event") in {"interrupt", "error"} for e in events
+        resume = request.model_dump(
+            include={"kind", "request_id", "order_id", "cancelled"},
+            exclude_none=True,
         )
-
-        # 如果对话正常完成，调度摘要任务
-        if completed and not interrupted_or_failed:
-            schedule_persisted_summary(
-                request.user_id,
-                request.conversation_id,
-                summarize_dialog,
-            )
-
-        # 产出所有事件（跳过end事件）
-        for event in events:
-            if event.get("event") != "end":
-                yield graph_event_to_sse(
-                    event,
-                    request.conversation_id,
-                )
+        async for frame in stream_graph_events(
+            runtime, request.user_id, request.conversation_id,
+            runtime.stream_turn("", request.user_id, str(request.conversation_id), resume=resume),
+        ):
+            yield frame
 
     except Exception:
         logger.exception(
@@ -352,9 +278,7 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
         raise HTTPException(status_code=503, detail="图服务尚未就绪")
 
     async with conversation_lock(user_id, conversation_id):
-        # 从图快照中提取中断
-        snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
-        pending = _interrupt(snapshot)
+        pending = await runtime.pending_interrupt(user_id, conversation_id)
 
         # 订单选择中断
         if pending and pending.get("kind") == "select_order":

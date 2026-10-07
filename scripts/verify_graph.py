@@ -15,7 +15,6 @@ from app.db.database import engine
 from app.db.models import Ticket
 from app.graph.adapters import make_services
 from app.graph.checkpoint import persistent_runtime
-from app.api.graph_chat import _thread_config
 
 BASE = "http://127.0.0.1:8000"
 REPORT = Path("reports/05_live.json")
@@ -48,7 +47,7 @@ async def verify(report):
             events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": query}))
             cid = next(e["conversation_id"] for e in events if "conversation_id" in e)
             async with persistent_runtime(make_services(), settings.graph_checkpoint_path) as runtime:
-                snapshot = await runtime.graph.aget_state(_thread_config("u1", cid))
+                snapshot = await runtime.get_state("u1", cid)
             state = snapshot.values
             row = {"case": name, "query": query, "conversation_id": cid,
                    "intent": state["intent"], "trace": state["trace"],

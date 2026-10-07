@@ -3,8 +3,9 @@
 # 支持订单选择等人机交互场景，确保状态一致性和并发安全
 # 核心职责：提供统一的图执行接口，隔离LangGraph复杂性
 
-from langchain_core.messages import HumanMessage
-from langgraph.types import Command
+from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command, StateSnapshot
 from collections.abc import AsyncIterator
 from app.core.conversation_lock import conversation_lock
 from uuid import uuid4
@@ -23,11 +24,43 @@ class Runtime:
         self.graph = graph
         self.trace_sink = trace_sink
 
+    def config(self, user_id: str, conversation_id: int | str) -> RunnableConfig:
+        """统一会话线程配置；整数与字符串会话 ID 指向同一检查点。"""
+        return {
+            "configurable": {"thread_id": f"{user_id}:{str(conversation_id)}"},
+            "recursion_limit": 64,
+        }
+
+    async def get_state(self, user_id: str, conversation_id: int | str) -> StateSnapshot:
+        """读取指定会话的图状态快照。"""
+        return await self.graph.aget_state(self.config(user_id, conversation_id))
+
+    async def pending_interrupt(self, user_id: str, conversation_id: int | str) -> dict | None:
+        """返回会话中第一个待处理中断的 value；没有中断时返回 None。"""
+        snapshot = await self.get_state(user_id, conversation_id)
+        return next((item.value for task in snapshot.tasks for item in task.interrupts), None)
+
+    async def seed_messages(
+        self, user_id: str, conversation_id: int | str, messages: list[BaseMessage],
+    ) -> None:
+        """将恢复的历史消息作为已完成的 finish 节点状态写入会话。"""
+        await self.graph.aupdate_state(
+            self.config(user_id, conversation_id), {"messages": messages}, as_node="finish",
+        )
+
+    async def continue_turn(self, user_id: str, conversation_id: int | str) -> dict:
+        """在会话锁和 graph_turn span 内继续执行尚未完成的图轮次。"""
+        async with (
+            span("graph_turn", self.trace_sink),
+            conversation_lock(user_id, conversation_id),
+        ):
+            return await self.graph.ainvoke(None, config=self.config(user_id, conversation_id))
+
     async def run_turn(
             self,
             query: str,
             user_id: str,
-            conversation_id: str,
+            conversation_id: int | str,
             *,
             resume=None,
             summary_text: str = "",
@@ -41,7 +74,7 @@ class Runtime:
             query: 用户问题
             user_id: 用户ID
             conversation_id: 会话ID
-            resume: 恢复数据（订单选择、错误重试）
+            resume: 恢复数据（订单选择、工单确认）
             summary_text: 对话摘要文本
             summary_upto: 摘要覆盖到的消息ID
             covered_count: 已覆盖的消息数
@@ -51,11 +84,11 @@ class Runtime:
 
         执行模式:
             1. 新问题：query非空，resume=None
-            2. 恢复中断：resume非空（订单选择结果）
-            3. 重试失败：query为空，图状态有next
+            2. 恢复中断：resume非空（订单选择或工单决策）
+            3. 重试失败：query与原问题一致，图状态有next
 
         中断处理:
-            订单选择：图中断等待用户选择，客户端调用resume恢复
+            订单选择或工单确认：图中断等待用户操作，客户端调用resume恢复
 
         并发控制:
             按user_id:conversation_id加锁，确保同一会话串行执行
@@ -68,17 +101,13 @@ class Runtime:
             thread_id = user_id:conversation_id，隔离不同会话
             递归上限64防止无限循环
         """
+        conversation_id = str(conversation_id)
         async with (
             span("graph_turn", self.trace_sink),
             conversation_lock(user_id, conversation_id),
         ):
-            config = {
-                "configurable": {
-                    "thread_id": f"{user_id}:{conversation_id}",
-                },
-                "recursion_limit": 64
-            }
-            snapshot = await self.graph.aget_state(config)
+            config = self.config(user_id, conversation_id)
+            snapshot = await self.get_state(user_id, conversation_id)
             # 提取待处理的中断项
             pending = [
                 item.value
@@ -184,7 +213,7 @@ class Runtime:
             self,
             query: str,
             user_id: str,
-            conversation_id: str,
+            conversation_id: int | str,
             *,
             resume: bool | dict | None = None,
             summary_text: str = "",

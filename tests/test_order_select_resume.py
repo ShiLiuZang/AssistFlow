@@ -48,6 +48,9 @@ def test_sqlite_reopen_preserves_pending_card(tmp_path, cancelled):
             choice = await pause(runtime)
         async with AsyncSqliteSaver.from_conn_string(path) as saver:
             runtime, services = setup_runtime(saver)
+            pending = await runtime.pending_interrupt("u1", "resume-test")
+            assert pending["kind"] == "select_order"
+            assert pending["request_id"] == choice["request_id"]
             if cancelled:
                 choice.pop("order_id")
                 choice["cancelled"] = True
@@ -56,6 +59,7 @@ def test_sqlite_reopen_preserves_pending_card(tmp_path, cancelled):
             assert result["request_id"] == choice["request_id"]
             assert len(result["messages"]) == 1
             assert services.get_order.await_count == (0 if cancelled else 1)
+            assert await runtime.pending_interrupt("u1", "resume-test") is None
         async with AsyncSqliteSaver.from_conn_string(path) as saver:
             runtime, _ = setup_runtime(saver)
             with pytest.raises(ValueError, match="没有待恢复"):

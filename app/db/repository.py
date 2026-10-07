@@ -208,39 +208,6 @@ async def create_ticket(
         return ticket.ticket_no
 
 
-async def get_pending_ticket_call(conversation_id: int) -> dict | None:
-    """
-    读取会话中最近一条尚未产生ToolMessage的建单请求
-
-    参数:
-        conversation_id: 会话ID
-
-    返回:
-        待处理的tool_call字典，不存在时返回None
-
-    设计说明:
-        用于人工审核场景：模型调用create_ticket但需要人工确认
-        通过比对tool_call_id判断哪些调用已响应
-        倒序遍历找到最近的未决调用
-    """
-    records = await list_messages(conversation_id)
-    resolved_ids = {
-        record.tool_call_id
-        for record in records
-        if record.role == "tool" and record.tool_call_id
-    }
-
-    for record in reversed(records):
-        for tool_call in record.tool_calls or []:
-            if (
-                tool_call.get("name") == "create_ticket"
-                and tool_call.get("id") not in resolved_ids
-            ):
-                return tool_call
-
-    return None
-
-
 async def insert_knowledge_chunk(
     category: str,
     questions: str,

@@ -80,26 +80,6 @@ def restore_messages(records: list) -> list:
     return messages
 
 
-def _thread_config(user_id: str, conversation_id: int) -> dict:
-    """
-    生成LangGraph线程配置字典
-
-    参数:
-        user_id: 用户标识
-        conversation_id: 会话ID
-
-    返回:
-        包含thread_id的配置字典，用于图状态的持久化和恢复
-
-    thread_id格式为"用户ID:会话ID"，确保每个会话有独立的图状态
-    """
-    return {
-        "configurable": {
-            "thread_id": f"{user_id}:{conversation_id}",
-        },
-    }
-
-
 async def _persist_graph_messages(
     runtime: Runtime, user_id: str, conversation_id: int,
 ) -> None:
@@ -114,10 +94,67 @@ async def _persist_graph_messages(
     从图快照中提取消息列表，调用repository持久化到数据库
     这是图状态与数据库的同步点，确保消息不会因图重启而丢失
     """
-    snapshot = await runtime.graph.aget_state(_thread_config(user_id, conversation_id))
+    snapshot = await runtime.get_state(user_id, conversation_id)
     await repository.persist_graph_messages(
         conversation_id, user_id, snapshot.values.get("messages", []),
     )
+
+
+def schedule_graph_summary(user_id: str, conversation_id: int) -> None:
+    """为已正常完成并持久化的图轮次调度后台摘要。"""
+    schedule_persisted_summary(user_id, conversation_id, summarize_dialog)
+
+
+async def stream_graph_events(
+    runtime: Runtime, user_id: str, conversation_id: int, events: AsyncIterator[dict],
+) -> AsyncIterator[str]:
+    """锁内运行并保存图消息，锁外按事件调度摘要、输出 SSE，跳过 end。"""
+    async with conversation_lock(user_id, conversation_id):
+        collected = [event async for event in events]
+        await _persist_graph_messages(runtime, user_id, conversation_id)
+
+    completed = any(event.get("event") == "done" for event in collected)
+    interrupted_or_failed = any(
+        event.get("event") in {"interrupt", "error"} for event in collected
+    )
+    if completed and not interrupted_or_failed:
+        schedule_graph_summary(user_id, conversation_id)
+
+    for event in collected:
+        if event.get("event") != "end":
+            yield graph_event_to_sse(event, conversation_id)
+
+
+async def _chat_events(
+    request: ChatRequest, conversation_id: int, runtime: Runtime,
+) -> AsyncIterator[dict]:
+    """在共享收尾函数持有的会话锁内恢复历史并执行聊天轮次。"""
+    snapshot = await runtime.get_state(request.user_id, conversation_id)
+    conversation = await repository.get_conversation(conversation_id, request.user_id)
+    if conversation is None:
+        raise ValueError("会话不存在")
+
+    records = await repository.list_messages(conversation_id)
+    graph_messages = (
+        restore_messages(records)
+        if not snapshot.values
+        else snapshot.values.get("messages", [])
+    )
+    covered_count = count_covered_messages(
+        records, graph_messages, conversation.summary_upto or 0,
+    )
+    if not snapshot.values and graph_messages:
+        await runtime.seed_messages(request.user_id, conversation_id, graph_messages)
+
+    async for event in runtime.stream_turn(
+        request.message,
+        request.user_id,
+        str(conversation_id),
+        summary_text=conversation.summary_text or "",
+        summary_upto=conversation.summary_upto or 0,
+        covered_count=covered_count,
+    ):
+        yield event
 
 
 async def stream_graph_chat(
@@ -156,72 +193,11 @@ async def stream_graph_chat(
         # 首先发送会话ID，让客户端知道当前会话
         yield make_sse({"event": "conversation", "conversation_id": conversation_id})
 
-        # 获取会话锁，防止并发修改图状态
-        async with conversation_lock(request.user_id, conversation_id):
-            config = _thread_config(request.user_id, conversation_id)
-
-            # 获取图当前快照
-            snapshot = await runtime.graph.aget_state(config)
-
-            # 获取会话元数据（包含摘要信息）
-            conversation = await repository.get_conversation(conversation_id, request.user_id)
-            if conversation is None:
-                raise ValueError("会话不存在")
-
-            # 从数据库加载消息历史
-            records = await repository.list_messages(conversation_id)
-
-            # 决定使用数据库历史还是图状态中的消息
-            # 如果图状态为空，使用数据库恢复；否则使用图状态（图是真实来源）
-            graph_messages = (
-                restore_messages(records)
-                if not snapshot.values
-                else snapshot.values.get("messages", [])
-            )
-
-            # 计算已被摘要覆盖的消息数量
-            covered_count = count_covered_messages(
-                records, graph_messages, conversation.summary_upto or 0,
-            )
-
-            # 如果图状态为空但有历史消息，初始化图状态
-            # as_node="finish"表示这些消息已经处理完成
-            if not snapshot.values and graph_messages:
-                await runtime.graph.aupdate_state(
-                    config, {"messages": graph_messages}, as_node="finish",
-                )
-
-            # 执行图运行，收集所有事件
-            events = [event async for event in runtime.stream_turn(
-                request.message,
-                request.user_id,
-                str(conversation_id),
-                summary_text=conversation.summary_text or "",
-                summary_upto=conversation.summary_upto or 0,
-                covered_count=covered_count,
-            )]
-
-            # 将图消息持久化到数据库
-            await _persist_graph_messages(runtime, request.user_id, conversation_id)
-
-        # 判断对话是否成功完成（没有中断或错误）
-        completed = any(e.get("event") == "done" for e in events)
-        interrupted_or_failed = any(
-            e.get("event") in {"interrupt", "error"} for e in events
-        )
-
-        # 如果对话正常完成，调度后台摘要任务
-        if completed and not interrupted_or_failed:
-            schedule_persisted_summary(
-                request.user_id,
-                conversation_id,
-                summarize_dialog,
-            )
-
-        # 产出所有事件（跳过end事件，转换为SSE格式）
-        for event in events:
-            if event.get("event") != "end":
-                yield graph_event_to_sse(event, conversation_id)
+        async for frame in stream_graph_events(
+            runtime, request.user_id, conversation_id,
+            _chat_events(request, conversation_id, runtime),
+        ):
+            yield frame
 
     except Exception:
         logger.exception("图聊天失败 conversation_id=%s", conversation_id)
@@ -301,13 +277,13 @@ async def graph_chat(
     1. 从app.state获取图运行时实例
     2. 首次聊天时创建新会话
     3. 续聊时校验会话存在性
-    4. 检查是否有待确认的工单
+    4. 从图状态检查是否有待处理的工单确认或订单选择中断
     5. 调用stream_graph_chat生成流式响应
 
     边界情况：
     - 图服务未启动时返回503
     - 会话不存在时返回404
-    - 有待确认工单时返回409
+    - 有待处理中断时返回409
     """
     # 获取图运行时实例
     runtime: Runtime | None = getattr(http_request.app.state, "graph_runtime", None)
@@ -328,9 +304,15 @@ async def graph_chat(
 
         conversation_id = conversation.id
 
-        # 检查是否有待确认的工单
-        if await repository.get_pending_ticket_call(conversation_id) is not None:
-            raise HTTPException(status_code=409, detail="请先确认或取消待处理工单")
+        # 图中断是待处理状态的来源，不从数据库消息推断。
+        pending = await runtime.pending_interrupt(request.user_id, conversation_id)
+        if pending is not None:
+            detail = (
+                "请先选择或取消待处理订单"
+                if pending.get("kind") == "select_order"
+                else "请先确认或取消待处理工单"
+            )
+            raise HTTPException(status_code=409, detail=detail)
 
     # 返回流式响应
     return StreamingResponse(

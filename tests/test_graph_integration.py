@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.core.intent import Intent, Prediction, ROUTES
@@ -65,4 +65,52 @@ def test_all_intents_take_expected_graph_branch(intent):
             s.retrieve_detailed.assert_not_awaited()
             s.agent.assert_not_awaited()
         s.classify.assert_awaited_once()
+    asyncio.run(run())
+
+
+def test_runtime_history_and_turn_share_normalized_thread():
+    """整数和字符串 ID 共用历史及轮次状态，不同用户保持隔离。"""
+    async def run():
+        r = runtime(fake_services(Intent.CHAT))
+        history = [HumanMessage(content="第一轮问题"), AIMessage(content="第一轮回答")]
+        await r.seed_messages("u1", 7, history)
+        seeded = await r.get_state("u1", "7")
+        assert seeded.values["messages"] == history
+        assert not seeded.next
+        assert await r.pending_interrupt("u1", 7) is None
+
+        result = await r.run_turn("第二轮问题", "u1", 7)
+        snapshot = await r.get_state("u1", "7")
+        assert result["conversation_id"] == "7"
+        assert snapshot.values["messages"][:2] == history
+        assert snapshot.values["messages"] == result["messages"]
+        assert (await r.get_state("u2", 7)).values == {}
+        assert r.config("u1", 7) == r.config("u1", "7") == {
+            "configurable": {"thread_id": "u1:7"}, "recursion_limit": 64,
+        }
+    asyncio.run(run())
+
+
+def test_runtime_continue_turn_retries_failed_node_with_span():
+    """继续执行失败节点，沿用会话历史并导出 graph_turn span。"""
+    async def run():
+        s = fake_services(Intent.ORDER)
+        s.agent = AsyncMock(side_effect=[RuntimeError("test failure"), AIMessage(content="重试完成")])
+        sink = AsyncMock()
+        r = Runtime(build_graph(s, InMemorySaver()), trace_sink=sink)
+        with pytest.raises(RuntimeError, match="test failure"):
+            await r.run_turn("订单状态", "u1", 7)
+        failed = await r.get_state("u1", "7")
+        assert failed.next == ("agent",)
+
+        result = await r.continue_turn("u1", "7")
+        latest = await r.get_state("u1", 7)
+        assert not latest.next
+        assert result["answer"] == "重试完成"
+        assert result["conversation_id"] == "7"
+        assert [message.type for message in result["messages"]] == ["human", "ai"]
+        assert s.classify.await_count == 1
+        assert s.agent.await_count == 2
+        spans = [call.args[0] for call in sink.await_args_list if call.args[0]["name"] == "graph_turn"]
+        assert [record["status"] for record in spans] == ["error", "ok"]
     asyncio.run(run())

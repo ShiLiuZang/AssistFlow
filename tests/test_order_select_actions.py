@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api import actions
+from app.api import actions, graph_chat
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
@@ -24,7 +24,9 @@ def test_selection_http_forwards_choice_after_saving(monkeypatch, cancelled):
         yield {"event": "end"}
     runtime = SimpleNamespace(stream_turn=stream)
     saved = AsyncMock()
-    monkeypatch.setattr(actions, "_persist_graph_messages", saved)
+    scheduled = Mock()
+    monkeypatch.setattr(graph_chat, "_persist_graph_messages", saved)
+    monkeypatch.setattr(graph_chat, "schedule_persisted_summary", scheduled)
     monkeypatch.setattr(actions.repository, "get_conversation", AsyncMock(return_value=object()))
     app = FastAPI()
     app.include_router(actions.router)
@@ -36,6 +38,7 @@ def test_selection_http_forwards_choice_after_saving(monkeypatch, cancelled):
     assert response.status_code == 200
     assert calls == [("", "u1", "1", {"kind": "select_order", "request_id": "r1", "cancelled": cancelled, **choice})]
     saved.assert_awaited_once_with(runtime, "u1", 1)
+    scheduled.assert_called_once_with("u1", 1, graph_chat.summarize_dialog)
     assert '"event": "done"' in response.text
     assert response.text.count('[DONE]') == 1
 
@@ -63,8 +66,8 @@ def test_save_failure_does_not_emit_success(monkeypatch):
         yield {"event": "end"}
     saved = AsyncMock(side_effect=RuntimeError("private"))
     scheduled = Mock()
-    monkeypatch.setattr(actions, "_persist_graph_messages", saved)
-    monkeypatch.setattr(actions, "schedule_persisted_summary", scheduled)
+    monkeypatch.setattr(graph_chat, "_persist_graph_messages", saved)
+    monkeypatch.setattr(graph_chat, "schedule_persisted_summary", scheduled)
     request = actions.SelectOrderRequest(conversation_id=1, user_id="u1", request_id="r1", cancelled=True)
     runtime = SimpleNamespace(stream_turn=stream)
     async def run():

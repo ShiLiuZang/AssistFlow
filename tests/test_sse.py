@@ -1,5 +1,11 @@
+import asyncio
 import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
+import pytest
+
+from app.api import graph_chat
 from app.api.sse import graph_event_to_sse, make_sse
 
 
@@ -38,3 +44,47 @@ def test_interrupt_flattens_preview():
         "kind": "confirm_ticket",
         "tool_call_id": "c1",
     }
+
+
+@pytest.mark.parametrize("terminal, completed", [
+    ([{"event": "done"}], True),
+    ([{"event": "interrupt", "preview": {"kind": "select_order"}}], False),
+    ([{"event": "error"}], False),
+    ([{"event": "done"}, {"event": "interrupt", "preview": {"kind": "confirm_ticket"}}], False),
+    ([{"event": "done"}, {"event": "error"}], False),
+    ([], False),
+])
+def test_shared_finalization_saves_before_summary_and_sse(monkeypatch, terminal, completed):
+    """仅正常完成才调度摘要；消息先保存，内部 end 不输出 SSE 结束帧。"""
+    order = []
+    saved = AsyncMock(side_effect=lambda *_: order.append("saved"))
+    scheduled = Mock(side_effect=lambda *_: order.append("summary"))
+    monkeypatch.setattr(graph_chat.repository, "persist_graph_messages", saved)
+    monkeypatch.setattr(graph_chat, "schedule_persisted_summary", scheduled)
+    messages = [object()]
+    runtime = SimpleNamespace(get_state=AsyncMock(return_value=SimpleNamespace(values={"messages": messages})))
+
+    async def source():
+        order.append("run")
+        yield {"delta": "回答"}
+        for event in terminal:
+            yield event
+        yield {"event": "end"}
+
+    async def run():
+        frames = []
+        async for frame in graph_chat.stream_graph_events(runtime, "u1", 7, source()):
+            order.append("frame")
+            frames.append(frame)
+        return frames
+
+    frames = asyncio.run(run())
+    saved.assert_awaited_once_with(7, "u1", messages)
+    runtime.get_state.assert_awaited_once_with("u1", 7)
+    assert order == ["run", "saved"] + (["summary"] if completed else []) + ["frame"] * len(frames)
+    if completed:
+        scheduled.assert_called_once_with("u1", 7, graph_chat.summarize_dialog)
+    else:
+        scheduled.assert_not_called()
+    assert frames == [graph_event_to_sse(event, 7) for event in [{"delta": "回答"}, *terminal]]
+    assert "data: [DONE]\n\n" not in frames
