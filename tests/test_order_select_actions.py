@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.conftest import visitor_headers
 
 from app.api import actions, graph_chat
 
@@ -33,7 +34,7 @@ def test_selection_http_forwards_choice_after_saving(monkeypatch, cancelled):
     app.state.graph_runtime = runtime
     choice = {"cancelled": True} if cancelled else {"order_id": "ORD-1001"}
     payload = {"conversation_id": 1, "user_id": "u1", "request_id": "r1", **choice}
-    with TestClient(app) as client:
+    with TestClient(app, headers=visitor_headers()) as client:
         response = client.post("/api/actions/select-order", json=payload)
     assert response.status_code == 200
     assert calls == [("", "u1", "1", {"kind": "select_order", "request_id": "r1", "cancelled": cancelled, **choice})]
@@ -50,8 +51,8 @@ def test_other_conversation_cannot_resume(monkeypatch):
     app = FastAPI()
     app.include_router(actions.router)
     app.state.graph_runtime = SimpleNamespace(stream_turn=stream)
-    with TestClient(app) as client:
-        response = client.post('/api/actions/select-order', json={
+    with TestClient(app, headers=visitor_headers()) as client:
+        response = client.post('/api/actions/select-order', headers=visitor_headers('u2'), json={
             "conversation_id": 1, "user_id": "u2", "request_id": "r1", "order_id": "ORD-1001",
         })
     assert response.status_code == 404

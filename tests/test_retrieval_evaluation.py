@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.conftest import ADMIN_HEADERS
 
 from app.core import evaluation as ev
 from app.api import knowledge
@@ -74,12 +75,12 @@ def test_report_missing_and_present(tmp_path):
     """测试评估报告接口：未评估时返回not_evaluated，有报告时返回内容"""
     app = FastAPI()
     app.include_router(knowledge.router)
-    client = TestClient(app)
+    client = TestClient(app, headers=ADMIN_HEADERS)
     path = tmp_path / "report.json"
     with patch.object(knowledge, "REPORT_PATH", path):
-        assert client.get("/rag-eval").json()["status"] == "not_evaluated"
+        assert client.get("/api/rag-eval/report").json()["status"] == "not_evaluated"
         path.write_text('{"status":"evaluated"}', encoding="utf-8")
-        assert client.get("/rag-eval").json()["status"] == "evaluated"
+        assert client.get("/api/rag-eval/report").json()["status"] == "evaluated"
 
 
 def test_fixed_dataset_sources():

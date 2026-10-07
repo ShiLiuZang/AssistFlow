@@ -6,7 +6,9 @@
 在系统中充当会话数据的只读访问层，供前端展示历史对话使用。
 """
 
-from fastapi import APIRouter, HTTPException
+from app.core.auth import require_visitor, resolve_visitor_id
+
+from fastapi import Depends, APIRouter, HTTPException
 
 from app.db import conversation_repo
 
@@ -15,7 +17,9 @@ router = APIRouter(tags=["conversations"])
 
 
 @router.get("/api/conversations")
-async def list_conversations(user_id: str) -> list[dict]:
+async def list_conversations(
+    user_id: str | None = None, visitor_id: str = Depends(require_visitor),
+) -> list[dict]:
     """
     获取指定用户的所有会话列表
 
@@ -27,6 +31,7 @@ async def list_conversations(user_id: str) -> list[dict]:
 
     返回格式为字典列表，便于前端展示会话卡片
     """
+    user_id = resolve_visitor_id(visitor_id, user_id)
     conversations = await conversation_repo.list_conversations(user_id)
 
     return [
@@ -41,7 +46,8 @@ async def list_conversations(user_id: str) -> list[dict]:
 @router.get("/api/conversations/{conversation_id}/messages")
 async def list_messages(
     conversation_id: int,
-    user_id: str,
+    user_id: str | None = None,
+    visitor_id: str = Depends(require_visitor),
 ) -> list[dict]:
     """
     获取指定会话的消息历史
@@ -61,6 +67,7 @@ async def list_messages(
     边界情况：
     - 会话不存在或不属于该用户时返回404
     """
+    user_id = resolve_visitor_id(visitor_id, user_id)
     # 校验会话存在性和所属权
     conversation = await conversation_repo.get_conversation(
         conversation_id,

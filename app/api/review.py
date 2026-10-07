@@ -3,7 +3,9 @@
 # 支持查看待审队列、处理建议、通过/驳回、发布到知识库
 # 核心职责：闭环飞轮流程，将人工审核的优质QA对补充回知识库
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from app.core.auth import require_admin
+
+from fastapi import Depends, APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -13,7 +15,7 @@ from app.db import review_repo
 from app.kb.review_publish import publish_review
 
 
-router = APIRouter(prefix="/api/review", tags=["review"])
+router = APIRouter(dependencies=[Depends(require_admin)], prefix="/api/review", tags=["review"])
 
 # 审核状态标签映射
 LABELS = {

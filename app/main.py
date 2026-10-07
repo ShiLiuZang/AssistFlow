@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # API 路由导入
+from app.api.auth import router as auth_router
 from app.api.graph_chat import router as graph_chat_router  # LangGraph 驱动的聊天接口
 from app.api.extract import router as extract_router  # 信息抽取接口
 from app.api.conversations import router as conversations_router  # 会话历史管理
@@ -38,6 +39,7 @@ from app.api.observability import router as observability_router  # 观测数据
 
 # 核心服务导入
 from app.config import settings, warn_unknown_env_keys  # 配置管理
+from app.core.auth import initialize_auth
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
 from app.db import trace_repo  # 数据库操作
 from app.graph.adapters import make_services_with_mcp  # 服务容器和 MCP 工具集成
@@ -68,6 +70,7 @@ async def lifespan(app: FastAPI):
     2. 清理观测配置
     3. 关闭 Langfuse 客户端，刷新未上报的数据
     """
+    initialize_auth()
     warn_unknown_env_keys()
 
     # 1. 从环境变量收集已配置的 MCP 服务器 URL
@@ -147,6 +150,7 @@ app = FastAPI(
 )
 
 # 注册 API 路由
+app.include_router(auth_router)
 # 核心聊天接口
 app.include_router(graph_chat_router)  # LangGraph 聊天
 

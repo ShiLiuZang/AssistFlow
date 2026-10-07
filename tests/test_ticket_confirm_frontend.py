@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from tests.conftest import issue_visitor_token
 
 
 def test_ticket_card_keeps_identity_and_retries_same_call():
@@ -21,6 +22,12 @@ def test_ticket_card_keeps_identity_and_retries_same_call():
             page = browser.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
             def route_request(route):
+                if route.request.url.endswith("/api/auth/visitor"):
+                    token, expires_at = issue_visitor_token("frontend-visitor")
+                    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                        "user_id": "frontend-visitor", "token": token, "expires_at": expires_at,
+                    }))
+                    return
                 if route.request.url.endswith("/api/actions/resume"):
                     requests.append(route.request.post_data_json)
                     data = ('event: error\ndata: {"message":"retry"}\n\ndata: [DONE]\n\n'
@@ -68,6 +75,12 @@ def test_replayed_ticket_button_uses_graph_interrupt_and_resume():
             page.on("pageerror", lambda error: errors.append(str(error)))
 
             def route_request(route):
+                if route.request.url.endswith("/api/auth/visitor"):
+                    token, expires_at = issue_visitor_token("frontend-visitor")
+                    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                        "user_id": "frontend-visitor", "token": token, "expires_at": expires_at,
+                    }))
+                    return
                 path = route.request.url.removeprefix("http://localhost:18765").split("?")[0]
                 if path == "/":
                     route.fulfill(status=200, content_type="text/html", body=html)

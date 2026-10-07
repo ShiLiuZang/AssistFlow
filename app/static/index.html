@@ -439,6 +439,7 @@
 
   <script>
     const SESSION_KEY = "minihelp_session_id";
+    const TOKEN_KEY = "minihelp_visitor_token";
     const CONV_KEY = "minihelp_conversation_id";
     const SUGGESTIONS = ["退换货政策是怎样的?", "怎么查我的物流进度?", "猫粮怎么选?", "会员有什么权益?"];
     const CAT_SVG =
@@ -468,9 +469,48 @@
     for (const el of document.querySelectorAll("[data-cat]")) el.innerHTML = CAT_SVG;
 
     function getUserId() {
-      const id = "u1";
-      localStorage.setItem(SESSION_KEY, id);
-      return id;
+      return localStorage.getItem(SESSION_KEY);
+    }
+
+    let visitorPromise = null;
+    async function ensureVisitor(rejectedToken = null) {
+      const current = localStorage.getItem(TOKEN_KEY);
+      if (current && getUserId() && current !== rejectedToken) return;
+      if (!visitorPromise) {
+        visitorPromise = (async () => {
+          const response = await fetch("/api/auth/visitor", { method: "POST" });
+          if (!response.ok) throw new Error("访客身份获取失败");
+          const visitor = await response.json();
+          if (!visitor.user_id || !visitor.token) throw new Error("无效的访客身份响应");
+          clearConversationId();
+          localStorage.setItem(SESSION_KEY, visitor.user_id);
+          localStorage.setItem(TOKEN_KEY, visitor.token);
+        })().finally(() => { visitorPromise = null; });
+      }
+      await visitorPromise;
+    }
+
+    async function apiFetch(input, init = {}) {
+      await ensureVisitor();
+      const send = () => {
+        const url = new URL(input, location.href);
+        const headers = new Headers(init.headers);
+        headers.set("Authorization", "Bearer " + localStorage.getItem(TOKEN_KEY));
+        // 兼容身份字段始终跟随当前令牌，换令牌后不会携带旧身份重试。
+        if (url.searchParams.has("user_id")) url.searchParams.set("user_id", getUserId());
+        let body = init.body;
+        if (typeof body === "string" && headers.get("Content-Type")?.includes("application/json")) {
+          const payload = JSON.parse(body);
+          if (Object.hasOwn(payload, "user_id")) payload.user_id = getUserId();
+          body = JSON.stringify(payload);
+        }
+        return fetch(url, { ...init, headers, body });
+      };
+      const token = localStorage.getItem(TOKEN_KEY);
+      const response = await send();
+      if (response.status !== 401) return response;
+      await ensureVisitor(token);
+      return send();
     }
 
     function getConversationId() {
@@ -714,7 +754,7 @@
         }
 
         try {
-          const response = await fetch("/api/feedback", {
+          const response = await apiFetch("/api/feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -838,7 +878,7 @@
       const nb = addRow("bot");
       setBusy(true);
       try {
-        await streamInto(nb, () => fetch("/api/actions/select-order", {
+        await streamInto(nb, () => apiFetch("/api/actions/select-order", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversation_id: selection.conversationId,
@@ -889,7 +929,7 @@
           const nb = addRow("bot");
           setBusy(true);
           try {
-            await streamInto(nb, () => fetch("/api/actions/resume", {
+            await streamInto(nb, () => apiFetch("/api/actions/resume", {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ user_id: ticketUserId, conversation_id: ticketConversationId, tool_call_id: toolCallId, confirmed }),
             }));
@@ -1029,7 +1069,7 @@
       setBusy(true);
       const bubble = addRow("bot");
       try {
-        await streamInto(bubble, () => fetch("/api/graph-chat", {
+        await streamInto(bubble, () => apiFetch("/api/graph-chat", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: getUserId(), message, conversation_id: getConversationId() }),
         }));
@@ -1047,7 +1087,7 @@
 
     async function loadConversations() {
       try {
-        const r = await fetch("/api/conversations?user_id=" + encodeURIComponent(getUserId()));
+        const r = await apiFetch("/api/conversations?user_id=" + encodeURIComponent(getUserId()));
         if (!r.ok) return;
         const payload = await r.json();
         renderConvList(Array.isArray(payload) ? payload : payload.items || []);
@@ -1095,7 +1135,7 @@
       const userId = getUserId();
       messagesEl.innerHTML = "";
       try {
-        const r = await fetch("/api/conversations/" + cid + "/messages?user_id=" + encodeURIComponent(userId));
+        const r = await apiFetch("/api/conversations/" + cid + "/messages?user_id=" + encodeURIComponent(userId));
         if (r.ok) {
           const payload = await r.json();
           if (getConversationId() !== cid || getUserId() !== userId) return;
@@ -1115,7 +1155,7 @@
             }
           }
         }
-        const pendingResponse = await fetch("/api/actions/pending?conversation_id=" + cid + "&user_id=" + encodeURIComponent(userId));
+        const pendingResponse = await apiFetch("/api/actions/pending?conversation_id=" + cid + "&user_id=" + encodeURIComponent(userId));
         if (pendingResponse.ok) {
           const pending = await pendingResponse.json();
           if (getConversationId() !== cid || getUserId() !== userId) return;
@@ -1156,10 +1196,14 @@
       inputEl.focus();
     });
 
-    getUserId();
     renderEmptyState();
-    if (getConversationId()) switchConversation(getConversationId());
-    else loadConversations();
+    setBusy(true);
+    ensureVisitor().then(async () => {
+      if (getConversationId()) await switchConversation(getConversationId());
+      else await loadConversations();
+    }).catch(() => {
+      addRow("bot").textContent = "访客身份获取失败，请刷新重试";
+    }).finally(() => setBusy(false));
     inputEl.focus();
   </script>
 </body>

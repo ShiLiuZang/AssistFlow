@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 class ExtractRequest(BaseModel):
     """POST /api/extract 的请求体。"""
 
+    user_id: str | None = None
+
     text: str = Field(
         min_length=1,
         description="用户的售后描述原文",

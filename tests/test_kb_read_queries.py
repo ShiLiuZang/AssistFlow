@@ -7,6 +7,7 @@ import pytest
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import ADMIN_HEADERS
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api import kb
@@ -32,7 +33,7 @@ async def database(monkeypatch):
 def client():
     app = FastAPI()
     app.include_router(kb.router)
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=ADMIN_HEADERS)
 
 
 def test_candidate_full_answer_all_counts_and_source_boundaries(monkeypatch, tmp_path):

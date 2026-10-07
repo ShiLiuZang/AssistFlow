@@ -10,7 +10,9 @@ import json
 import logging
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from app.core.auth import require_visitor, resolve_visitor_id
+
+from fastapi import Depends, APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -291,6 +293,7 @@ def count_covered_messages(records, graph_messages, summary_upto: int) -> int:
 async def graph_chat(
     request: ChatRequest,
     http_request: Request,
+    visitor_id: str = Depends(require_visitor),
 ) -> StreamingResponse:
     """
     图模式聊天接口端点
@@ -314,6 +317,7 @@ async def graph_chat(
     - 会话不存在时返回404
     - 有待处理中断时返回409
     """
+    request.user_id = resolve_visitor_id(visitor_id, request.user_id)
     # 获取图运行时实例
     runtime: Runtime | None = getattr(http_request.app.state, "graph_runtime", None)
     if runtime is None:

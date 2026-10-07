@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.conftest import visitor_headers
 from langchain_core.messages import AIMessage
 
 from app.api import actions, graph_chat
@@ -68,7 +69,7 @@ def test_ticket_actions_require_runtime(monkeypatch, endpoint, runtime_present):
     app.include_router(actions.router)
     if runtime_present:
         app.state.graph_runtime = None
-    with TestClient(app) as client:
+    with TestClient(app, headers=visitor_headers()) as client:
         if endpoint == "resume":
             response = client.post("/api/actions/resume", json={
                 "conversation_id": 1, "user_id": "u1", "confirmed": True, "tool_call_id": "call-1",
@@ -89,7 +90,7 @@ def test_resume_rejects_missing_call_id_before_lookup(monkeypatch):
     app = FastAPI()
     app.include_router(actions.router)
     app.state.graph_runtime = SimpleNamespace()
-    with TestClient(app) as client:
+    with TestClient(app, headers=visitor_headers()) as client:
         response = client.post("/api/actions/resume", json={
             "conversation_id": 1, "user_id": "u1", "confirmed": True,
         })
@@ -110,7 +111,7 @@ def test_pending_without_interrupt_ignores_unresolved_database_call(monkeypatch)
             monkeypatch.setattr(conversation_repo, "list_messages", lookup)
             graph_runtime = runtime(services())
             request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(graph_runtime=graph_runtime)))
-            assert await actions.pending_ticket(cid, "u1", request) is None
+            assert await actions.pending_ticket(cid, request, user_id="u1", visitor_id="u1") is None
             lookup.assert_not_awaited()
     asyncio.run(run())
 
@@ -210,7 +211,7 @@ def test_graph_chat_precheck_uses_pending_graph_interrupt(monkeypatch, kind, det
     app = FastAPI()
     app.include_router(graph_chat.router)
     app.state.graph_runtime = graph_runtime
-    with TestClient(app) as client:
+    with TestClient(app, headers=visitor_headers()) as client:
         response = client.post("/api/graph-chat", json={
             "conversation_id": cid, "user_id": "u1", "message": "继续",
         })

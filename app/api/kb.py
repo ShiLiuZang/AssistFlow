@@ -6,7 +6,9 @@
 import datetime as dt
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from app.core.auth import require_admin
+
+from fastapi import Depends, APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core import jobs, retrieval
@@ -16,7 +18,7 @@ from app.kb.sources import CONTENT_TYPE_DESC, CONTENT_TYPES, KB_DIR, SOURCE_TYPE
 from app.core.trusted_sources import validate_review_source
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/kb")
+router = APIRouter(dependencies=[Depends(require_admin)], prefix="/api/kb")
 
 # 单次手工录入的正文字数上限，避免超大文档阻塞接口
 MAX_TEXT_CHARS = 40000

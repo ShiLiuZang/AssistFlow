@@ -11,7 +11,9 @@ import logging
 import time
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from app.core.auth import require_visitor, resolve_visitor_id
+
+from fastapi import Depends, APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from app.core.observability import span
 from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
@@ -246,7 +248,10 @@ async def stream_order_selection(
 
 
 @router.get("/pending")
-async def pending_ticket(conversation_id: int, user_id: str, http_request: Request):
+async def pending_ticket(
+    conversation_id: int, http_request: Request, user_id: str | None = None,
+    visitor_id: str = Depends(require_visitor),
+):
     """
     查询指定会话的待处理操作
 
@@ -269,6 +274,7 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
     为什么需要会话锁：
     避免在查询待处理操作时，其他请求修改图状态
     """
+    user_id = resolve_visitor_id(visitor_id, user_id)
     # 校验会话存在性
     if await conversation_repo.get_conversation(conversation_id, user_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -297,7 +303,10 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
 
 
 @router.post("/resume")
-async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> StreamingResponse:
+async def resume_ticket(
+    request: ResumeTicketRequest, http_request: Request,
+    visitor_id: str = Depends(require_visitor),
+) -> StreamingResponse:
     """
     恢复工单确认流程
 
@@ -320,6 +329,7 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
     - 缺少tool_call_id时请求校验返回422
     - 找不到对应工具调用时返回409
     """
+    request.user_id = resolve_visitor_id(visitor_id, request.user_id)
     # 校验会话存在性
     conversation = await conversation_repo.get_conversation(request.conversation_id, request.user_id)
     if conversation is None:
@@ -347,6 +357,7 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
 async def select_order(
     request: SelectOrderRequest,
     http_request: Request,
+    visitor_id: str = Depends(require_visitor),
 ) -> StreamingResponse:
     """
     处理订单选择
@@ -367,6 +378,7 @@ async def select_order(
     - 会话不存在时返回404
     - 图服务未启动时返回503
     """
+    request.user_id = resolve_visitor_id(visitor_id, request.user_id)
     # 校验会话存在性
     conversation = await conversation_repo.get_conversation(
         request.conversation_id,

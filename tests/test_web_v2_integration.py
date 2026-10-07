@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import ADMIN_HEADERS, visitor_headers
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -48,7 +49,7 @@ def test_feedback_pool_merge_and_readonly_stats(monkeypatch):
             app = FastAPI()
             app.include_router(feedback_router)
             app.include_router(review_router)
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=visitor_headers("v2-test")) as client:
                 before = await stored_counts(factory)
                 assert before == {"saved_turns": 1, "pool_total": 0, "unmerged": 0, "reviews": {}}
                 body = {"user_id": "v2-test", "conversation_id": cid, "message_id": "v2-test-message", "rating": "down"}
@@ -57,12 +58,12 @@ def test_feedback_pool_merge_and_readonly_stats(monkeypatch):
                 assert (await client.post("/api/feedback", json=body)).json()["pool_id"] == response.json()["pool_id"]
                 after = await stored_counts(factory)
                 assert after["pool_total"] == after["unmerged"] == 1
-                assert (await client.post("/api/feedback", json={**body, "user_id": "another"})).status_code == 404
+                assert (await client.post("/api/feedback", headers=visitor_headers("another"), json={**body, "user_id": "another"})).status_code == 404
                 normalizer = AsyncMock(return_value={"question": "退货运费谁出", "suggestion": "待人工补充", "matched_id": None})
                 assert (await process_pending(normalizer))["created"] == 1
                 final = await stored_counts(factory)
                 assert final["unmerged"] == 0 and final["reviews"] == {"pending": 1}
-                queue = (await client.get("/api/review/queue")).json()
+                queue = (await client.get("/api/review/queue", headers=ADMIN_HEADERS)).json()
                 assert len(queue["items"]) == 1
                 assert queue["items"][0]["question"] == "退货运费谁出"
     asyncio.run(run())

@@ -36,6 +36,16 @@ async def count_tickets(cid):
 async def verify(report):
     async with httpx.AsyncClient(base_url=BASE, timeout=180) as client:
         assert (await client.get("/api/health")).json()["status"] == "ok"
+        visitor_response = await client.post("/api/auth/visitor")
+        visitor_response.raise_for_status()
+        visitor = visitor_response.json()
+        user_id = visitor["user_id"]
+        client.headers["Authorization"] = "Bearer " + visitor["token"]
+        other_response = await client.post("/api/auth/visitor")
+        other_response.raise_for_status()
+        other = other_response.json()
+        other_headers = {"Authorization": "Bearer " + other["token"]}
+        report["browser_visitor"] = visitor
         cases = [
             ("chat", "你好", "chat"),
             ("knowledge", "七天无理由退货的条件是什么？", "knowledge"),
@@ -44,10 +54,10 @@ async def verify(report):
             ("refund", "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是本地验收工单。", "business"),
         ]
         for name, query, intent in cases:
-            events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": query}))
+            events = parse(await client.post("/api/graph-chat", json={"user_id": user_id, "message": query}))
             cid = next(e["conversation_id"] for e in events if "conversation_id" in e)
             async with persistent_runtime(make_services(), settings.graph_checkpoint_path) as runtime:
-                snapshot = await runtime.get_state("u1", cid)
+                snapshot = await runtime.get_state(user_id, cid)
             state = snapshot.values
             row = {"case": name, "query": query, "conversation_id": cid,
                    "intent": state["intent"], "trace": state["trace"],
@@ -70,13 +80,13 @@ async def verify(report):
                 preview = next(e for e in events if e.get("event") == "interrupt")
                 assert not any(e.get("event") == "done" for e in events)
                 assert await count_tickets(cid) == 0
-                params = {"user_id": "u1", "conversation_id": cid}
+                params = {"user_id": user_id, "conversation_id": cid}
                 assert (await client.post("/api/graph-chat", json={**params, "message": "继续"})).status_code == 409
                 for url in ("/api/actions/pending", f"/api/conversations/{cid}/messages"):
-                    assert (await client.get(url, params={**params, "user_id": "u2"})).status_code == 404
-                assert (await client.post("/api/graph-chat", json={**params, "user_id": "u2", "message": "你好"})).status_code == 404
+                    assert (await client.get(url, headers=other_headers, params={**params, "user_id": other["user_id"]})).status_code == 404
+                assert (await client.post("/api/graph-chat", headers=other_headers, json={**params, "user_id": other["user_id"], "message": "你好"})).status_code == 404
                 body = {**params, "tool_call_id": preview["tool_call_id"], "confirmed": True}
-                assert (await client.post("/api/actions/resume", json={**body, "user_id": "u2"})).status_code == 404
+                assert (await client.post("/api/actions/resume", headers=other_headers, json={**body, "user_id": other["user_id"]})).status_code == 404
                 responses = await asyncio.gather(*[client.post("/api/actions/resume", json=body) for _ in range(2)])
                 for response in responses:
                     assert any(e.get("event") == "done" for e in parse(response))
@@ -85,10 +95,10 @@ async def verify(report):
                 row["tickets_after_concurrent_confirmation"] = 1
                 row["ownership_checks"] = "passed"
             row["passed"] = True
-            REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            REPORT.write_text(json.dumps({k: v for k, v in report.items() if k != "browser_visitor"}, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"PASS {name}: conversation={cid}", flush=True)
 
-        events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是本地验收工单。"}))
+        events = parse(await client.post("/api/graph-chat", json={"user_id": user_id, "message": "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是本地验收工单。"}))
         pending = next(e for e in events if e.get("event") == "interrupt")
         report["browser_conversation_id"] = pending["conversation_id"]
         assert await count_tickets(pending["conversation_id"]) == 0
@@ -105,10 +115,12 @@ def verify_browser(report):
             page.set_default_timeout(180000)
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on("request", lambda req: graph_requests.append(req.url) if req.url.endswith("/api/graph-chat") else None)
+            page.add_init_script("""localStorage.setItem('minihelp_session_id', %s);
+                localStorage.setItem('minihelp_visitor_token', %s);
+                localStorage.setItem('minihelp_conversation_id', %s);""" % (
+                    json.dumps(report["browser_visitor"]["user_id"]),
+                    json.dumps(report["browser_visitor"]["token"]), json.dumps(str(cid))))
             page.goto(BASE)
-            page.wait_for_load_state("networkidle")
-            page.evaluate("cid => { localStorage.setItem('minihelp_session_id', 'u1'); localStorage.setItem('minihelp_conversation_id', String(cid)); }", cid)
-            page.reload()
             page.wait_for_load_state("networkidle")
             page.get_by_role("button", name="取消", exact=True).wait_for()
             assert page.locator(".conv-item").count() > 0
@@ -150,7 +162,7 @@ def main():
         asyncio.run(verify_cancel(report))
         report["passed"] = True
     finally:
-        REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        REPORT.write_text(json.dumps({k: v for k, v in report.items() if k != "browser_visitor"}, ensure_ascii=False, indent=2), encoding="utf-8")
     print("PASS live acceptance and browser", flush=True)
 
 

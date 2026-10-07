@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from playwright.sync_api import sync_playwright
+from tests.conftest import issue_visitor_token
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
@@ -25,6 +26,12 @@ def test_pending_order_survives_reload_and_uses_bound_identity(cancelled):
             page.on("pageerror", lambda error: errors.append(str(error)))
 
             def intercept(route):
+                if route.request.url.endswith("/api/auth/visitor"):
+                    token, expires_at = issue_visitor_token("frontend-visitor")
+                    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                        "user_id": "frontend-visitor", "token": token, "expires_at": expires_at,
+                    }))
+                    return
                 url = route.request.url
                 if url == "http://localhost:18765/":
                     route.fulfill(status=200, content_type="text/html", body=html)
@@ -75,6 +82,12 @@ def test_sse_replace_overwrites_streamed_bubble(answer, rendered):
             page.on("pageerror", lambda error: errors.append(str(error)))
 
             def intercept(route):
+                if route.request.url.endswith("/api/auth/visitor"):
+                    token, expires_at = issue_visitor_token("frontend-visitor")
+                    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                        "user_id": "frontend-visitor", "token": token, "expires_at": expires_at,
+                    }))
+                    return
                 if route.request.url == "http://localhost:18765/":
                     route.fulfill(status=200, content_type="text/html", body=html)
                 elif "/api/actions/pending?" in route.request.url:

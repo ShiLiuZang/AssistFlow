@@ -11,7 +11,9 @@ import logging
 import json
 from pathlib import Path
 
-from fastapi import APIRouter
+from app.core.auth import require_admin
+
+from fastapi import Depends, APIRouter
 from pydantic import ValidationError
 
 from app.schemas.cost_report import CostReport
@@ -20,6 +22,7 @@ from app.core.flywheel_evaluation import comparable
 from app.db import trace_repo
 
 router = APIRouter(
+    dependencies=[Depends(require_admin)],
     prefix="/api/observability",
     tags=["observability"],
 )

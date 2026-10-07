@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     # ==================== 其他配置 ====================
     review_admin_name: str = "local-reviewer"  # 知识审核管理员名称
 
+    # ==================== 鉴权配置 ====================
+    admin_token: str = ""
+    auth_secret: str = ""
+    visitor_token_ttl_days: int = 30
+
     @property
     def langfuse_configured(self) -> bool:
         """

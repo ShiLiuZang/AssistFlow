@@ -7,11 +7,13 @@
 作业定义和参数配置在app/core/jobs.py中维护。
 """
 
-from fastapi import APIRouter, HTTPException
+from app.core.auth import require_admin
+
+from fastapi import Depends, APIRouter, HTTPException
 
 from app.core import jobs
 
-router = APIRouter(prefix="/api/jobs")
+router = APIRouter(dependencies=[Depends(require_admin)], prefix="/api/jobs")
 
 
 def _known(name: str) -> None:

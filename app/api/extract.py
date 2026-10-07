@@ -8,7 +8,9 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from app.core.auth import require_visitor, resolve_visitor_id
+
+from fastapi import Depends, APIRouter, HTTPException
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.llm import get_chat_model
@@ -21,7 +23,9 @@ router = APIRouter(prefix="/api", tags=["extract"])
 
 
 @router.post("/extract", response_model=AfterSalesTicket)
-async def extract(request: ExtractRequest) -> AfterSalesTicket:
+async def extract(
+    request: ExtractRequest, visitor_id: str = Depends(require_visitor),
+) -> AfterSalesTicket:
     """
     从售后描述中提取结构化字段
 
@@ -45,6 +49,7 @@ async def extract(request: ExtractRequest) -> AfterSalesTicket:
     该接口只提取候选信息，不创建工单
     提取结果需要进一步确认后才能创建工单
     """
+    request.user_id = resolve_visitor_id(visitor_id, request.user_id)
     # 获取聊天模型
     model = get_chat_model()
 

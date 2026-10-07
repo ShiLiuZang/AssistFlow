@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import ADMIN_HEADERS
 
 from app.api.review import router as review_router
 from app.core.flywheel import process_pending
@@ -71,7 +72,7 @@ def test_review_without_token_and_same_chunk_recovery(monkeypatch):
                 return await publish_review(review_id, index=index)
 
             monkeypatch.setattr("app.api.review.publish_review", publish)
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=ADMIN_HEADERS) as api:
                 queue = await api.get("/api/review/queue")
                 assert queue.status_code == 200
                 assert [row["id"] for row in queue.json()["items"]] == [review_id]

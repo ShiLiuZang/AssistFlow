@@ -8,7 +8,9 @@ import pathlib
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from app.core.auth import require_admin
+
+from fastapi import Depends, APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import settings
@@ -16,7 +18,7 @@ from app.core import jobs
 from app.core import topic_views
 from app.core.taxonomy import SEVERITY, TOPIC_NAMES
 
-router = APIRouter(prefix="/api/acceptance")
+router = APIRouter(dependencies=[Depends(require_admin)], prefix="/api/acceptance")
 
 # 微调产物根目录及各子目录
 FINETUNE_DIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "finetune"

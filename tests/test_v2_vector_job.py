@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import ADMIN_HEADERS
 
 from app.api import jobs as jobs_api
 
@@ -19,7 +20,7 @@ def test_vector_job_existing_route_and_whitelist(monkeypatch):
     async def run():
         app = FastAPI()
         app.include_router(jobs_api.router)
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=ADMIN_HEADERS) as api:
             response = await api.post("/api/jobs/kb-vectorize")
             assert response.status_code == 200 and response.json()["status"] == "running"
             assert response.json()["log"] == "一次性测试日志"
@@ -40,7 +41,7 @@ def test_running_job_conflict_preserves_existing_status(monkeypatch):
     async def run():
         app = FastAPI()
         app.include_router(jobs_api.router)
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as api:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=ADMIN_HEADERS) as api:
             response = await api.post("/api/jobs/kb-vectorize")
             assert response.status_code == 409 and isinstance(response.json()["detail"], str)
             state = (await api.get("/api/jobs/kb-vectorize")).json()

@@ -6,6 +6,19 @@
 
 An enterprise-grade e-commerce AI customer service system built with **FastAPI + LangGraph + MySQL + Milvus**. Features natural language conversations, knowledge base retrieval, order queries, ticket processing, and comprehensive knowledge operations with quality monitoring.
 
+## Authentication (鉴权)
+
+The APIs use two kinds of `Authorization: Bearer <token>` credentials:
+
+- **Visitor tokens**: public `POST /api/auth/visitor` generates a server-side anonymous `user_id`, an HMAC-SHA256 signed token, and `expires_at` (Unix seconds). Chat, conversations, pending actions, confirmation, order selection, feedback, and extraction require this token. An optional body/query `user_id` must match the token or the request returns 403. Missing, invalid, or expired tokens return 401 with `WWW-Authenticate: Bearer`.
+- **Administrator token**: set `ADMIN_TOKEN` to a private random value. Knowledge, reviews, jobs, observability, acceptance, topics, and admin APIs require this exact token. An empty configuration returns 503 (`未配置 ADMIN_TOKEN`); missing or incorrect credentials return 401.
+
+Set `AUTH_SECRET` to a private random signing key and optionally set `VISITOR_TOKEN_TTL_DAYS` (default 30). If `AUTH_SECRET` is empty, startup generates an in-memory random key and logs a warning without the key; restarting invalidates existing visitor tokens. Use the same configured secret for multiple server processes. Changing the secret also invalidates existing visitor tokens.
+
+The chat page stores its visitor credentials in localStorage and renews them once after a 401; a new anonymous identity cannot access the previous identity's conversations. Admin pages prompt for `ADMIN_TOKEN` after 401/503 and retry once. HTML pages, `/static`, `/api/health`, and visitor issuance stay public; a prompt cannot configure an empty server-side `ADMIN_TOKEN`.
+
+Visitor tokens are anonymous demo identities, not verified customer accounts. Production identity should be issued by the upstream platform and validated by the service. HTTP scripts must first obtain a visitor token or read `ADMIN_TOKEN` from the environment for admin APIs.
+
 ## ✨ Key Features
 
 ### 🤖 Intelligent Dialogue

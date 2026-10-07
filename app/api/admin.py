@@ -10,7 +10,9 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter
+from app.core.auth import require_admin
+
+from fastapi import Depends, APIRouter
 from sqlalchemy import func, select
 
 from app.api import acceptance, kb, observability
@@ -21,7 +23,7 @@ from app.db.database import SessionLocal
 from app.db.models import Review
 
 
-router = APIRouter(prefix="/api/admin")
+router = APIRouter(dependencies=[Depends(require_admin)], prefix="/api/admin")
 
 
 def _card(key: str, title: str, page: str, lede: str) -> dict:

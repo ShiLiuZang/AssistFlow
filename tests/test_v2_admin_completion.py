@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import ADMIN_HEADERS
 
 from app.api import review, kb, jobs, knowledge
 from app.core import trusted_sources, evaluation
@@ -17,7 +18,7 @@ def client():
     app = FastAPI()
     for module in (review, kb, jobs, knowledge):
         app.include_router(module.router)
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=ADMIN_HEADERS)
 
 
 def test_review_legacy_queue_contract(monkeypatch):

@@ -12,7 +12,7 @@ class ResumeTicketRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     conversation_id: int
-    user_id: str
+    user_id: str | None = None
     confirmed: StrictBool
     tool_call_id: str
 
@@ -21,7 +21,7 @@ class SelectOrderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     conversation_id: int = Field(gt=0)
-    user_id: str = Field(min_length=1)
+    user_id: str | None = Field(default=None, min_length=1)
     kind: Literal["select_order"] = "select_order"
     request_id: str = Field(min_length=1)
     order_id: str | None = Field(default=None, min_length=1)

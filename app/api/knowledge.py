@@ -12,7 +12,8 @@ from pathlib import Path
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
+from app.core.auth import require_admin
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -46,7 +47,7 @@ def load_cases():
     return cases
 
 
-@router.get("/api/knowledge/cases")
+@router.get("/api/knowledge/cases", dependencies=[Depends(require_admin)])
 async def cases():
     """
     获取所有评测用例
@@ -69,7 +70,7 @@ class EvaluationRequest(BaseModel):
     generate: bool = False
 
 
-@router.post("/api/knowledge/evaluate")
+@router.post("/api/knowledge/evaluate", dependencies=[Depends(require_admin)])
 async def run_evaluation(request: EvaluationRequest):
     """
     运行知识库评测
@@ -121,20 +122,13 @@ async def run_evaluation(request: EvaluationRequest):
         return result
 
 
-@router.get("/rag-eval")
-async def evaluation_page(request: Request):
-    """
-    RAG评测页面入口
-
-    如果请求头包含text/html，返回评测页面；否则返回评测报告
-    实现内容协商，同一个URL支持浏览器访问和API调用
-    """
-    if "text/html" in request.headers.get("accept", ""):
-        return FileResponse(Path(__file__).resolve().parents[1] / "static" / "rageval.html")
-    return await report()
+@router.get("/rag-eval", include_in_schema=False)
+async def evaluation_page() -> FileResponse:
+    """公开页面；评测数据经受管理员鉴权的 /api/rag-eval/report 获取。"""
+    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "rageval.html")
 
 
-@router.get("/api/rag-eval/report")
+@router.get("/api/rag-eval/report", dependencies=[Depends(require_admin)])
 async def report():
     """
     获取最新的评测报告
@@ -171,7 +165,7 @@ class KnowledgeRequest(BaseModel):
     split: bool = False
 
 
-@router.post("/api/knowledge/search")
+@router.post("/api/knowledge/search", dependencies=[Depends(require_admin)])
 async def search(request: KnowledgeRequest):
     """
     执行知识库检索
@@ -194,7 +188,7 @@ async def search(request: KnowledgeRequest):
         ) from exc
 
 
-@router.post("/api/knowledge/answer")
+@router.post("/api/knowledge/answer", dependencies=[Depends(require_admin)])
 async def answer(request: KnowledgeRequest):
     """
     基于检索结果生成答案
