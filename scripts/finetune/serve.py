@@ -15,7 +15,7 @@ from scripts.finetune.inference_lib import apply_threshold
 
 DIR = pathlib.Path("data/finetune/onnx")
 
-app = FastAPI(title="mewhelp 微调 topic classifier")
+app = FastAPI(title="Minihelp 微调 topic classifier")
 _sess = ort.InferenceSession(str(DIR / "model.onnx"), providers=["CPUExecutionProvider"])
 _tok = Tokenizer.from_file(str(DIR / "tokenizer.json"))
 _tok.enable_truncation(max_length=128)

@@ -1,4 +1,4 @@
-"""真实教学环境验收：使用当前配置，创建新会话及一个本地演示工单。"""
+"""端到端验收：使用当前配置，创建新会话及一个本地演示工单。"""
 import asyncio
 import json
 import os
@@ -36,13 +36,13 @@ async def count_tickets(cid):
 
 async def verify(report):
     async with httpx.AsyncClient(base_url=BASE, timeout=180) as client:
-        assert (await client.get("/api/health")).json()["chapter"] == "ch05"
+        assert (await client.get("/api/health")).json()["status"] == "ok"
         cases = [
             ("chat", "你好", "chat"),
             ("knowledge", "七天无理由退货的条件是什么？", "knowledge"),
             ("complaint", "我要投诉，客服态度太差了", "complaint"),
             ("order", "请查询我的订单 ORD-1001 的商品和物流状态", "business"),
-            ("refund", "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是教学验收的本地工单。", "business"),
+            ("refund", "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是本地验收工单。", "business"),
         ]
         for name, query, intent in cases:
             events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": query}))
@@ -89,7 +89,7 @@ async def verify(report):
             REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"PASS {name}: conversation={cid}", flush=True)
 
-        events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是教学验收的本地工单。"}))
+        events = parse(await client.post("/api/graph-chat", json={"user_id": "u1", "message": "请为订单 ORD-1001 创建退款工单，原因是商品破损。这是本地验收工单。"}))
         pending = next(e for e in events if e.get("event") == "interrupt")
         report["browser_conversation_id"] = pending["conversation_id"]
         assert await count_tickets(pending["conversation_id"]) == 0

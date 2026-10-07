@@ -1,4 +1,4 @@
-"""Ch03：基础 Dense 检索工具；Ch04 的混合检索在独立教学包中。"""
+"""基础 Dense 检索工具。"""
 from langchain_core.tools import tool
 from app.core.embeddings import embed_query
 from app.kb import milvus_client

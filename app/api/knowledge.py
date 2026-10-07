@@ -36,11 +36,11 @@ def load_cases():
     返回:
         评测用例列表，每个用例包含query、expected_chunks等字段
 
-    从data/eval/04.jsonl读取用例，调用validate_cases校验格式
+    从data/eval/retrieval.jsonl读取用例，调用validate_cases校验格式
     """
-    from scripts.eval_04 import validate_cases, ROOT
+    from scripts.eval_retrieval import validate_cases, ROOT
     cases = [json.loads(line) for line in
-             (ROOT / "data/eval/04.jsonl").read_text(encoding="utf-8").splitlines()
+             (ROOT / "data/eval/retrieval.jsonl").read_text(encoding="utf-8").splitlines()
              if line.strip()]
     validate_cases(cases)
     return cases

@@ -1,4 +1,4 @@
-"""Ch03：协调 MySQL 原文状态与 Milvus 向量写入。"""
+"""协调 MySQL 原文状态与 Milvus 向量写入。"""
 
 from app.core import embeddings
 from app.kb import milvus_client

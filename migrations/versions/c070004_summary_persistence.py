@@ -1,4 +1,4 @@
-"""Ch07: persist summary text, cursor and optimistic version together."""
+"""Persist summary text, cursor and optimistic version together."""
 from alembic import op
 import sqlalchemy as sa
 

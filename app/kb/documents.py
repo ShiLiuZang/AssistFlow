@@ -1,4 +1,4 @@
-"""Ch03：把 Markdown 文档转换成结构化知识块。"""
+"""把 Markdown 文档转换成结构化知识块。"""
 
 from dataclasses import dataclass
 from app.kb import chunking

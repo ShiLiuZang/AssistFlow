@@ -16,9 +16,6 @@ LangGraph 节点实现模块
 - fetch_order: 订单获取和选择
 - policy: 退款政策检索
 - finish: 最终处理（记录日志、更新摘要）
-
-参考 git commit 6721ca3 (统一服务端工具身份上下文)
-参考 git commit d4386aa (增加订单选择节点与归属校验)
 """
 
 import json
@@ -117,8 +114,6 @@ def make_nodes(services):
 
         Raises:
             ValueError: 如果输入格式不正确或服务未配置
-
-        参考 git commit 0059169 (增加有界政策扩展与证据合并)
         """
         if not isinstance(result, dict):
             raise ValueError("详细检索结果必须是字典")
@@ -220,8 +215,6 @@ def make_nodes(services):
 
         Returns:
             状态更新字典，包含 answer 和 citations
-
-        参考 git commit 4d1384a (记录意图与选单接入审查并生成长对话教学包)
         """
         query = state.get("resolved_query") or state["query"]
         evidence = state["evidence"]
@@ -402,8 +395,6 @@ def make_nodes(services):
 
         Returns:
             状态更新字典，包含新的 assistant 消息
-
-        参考 git commit 7a3584a (增加统一工具执行与错误分类)
         """
         steps = state.get("steps", 0)
 

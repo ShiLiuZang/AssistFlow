@@ -1,4 +1,4 @@
-"""显式运行的 Ch08 本地 HTTP 验收；仅使用合成订单，不调用模型或数据库。"""
+"""显式运行的 MCP 本地 HTTP 验收；仅使用合成订单，不调用模型或数据库。"""
 
 import asyncio
 import json
@@ -15,7 +15,7 @@ URLS = {
     "aftersales": "http://127.0.0.1:18102/mcp",
 }
 REMOTE_TOOLS = ("query_logistics", "query_warranty", "query_return_status")
-CONTEXT = ToolContext("u1", "ch08-http-verification")
+CONTEXT = ToolContext("u1", "mcp-http-verification")
 
 
 class RecordingTransport(StreamableHTTPTransport):

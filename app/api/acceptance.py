@@ -17,7 +17,7 @@ from app.core.taxonomy import SEVERITY, TOPIC_NAMES
 
 router = APIRouter(prefix="/api/acceptance")
 
-# 第10章项目根目录及各产物子目录
+# 微调产物根目录及各子目录
 FINETUNE_DIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "finetune"
 REPORTS = FINETUNE_DIR / "reports"
 DATASET = FINETUNE_DIR / "dataset"

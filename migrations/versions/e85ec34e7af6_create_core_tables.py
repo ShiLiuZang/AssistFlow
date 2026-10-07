@@ -1,4 +1,4 @@
-"""create ch02 tables
+"""create conversations, messages and tickets tables
 
 Revision ID: e85ec34e7af6
 Revises: 

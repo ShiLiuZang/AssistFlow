@@ -1,4 +1,4 @@
-"""保存 Ch09 固定集评测运行结果。"""
+"""保存固定集评测运行结果。"""
 
 from alembic import op
 import sqlalchemy as sa

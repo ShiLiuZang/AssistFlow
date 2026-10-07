@@ -12,9 +12,6 @@
 工具分类：
 - 本地工具（builtin）：在应用内实现，如订单查询、工单创建
 - MCP 工具（mcp）：通过 MCP 协议集成的外部工具，如物流查询、售后系统
-
-参考 git commit 83b28dd (统一工具声明与注册入口)
-参考 git commit 7d21aac (增加工具参数统一校验)
 """
 
 from collections.abc import Callable
@@ -49,9 +46,6 @@ class ToolSpec:
             - "builtin": 本地工具
             - "mcp": MCP 工具
         server: MCP 服务器名称（仅 MCP 工具需要）
-
-    参考 git commit df3eed9 (为只读工具增加超时与有限重试)
-    参考 git commit 6721ca3 (统一服务端工具身份上下文)
     """
     name: str
     invoke: Callable
@@ -93,8 +87,6 @@ class Registry:
 
         Raises:
             ValueError: 如果工具规范不合法
-
-        参考 git commit 7d21aac (增加工具参数统一校验)
         """
         # 校验 JSON Schema 本身是否合法
         Draft202012Validator.check_schema(spec.schema)
@@ -200,10 +192,10 @@ class Registry:
         Returns:
             工具名称到执行函数的映射
         """
-        return {
-            name: spec.invoke
-            for name, spec in self._specs.items()
-        }
+        result = {}
+        for name, spec in self._specs.items():
+            result[name] = spec.invoke
+        return result
 
 
 def validate_args(spec: ToolSpec, args: object) -> None:
@@ -218,8 +210,6 @@ def validate_args(spec: ToolSpec, args: object) -> None:
 
     Raises:
         jsonschema.ValidationError: 如果参数不符合 schema
-
-    参考 git commit 7d21aac (增加工具参数统一校验)
     """
     Draft202012Validator(
         spec.schema,

@@ -11,9 +11,6 @@ Services 容器：
 - 提供对话图节点需要的所有服务
 - 支持注入审计和追踪回调
 - 管理工具注册表
-
-参考 git commit 21557ba (增加受控 MCP 发现与调用适配)
-参考 git commit daf2eaa (明确消息轮次与工具配对规则)
 """
 
 import json
@@ -162,8 +159,6 @@ async def make_services_with_mcp(
     - 工具定义不合法
     - 服务器连接超时
     - 工具名称冲突
-
-    参考 git commit 21557ba (增加受控 MCP 发现与调用适配)
     """
     registry = make_tool_registry()
     issues = await discover_mcp_tools(
@@ -342,8 +337,6 @@ def select_original_window(
 
     Raises:
         ValueError: 如果 covered_count 超出消息范围或消息类型不支持
-
-    参考 git commit daf2eaa (明确消息轮次与工具配对规则)
     """
     if not 0 <= covered_count <= len(messages):
         raise ValueError("摘要覆盖条数超出消息范围")
@@ -391,8 +384,6 @@ def build_agent_messages(recent_message, summary_text: str = ""):
 
     Returns:
         完整的消息列表
-
-    参考 git commit 22c8248 (持久化摘要并管理后台任务)
     """
     result = [SystemMessage(content=CHAT_SYSTEM_PROMPT)]
 
@@ -435,8 +426,6 @@ def build_windowed_agent_messages(
 
     Returns:
         完整的消息列表（系统提示 + 摘要 + 窗口消息）
-
-    参考 git commit c5c2aad (按覆盖游标更新滚动摘要)
     """
     # 计算前缀（系统提示 + 摘要）的成本
     prefix = build_agent_messages([], summary_text)
@@ -502,8 +491,6 @@ async def classify_detail(
 
     Returns:
         分类结果（包含 route、intent_detail、intent_confidence）
-
-    参考 git commit 4d1384a (记录意图与选单接入审查)
     """
     model = get_chat_model()
     predict = model_predictor(model, summary_text, recent_context)
@@ -529,8 +516,6 @@ async def expand_policy(query: str) -> list[str]:
     5. 无需扩展时返回空列表
 
     异常处理：如果 LLM 调用失败或解析失败，返回空列表（不影响主流程）
-
-    参考 git commit 0059169 (增加有界政策扩展与证据合并)
     """
     try:
         model = get_chat_model().with_structured_output(
@@ -607,8 +592,6 @@ async def get_verified_order(order_id: str) -> dict[str, str] | None:
 
     Returns:
         订单详情，如果订单不存在返回 None
-
-    参考 git commit d4386aa (增加订单选择节点与归属校验)
     """
     return get_order(order_id)
 
@@ -631,9 +614,6 @@ def make_tool_registry() -> Registry:
     - timeout: 超时时间（秒）
     - max_retries: 最大重试次数
     - permission: 权限级别（"read" 或 "write"）
-
-    参考 git commit 83b28dd (统一工具声明与注册入口)
-    参考 git commit df3eed9 (为只读工具增加超时与有限重试)
     """
     registry = Registry()
 

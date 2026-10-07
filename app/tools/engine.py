@@ -17,9 +17,6 @@
 - format_error: 结果格式不正确
 - timeout: 执行超时
 - transport_error: 传输错误（网络故障等）
-
-参考 git commit 7a3584a (增加统一工具执行与错误分类)
-参考 git commit df3eed9 (为只读工具增加超时与有限重试)
 """
 
 import asyncio
@@ -121,8 +118,6 @@ def classify_tool_result(data: object) -> str:
     3. 如果 cancelled=True 或 confirmed=False，返回 permission_denied
     4. 如果有 error 字段，返回 business_error
     5. 否则返回 success
-
-    参考 git commit 66b5981 (修复工具调用重复标识与结果状态恢复)
     """
     if not isinstance(data, dict):
         return "format_error"
@@ -229,8 +224,6 @@ def check_tool_call(
     1. 检查调用格式（id、name、args）
     2. 检查工具是否存在
     3. 校验参数是否符合 Schema
-
-    参考 git commit 7d21aac (增加工具参数统一校验)
     """
     # 1. 检查调用格式
     if (
@@ -303,9 +296,6 @@ async def execute_tool_call(
     - 仅 TimeoutError 和 ConnectionError 触发重试
     - 指数退避：0.1s, 0.2s, 0.4s, 0.8s, 1.0s
     - 最大重试次数由 spec.max_retries 决定
-
-    参考 git commit df3eed9 (为只读工具增加超时与有限重试)
-    参考 git commit ded9aed (完成工具结果格式化与审计落库)
     """
     started = time.monotonic()
     retry_count = 0

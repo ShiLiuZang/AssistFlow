@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     chat_thinking: str = "disabled"  # 思考模式，"disabled" 或 "enabled"（仅部分模型支持）
 
     # ==================== 数据库配置 ====================
-    handwritten_database_url: str = (
-        "mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_handwritten"
+    mysql_database_url: str = (
+        "mysql+asyncmy://root:root@127.0.0.1:3308/minihelp"
     )  # MySQL 异步连接 URL（使用 asyncmy 驱动）
     graph_checkpoint_path: str = "data/graph-checkpoints.sqlite"  # LangGraph 检查点存储路径
 
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # ==================== Milvus 向量库配置 ====================
     milvus_uri: str = "http://127.0.0.1:19530"  # Milvus 服务地址
-    milvus_collection: str = "minihelp_handwritten_knowledge"  # 知识库集合名称
+    milvus_collection: str = "minihelp_knowledge"  # 知识库集合名称
 
     # ==================== 重排序模型配置 ====================
     rerank_base_url: str = "https://api.siliconflow.cn/v1"  # 重排序 API 基础 URL

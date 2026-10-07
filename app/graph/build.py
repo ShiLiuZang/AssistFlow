@@ -13,9 +13,6 @@ LangGraph 对话图构建模块
 - 节点（Node）：处理逻辑单元（如意图分类、检索、答案生成）
 - 边（Edge）：节点间的转换关系
 - 条件边（Conditional Edge）：根据状态动态选择下一个节点
-
-参考 git commit 9faaac0 (接入多轮订单选择与退款政策子流程)
-参考 git commit 6721ca3 (统一服务端工具身份上下文)
 """
 
 from langgraph.graph import END, START, StateGraph
@@ -55,7 +52,6 @@ def build_graph(services, checkpointer=None):
 
     # ==================== 指代消解入口 ====================
     # START 直接进入 resolve_reference 节点
-    # 参考 git commit b406062 (增加保守指代消解并保留用户原话)
     graph.add_edge(START, "resolve_reference")
 
     # resolve_reference 根据是否需要澄清来路由
@@ -74,7 +70,6 @@ def build_graph(services, checkpointer=None):
 
     # ==================== 意图分类和路由 ====================
     # 根据识别的意图路由到不同处理分支
-    # 参考 git commit 4d1384a (记录意图与选单接入审查)
     graph.add_conditional_edges(
         "classify",
         route_by_intent,  # 路由函数，根据 intent 字段决定下一个节点
@@ -101,7 +96,6 @@ def build_graph(services, checkpointer=None):
     )
 
     # ==================== 订单处理分支 ====================
-    # 参考 git commit 9faaac0 (接入多轮订单选择与退款政策子流程)
     graph.add_conditional_edges(
         "fetch_order",
         lambda state: (

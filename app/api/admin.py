@@ -114,7 +114,7 @@ def _rag_card() -> dict:
 
     MRR是检索质量的核心指标，值越接近1越好
     """
-    card = _card("rageval", "RAG 评估", "/rag-eval", "读取主项目已保存的 Ch04 评估报告")
+    card = _card("rageval", "RAG 评估", "/rag-eval", "读取已保存的检索评估报告")
     try:
         report = json.loads(Path(REPORT_PATH).read_text(encoding="utf-8"))
     except FileNotFoundError:

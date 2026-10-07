@@ -1,4 +1,4 @@
-"""Ch03：Markdown 标题解析、正文切分、重叠和表格切分。"""
+"""Markdown 标题解析、正文切分、重叠和表格切分。"""
 import re
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,

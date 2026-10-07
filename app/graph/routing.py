@@ -87,7 +87,6 @@ def confidence_gate(
     2. evidence 列表非空（至少有检索结果）
 
     注：置信度评估在 retrieve 或 policy 节点中完成，这里只检查结果。
-    参考 git commit 0059169 (增加有界政策扩展与证据合并)
     """
     if (
         state.get("evidence_allowed") is True
@@ -115,7 +114,6 @@ def should_continue(state: ConversationState) -> Literal["tools", "finish"]:
         - finish: 任务已完成，不需要工具
 
     这是 Agent 模式的核心循环：agent → tools → agent → ... → finish
-    参考 git commit 7a3584a (增加统一工具执行与错误分类)
     """
     messages = state.get("messages")
     if not messages:

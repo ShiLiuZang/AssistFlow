@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import (
 from app.config import settings
 
 
-engine = create_async_engine(settings.handwritten_database_url, pool_pre_ping=True)
+engine = create_async_engine(settings.mysql_database_url, pool_pre_ping=True)
 
 SessionLocal = async_sessionmaker(
     engine,

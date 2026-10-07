@@ -133,7 +133,7 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 │   │   ├── review_publish.py # Review & publish workflow
 │   │   └── ...
 │   ├── db/                   # Database layer (4 modules)
-│   │   ├── models.py         # SQLAlchemy models (13 tables)
+│   │   ├── models.py         # SQLAlchemy models (12 tables)
 │   │   ├── repository.py     # Data access layer
 │   │   └── database.py       # Async session factory
 │   ├── schemas/              # Pydantic models
@@ -149,7 +149,7 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 │   ├── tasks.py              # Unified CLI entry
 │   ├── build_kb.py           # Build knowledge base
 │   ├── vectorize_kb.py       # Vectorization job
-│   ├── eval_04.py            # RAG evaluation
+│   ├── eval_retrieval.py     # RAG evaluation
 │   ├── cost_by_intent.py     # Cost reporting
 │   └── finetune/             # Classifier training pipeline
 ├── .env.example              # Environment template
@@ -201,7 +201,7 @@ RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_API_KEY=...
 
 # Database (keep default when using docker-compose)
-HANDWRITTEN_DATABASE_URL=mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_complete
+MYSQL_DATABASE_URL=mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_complete
 MILVUS_URI=http://127.0.0.1:19531
 
 # RAG Parameters
@@ -387,7 +387,7 @@ MCP tools are discovered at startup. Check logs for `"MCP 工具发现异常"` w
 
 ## 📊 Database Schema
 
-13 tables covering conversation, knowledge, audit, and observability:
+12 tables covering conversation, knowledge, audit, and observability:
 
 | Table | Purpose |
 |-------|---------|
@@ -398,12 +398,11 @@ MCP tools are discovered at startup. Check logs for `"MCP 工具发现异常"` w
 | `qa_extraction_staging` | Mined candidate knowledge |
 | `reviews` | Knowledge review queue |
 | `low_confidence_questions` | Questions needing review |
-| `user_feedback` | User satisfaction feedback |
+| `turns` | Per-turn answer snapshots (intent, evidence, confidence) |
 | `tool_audit_logs` | Tool invocation audit trail |
 | `trace_spans` | Execution trace spans |
 | `topic_classifications` | 17-class topic labels |
-| `model_usage_logs` | Token usage by intent |
-| `cost_attribution` | Cost allocation |
+| `eval_runs` | Fixed-set evaluation run results |
 
 ---
 
@@ -475,35 +474,35 @@ Higher Confidence on Similar Questions
 
 ## 📈 Key Design Decisions
 
-Based on git commit history, here are the major architectural choices:
+Major architectural choices:
 
-1. **LangGraph for Orchestration** (Ch05-Ch06)
+1. **LangGraph for Orchestration**
    - Stateful conversation flow with checkpoints
    - Resumable execution after interrupts (ticket confirmation)
    - Visual graph structure for debugging
 
-2. **Unified Tool System** (Ch08)
+2. **Unified Tool System**
    - Registry-based tool discovery (local + MCP)
    - Standardized execution engine with timeout/retry
    - Complete audit trail with replay capability
    - Tool identity context for permission isolation
 
-3. **RAG with Confidence Gating** (Ch03-Ch04)
+3. **RAG with Confidence Gating**
    - Evidence sufficiency assessment before answering
    - Configurable confidence threshold
    - Refusal when evidence is insufficient
 
-4. **Rolling Conversation Summary** (Ch07)
+4. **Rolling Conversation Summary**
    - Automatic summarization at configurable intervals
    - Summary-aware intent recognition
    - Reduces context window usage
 
-5. **Intent-Based Cost Attribution** (Ch09)
+5. **Intent-Based Cost Attribution**
    - Track token usage by conversation intent
    - Enables business-level cost optimization
    - Identifies high-cost interaction patterns
 
-6. **MCP Protocol Integration** (Ch08)
+6. **MCP Protocol Integration**
    - Standard protocol for external tools
    - HTTP transport with streaming support
    - Runtime discovery and error handling

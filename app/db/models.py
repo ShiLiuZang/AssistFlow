@@ -34,7 +34,7 @@ class Conversation(Base):
     会话表
 
     记录用户与客服的完整对话会话，每个会话包含多条消息。
-    支持对话摘要功能，用于压缩长对话历史（参考 git commit 22c8248）。
+    支持对话摘要功能，用于压缩长对话历史。
     """
     __tablename__ = "conversations"
 
@@ -55,8 +55,6 @@ class Message(Base):
 
     记录会话中的每条消息，包括用户消息、助手消息和工具调用结果。
     支持 OpenAI 消息格式（role、content、tool_calls、tool_call_id）。
-
-    参考 git commit daf2eaa (明确消息轮次与工具配对规则)
     """
     __tablename__ = "messages"
 
@@ -87,7 +85,7 @@ class Ticket(Base):
     工单表
 
     记录用户创建的售后工单，包括退款、换货、投诉等。
-    工单通过 MCP 工具集成外部售后系统（参考 git commit 21557ba）。
+    工单通过 MCP 工具集成外部售后系统。
     """
     __tablename__ = "tickets"
 
@@ -121,7 +119,7 @@ class KnowledgeChunk(Base):
 
     分块来源：
     1. 人工录入的 FAQ
-    2. 从文档挖掘的 QA 对（参考 git commit 挖掘相关）
+    2. 从文档挖掘的 QA 对
     3. 从对话中提取的知识（QaExtractionStaging 审核通过后）
     """
     __tablename__ = "knowledge_chunks"
@@ -195,10 +193,8 @@ class ToolAuditLog(Base):
 
     记录所有工具调用的参数和结果，用于：
     1. 审计：追溯工具调用历史，排查问题
-    2. 重放：基于审计日志重现工具调用场景（参考 git commit 658119b）
+    2. 重放：基于审计日志重现工具调用场景
     3. 分析：统计工具使用频率和成功率
-
-    参考 git commit ded9aed (完成工具结果格式化与审计落库)
     """
     __tablename__ = "tool_audit_logs"
     __table_args__ = (
@@ -242,8 +238,6 @@ class TraceSpan(Base):
     - trace_id：追踪 ID，同一次请求的所有 span 共享
     - span_id：当前 span 唯一 ID
     - parent_id：父 span ID，构成调用树
-
-    参考 git commit 805cba5 (接入执行追踪持久化与 Langfuse 观测)
     """
     __tablename__ = "trace_spans"
 
@@ -300,8 +294,6 @@ class Turn(Base):
     1. 历史追溯：查看某次回答时的检索上下文
     2. 问题分析：统计用户问题分布
     3. 效果评估：评估检索质量和答案准确性
-
-    参考 git commit 4d1384a (记录意图与选单接入审查并生成长对话教学包)
     """
     __tablename__ = "turns"
     __table_args__ = (
@@ -331,8 +323,6 @@ class LowConfidenceQuestion(Base):
     1. 检索结果置信度低于阈值
     2. 用户反馈答案不准确
     3. 系统无法理解用户意图
-
-    参考 git commit 4d1384a (记录意图与选单接入审查并生成长对话教学包)
     """
     __tablename__ = "low_confidence_questions"
     __table_args__ = (
@@ -378,8 +368,6 @@ class Review(Base):
     2. 系统标准化问题并归并相似问题到审核队列（Review）
     3. 人工审核并补充答案
     4. 发布到知识库（KnowledgeChunk）
-
-    参考 git commit 相关审核流程提交
     """
     __tablename__ = "reviews"
     __table_args__ = (

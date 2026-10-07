@@ -23,8 +23,6 @@
 - 人工 → human（转人工）
 - 闲聊 → chat（闲聊回复）
 - 其他 → clarify（澄清意图）
-
-参考 git commit 4d1384a (记录意图与选单接入审查)
 """
 
 from enum import StrEnum
@@ -147,8 +145,6 @@ def model_predictor(
     2. 对话摘要（如有）
     3. 最近消息（如有）
     4. 当前用户查询
-
-    参考 git commit 4d1384a (记录意图与选单接入审查)
     """
     structured = model.with_structured_output(
         Prediction,

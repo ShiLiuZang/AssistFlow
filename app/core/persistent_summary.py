@@ -1,4 +1,4 @@
-"""Database-backed adapter for the handwritten Ch07 summary algorithm."""
+"""Database-backed adapter for the rolling summary algorithm."""
 from sqlalchemy import select, update
 
 from app.core.memory import Message as ViewMessage

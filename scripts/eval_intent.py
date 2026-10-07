@@ -1,5 +1,5 @@
 """
-Ch06 意图分类评估脚本
+意图分类评估脚本
 读取标准样例与预测结果，计算准确率、精确率、召回率和F1分数
 用于验证意图识别模块的性能
 """
@@ -19,7 +19,7 @@ def main():
     parser.add_argument(
         "--cases",
         type=Path,
-        default=Path("data/eval/06_intent.json"),
+        default=Path("data/eval/intent.json"),
     )
     parser.add_argument(
         "--predictions",

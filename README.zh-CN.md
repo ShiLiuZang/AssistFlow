@@ -133,7 +133,7 @@
 │   │   ├── review_publish.py # 审核与发布流程
 │   │   └── ...
 │   ├── db/                   # 数据库层（4 个模块）
-│   │   ├── models.py         # SQLAlchemy 模型（13 张表）
+│   │   ├── models.py         # SQLAlchemy 模型（12 张表）
 │   │   ├── repository.py     # 数据访问层
 │   │   └── database.py       # 异步会话工厂
 │   ├── schemas/              # Pydantic 数据模型
@@ -149,7 +149,7 @@
 │   ├── tasks.py              # 统一 CLI 入口
 │   ├── build_kb.py           # 构建知识库
 │   ├── vectorize_kb.py       # 向量化任务
-│   ├── eval_04.py            # RAG 评测
+│   ├── eval_retrieval.py     # RAG 评测
 │   ├── cost_by_intent.py     # 成本报告
 │   └── finetune/             # 分类器训练流程
 ├── .env.example              # 环境变量模板
@@ -201,7 +201,7 @@ RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_API_KEY=...
 
 # 数据库（使用 docker-compose 时保持默认）
-HANDWRITTEN_DATABASE_URL=mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_complete
+MYSQL_DATABASE_URL=mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_complete
 MILVUS_URI=http://127.0.0.1:19531
 
 # RAG 参数
@@ -387,7 +387,7 @@ MCP 工具在启动时发现。检查日志中的 `"MCP 工具发现异常"` 警
 
 ## 📊 数据库表结构
 
-13 张表，覆盖会话、知识、审计和可观测性：
+12 张表，覆盖会话、知识、审计和可观测性：
 
 | 表名 | 用途 |
 |------|------|
@@ -398,12 +398,11 @@ MCP 工具在启动时发现。检查日志中的 `"MCP 工具发现异常"` 警
 | `qa_extraction_staging` | 挖掘的候选知识 |
 | `reviews` | 知识审核队列 |
 | `low_confidence_questions` | 需审核的问题 |
-| `user_feedback` | 用户满意度反馈 |
+| `turns` | 每轮回答快照（意图、证据、置信度） |
 | `tool_audit_logs` | 工具调用审计轨迹 |
 | `trace_spans` | 执行追踪跨度 |
 | `topic_classifications` | 17 类主题标签 |
-| `model_usage_logs` | 按意图统计 token 用量 |
-| `cost_attribution` | 成本分配 |
+| `eval_runs` | 固定集评测运行结果 |
 
 ---
 
@@ -475,35 +474,35 @@ Markdown 文档
 
 ## 📈 关键设计决策
 
-基于 git 提交历史，以下是主要架构选择：
+以下是主要架构选择：
 
-1. **LangGraph 编排**（Ch05-Ch06）
+1. **LangGraph 编排**
    - 带检查点的状态化对话流程
    - 中断后可恢复执行（工单确认）
    - 可视化图结构便于调试
 
-2. **统一工具系统**（Ch08）
+2. **统一工具系统**
    - 基于注册表的工具发现（本地 + MCP）
    - 标准化执行引擎（超时/重试）
    - 完整审计轨迹与重放能力
    - 工具身份上下文实现权限隔离
 
-3. **带置信度门控的 RAG**（Ch03-Ch04）
+3. **带置信度门控的 RAG**
    - 回答前评估证据充分性
    - 可配置置信度阈值
    - 证据不足时拒绝回答
 
-4. **滚动对话摘要**（Ch07）
+4. **滚动对话摘要**
    - 可配置间隔的自动摘要
    - 摘要感知的意图识别
    - 减少上下文窗口使用
 
-5. **按意图成本归因**（Ch09）
+5. **按意图成本归因**
    - 按对话意图追踪 token 用量
    - 支持业务级成本优化
    - 识别高成本交互模式
 
-6. **MCP 协议集成**（Ch08）
+6. **MCP 协议集成**
    - 外部工具的标准协议
    - 带流式支持的 HTTP 传输
    - 运行时发现与错误处理

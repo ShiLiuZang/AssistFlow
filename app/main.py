@@ -68,9 +68,6 @@ async def lifespan(app: FastAPI):
     1. 关闭持久化摘要的后台任务
     2. 清理观测配置
     3. 关闭 Langfuse 客户端，刷新未上报的数据
-
-    参考 git commit 805cba5 (接入执行追踪持久化与 Langfuse 观测)
-    参考 git commit 21557ba (增加受控 MCP 发现与调用适配)
     """
     # 1. 从环境变量收集已配置的 MCP 服务器 URL
     # 仅包含非空 URL，支持逐步启用 MCP 服务器
@@ -92,8 +89,8 @@ async def lifespan(app: FastAPI):
     )
 
     # 3. 注入数据落库回调
-    # audit_sink: 记录工具调用参数和结果，用于审计和重放（git commit ded9aed）
-    # trace_sink: 记录执行追踪 span，用于性能分析和调试（git commit 805cba5）
+    # audit_sink: 记录工具调用参数和结果，用于审计和重放
+    # trace_sink: 记录执行追踪 span，用于性能分析和调试
     services.audit_sink = repository.insert_tool_audit
     services.trace_sink = repository.insert_trace_span
 
@@ -113,7 +110,7 @@ async def lifespan(app: FastAPI):
 
     try:
         # 6. 初始化图运行时和检查点持久化
-        # 支持会话状态断点续传，用户可以中断对话后继续（git commit 89bffc8）
+        # 支持会话状态断点续传，用户可以中断对话后继续
         async with persistent_runtime(
             services,
             settings.graph_checkpoint_path,
@@ -125,7 +122,7 @@ async def lifespan(app: FastAPI):
                 yield
             finally:
                 # 8. 应用关闭时，先关闭后台摘要任务
-                # 确保滚动摘要写入数据库，避免丢失上下文压缩结果（git commit 22c8248）
+                # 确保滚动摘要写入数据库，避免丢失上下文压缩结果
                 await close_persisted_summaries()
     finally:
         # 9. 清理观测配置和图运行时
@@ -143,7 +140,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
-    title="Minihelp Handwritten",
+    title="Minihelp",
     version="0.1.0",
     lifespan=lifespan,  # 应用生命周期管理
 )
@@ -175,8 +172,8 @@ app.include_router(jobs_router)  # 后台任务（摘要、挖掘等）
 app.include_router(admin_router)  # 管理后台
 
 # 测试和话题管理接口
-app.include_router(acceptance_router)  # 验收测试（git commit 8f03245）
-app.include_router(topics_router)  # 话题管理（git commit 4d1384a）
+app.include_router(acceptance_router)  # 验收测试
+app.include_router(topics_router)  # 话题管理
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     """
@@ -186,12 +183,11 @@ async def health() -> dict[str, str]:
     用于 Kubernetes liveness probe 或负载均衡器健康检查。
 
     Returns:
-        包含 status、service 和 chapter 的字典
+        包含 status 和 service 的字典
     """
     return {
         "status": "ok",
-        "service": "minihelp-handwritten",
-        "chapter": "ch05",
+        "service": "minihelp",
     }
 
 

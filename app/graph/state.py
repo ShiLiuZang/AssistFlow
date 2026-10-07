@@ -8,10 +8,8 @@ LangGraph 对话状态定义
 1. 消息历史：使用 add_messages reducer 自动合并消息
 2. 意图和路由：记录用户意图、置信度和路由决策
 3. 检索上下文：存储检索证据、快照和置信度信号
-4. 订单处理：支持订单选择和指代消解（参考 git commit d4386aa）
-5. 对话摘要：滚动摘要文本和覆盖位置（参考 git commit c5c2aad）
-
-参考 git commit 1c67061 (区分本轮状态与已验证订单槽位)
+4. 订单处理：支持订单选择和指代消解
+5. 对话摘要：滚动摘要文本和覆盖位置
 """
 
 from typing import Annotated, TypedDict
@@ -74,7 +72,6 @@ class ConversationState(
     needs_clarification: bool  # 是否需要澄清（查询模糊）
 
     # ==================== 订单处理 ====================
-    # 参考 git commit d4386aa (增加订单选择节点与归属校验)
     selected_order: str  # 用户选择的订单 ID（通过序号或订单号）
     order: dict | None  # 当前操作的订单详情
     last_order_id: str  # 上一次提及的订单 ID（用于指代消解）
@@ -91,7 +88,6 @@ class ConversationState(
     intent_confidence: float  # 意图识别置信度
 
     # ==================== 对话摘要 ====================
-    # 参考 git commit c5c2aad (按覆盖游标更新滚动摘要)
     summary_text: str  # 滚动摘要文本
     summary_upto: int  # 摘要覆盖到的消息 ID
     covered_count: int  # 已覆盖的消息数量

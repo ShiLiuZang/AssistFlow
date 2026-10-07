@@ -1,4 +1,4 @@
-"""create ch03 knowledge chunks
+"""create knowledge_chunks table
 
 Revision ID: 83ebbbced7d5
 Revises: e85ec34e7af6

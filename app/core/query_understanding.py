@@ -1,4 +1,4 @@
-"""Ch04：问题改写与关键词扩展。"""
+"""问题改写与关键词扩展。"""
 
 import logging
 import re

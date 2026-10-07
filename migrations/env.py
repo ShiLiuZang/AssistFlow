@@ -23,7 +23,7 @@ if config.config_file_name is not None:
 
 config.set_main_option(
     "sqlalchemy.url",
-    settings.handwritten_database_url.replace("%", "%%"),
+    settings.mysql_database_url.replace("%", "%%"),
 )
 
 target_metadata = Base.metadata

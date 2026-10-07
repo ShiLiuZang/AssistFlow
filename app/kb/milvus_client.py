@@ -148,7 +148,7 @@ def ensure_collection(
         - sparse: SPARSE_INVERTED_INDEX + BM25（关键词匹配）
 
     校验逻辑:
-        集合存在时检查是否有Ch04新增字段（dense/sparse/text）
+        集合存在时检查是否有混合检索所需字段（dense/sparse/text）
         检查向量维度是否匹配（DIM=1024）
         不匹配时抛出异常，提示重新建库
 
@@ -173,7 +173,7 @@ def ensure_collection(
             for field in description.get("fields", [])
         }
         if not {"dense", "sparse", "text"}.issubset(fields):
-            raise ValueError("现有集合缺少 Ch04 字段，请使用新集合并重新向量化")
+            raise ValueError("现有集合缺少混合检索所需字段，请使用新集合并重新向量化")
         dense_dim = int(fields["dense"].get("params", {}).get("dim", 0))
         if dense_dim != DIM:
             raise ValueError("当前维度不匹配")
