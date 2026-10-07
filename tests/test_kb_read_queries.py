@@ -35,7 +35,6 @@ def client():
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-@pytest.mark.skip(reason="C: app/db/staging_repo.py:10 staging_stats.counts 遗漏 approved/rejected，保留五种状态计数断言")
 def test_candidate_full_answer_all_counts_and_source_boundaries(monkeypatch, tmp_path):
     answer = "可信退货条件。" * 35
     (tmp_path / "returns-policy.md").write_text("# 条件\n" + answer, encoding="utf-8")
@@ -89,7 +88,6 @@ def test_staging_unavailable_stats_is_sanitized(monkeypatch):
     asyncio.run(run())
 
 
-@pytest.mark.skip(reason="C: app/api/kb.py:494 未约束 staging limit 为 1..100，0 和 101 未返回 422")
 def test_bounded_parameters_and_unavailable_queries(monkeypatch):
     monkeypatch.setattr(staging_repo, "staging_stats", AsyncMock(return_value={}))
     monkeypatch.setattr(staging_repo, "list_staging_by_status", AsyncMock(return_value=[]))

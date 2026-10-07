@@ -329,53 +329,6 @@
     .action-btn:disabled { background: #e8dcc8; color: var(--muted); cursor: not-allowed; }
 
 
-    .modal-mask {
-      position: fixed; inset: 0; z-index: 50;
-      background: rgba(43, 38, 50, .45);
-      display: none; align-items: center; justify-content: center;
-      padding: 20px;
-    }
-    .modal-mask.open { display: flex; }
-    .ticket-modal {
-      width: 100%; max-width: 420px;
-      background: var(--paper);
-      border: 4px solid var(--ink);
-      box-shadow: var(--shadow-lg);
-      padding: 20px;
-    }
-    .ticket-modal h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
-    .ticket-modal .sub { margin: 0 0 16px; font-size: 12px; color: var(--muted); }
-    .ticket-field { margin-bottom: 14px; }
-    .ticket-field label { display: block; font-size: 12.5px; margin-bottom: 6px; color: var(--ink); }
-    .ticket-field label .req { color: var(--error); }
-    .ticket-field select,
-    .ticket-field textarea {
-      width: 100%; font-family: inherit; font-size: 13px; color: var(--ink);
-      border: 3px solid var(--ink); background: var(--cream);
-      padding: 9px 10px; box-shadow: var(--shadow-sm);
-    }
-    .ticket-field textarea { resize: vertical; min-height: 88px; }
-    .ticket-field select:focus,
-    .ticket-field textarea:focus { outline: none; background: #fff; }
-    .ticket-err { color: var(--error); font-size: 12px; min-height: 16px; margin: -6px 0 10px; }
-    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
-    .modal-actions button {
-      border: 3px solid var(--ink); font-family: inherit; font-size: 13px;
-      padding: 9px 16px; cursor: pointer; box-shadow: var(--shadow-sm);
-    }
-    .modal-actions .cancel { background: var(--paper); color: var(--ink); }
-    .modal-actions .cancel:hover { background: #ffedd6; }
-    .modal-actions .submit { background: var(--coral); color: #fff; }
-    .modal-actions .submit:hover:not(:disabled) { background: #ff6a45; }
-    .modal-actions button:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
-    .modal-actions .submit:disabled { background: #e8dcc8; color: var(--muted); cursor: not-allowed; }
-
-    .ticket-field input {
-      width: 100%; font-family: inherit; font-size: 13px; color: var(--muted);
-      border: 3px solid var(--ink); background: #efe6d4;
-      padding: 9px 10px; box-shadow: var(--shadow-sm);
-    }
-
     .order-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .order-card {
       text-align: left; border: 3px solid var(--ink); background: var(--cream);
@@ -483,58 +436,6 @@
     </div>
   </div>
 
-
-  <div class="modal-mask" id="ticketMask">
-    <div class="ticket-modal" role="dialog" aria-modal="true" aria-labelledby="ticketTitle">
-      <h3 id="ticketTitle">创建工单</h3>
-      <p class="sub">小喵会把问题登记成工单跟进处理</p>
-      <div class="ticket-field">
-        <label for="ticketType">反馈类别 <span class="req">*</span></label>
-        <select id="ticketType">
-          <option value="" disabled selected>请选择反馈类别…</option>
-          <option value="售后">售后</option>
-          <option value="投诉">投诉</option>
-          <option value="咨询">咨询</option>
-        </select>
-      </div>
-      <div class="ticket-field">
-        <label for="ticketDesc">反馈描述 <span class="req">*</span></label>
-        <textarea id="ticketDesc" placeholder="请描述您遇到的问题…"></textarea>
-      </div>
-      <div class="ticket-err" id="ticketErr"></div>
-      <div class="modal-actions">
-        <button type="button" class="cancel" id="ticketCancel">取消</button>
-        <button type="button" class="submit" id="ticketSubmit">提交工单</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-mask" id="refundMask">
-    <div class="ticket-modal" role="dialog" aria-modal="true" aria-labelledby="refundTitle">
-      <h3 id="refundTitle">提交退款工单</h3>
-      <p class="sub">确认订单与退款原因后提交,小喵会为您登记退款申请</p>
-      <div class="ticket-field">
-        <label for="refundOrder">订单号</label>
-        <input id="refundOrder" type="text" readonly />
-      </div>
-      <div class="ticket-field">
-        <label for="refundReason">退款原因 <span class="req">*</span></label>
-        <select id="refundReason">
-          <option value="" disabled selected>请选择退款原因…</option>
-          <option value="七天无理由">七天无理由</option>
-          <option value="质量问题">质量问题</option>
-          <option value="发错货">发错货</option>
-          <option value="不想要了">不想要了</option>
-          <option value="其他">其他</option>
-        </select>
-      </div>
-      <div class="ticket-err" id="refundErr"></div>
-      <div class="modal-actions">
-        <button type="button" class="cancel" id="refundCancel">取消</button>
-        <button type="button" class="submit" id="refundSubmit">提交退款</button>
-      </div>
-    </div>
-  </div>
 
   <script>
     const SESSION_KEY = "minihelp_session_id";
@@ -877,138 +778,17 @@
         } else if (a.type === "create_ticket") {
           btn.textContent = "建工单";
 
-          btn.addEventListener("click", () => openTicketModal(btn));
-        } else if (a.type === "refund_form") {
-          btn.textContent = "提交退款工单";
-
-          btn.addEventListener("click", () => openRefundModal(btn, a.draft || {}));
+          btn.addEventListener("click", async () => {
+            if (sendBtn.disabled) return;
+            btn.disabled = true;
+            await send("请根据上述问题为我登记工单");
+            btn.disabled = false;
+          });
         }
         bar.appendChild(btn);
       }
       if (bar.children.length) bubble.appendChild(bar);
     }
-
-
-    const ticketMask = document.getElementById("ticketMask");
-    const ticketType = document.getElementById("ticketType");
-    const ticketDesc = document.getElementById("ticketDesc");
-    const ticketErr = document.getElementById("ticketErr");
-    const ticketSubmit = document.getElementById("ticketSubmit");
-    const ticketCancel = document.getElementById("ticketCancel");
-    let ticketTriggerBtn = null;
-
-    function openTicketModal(triggerBtn) {
-      ticketTriggerBtn = triggerBtn;
-      ticketType.value = "";
-      ticketDesc.value = "";
-      ticketErr.textContent = "";
-      ticketSubmit.disabled = false;
-      ticketSubmit.textContent = "提交工单";
-      ticketMask.classList.add("open");
-      ticketDesc.focus();
-    }
-    function closeTicketModal() {
-      ticketMask.classList.remove("open");
-      ticketTriggerBtn = null;
-    }
-
-    ticketCancel.addEventListener("click", closeTicketModal);
-
-    ticketMask.addEventListener("click", (e) => { if (e.target === ticketMask) closeTicketModal(); });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && ticketMask.classList.contains("open")) closeTicketModal();
-    });
-
-    ticketSubmit.addEventListener("click", async () => {
-      const type = ticketType.value;
-      const desc = ticketDesc.value.trim();
-      if (!type) { ticketErr.textContent = "请选择反馈类别"; return; }
-      if (!desc) { ticketErr.textContent = "请填写反馈描述"; ticketDesc.focus(); return; }
-      ticketErr.textContent = "";
-      ticketSubmit.disabled = true;
-      ticketSubmit.textContent = "提交中…";
-      try {
-        const resp = await fetch("/api/actions/create-ticket", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversation_id: getConversationId(),
-            description: desc,
-            ticket_type: type,
-          }),
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          if (ticketTriggerBtn) ticketTriggerBtn.disabled = true;
-          closeTicketModal();
-          addRow("bot").textContent = "工单已创建:" + data.ticket_no;
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        } else {
-          ticketErr.textContent = "工单创建失败,请稍后重试";
-          ticketSubmit.disabled = false;
-          ticketSubmit.textContent = "提交工单";
-        }
-      } catch (e) {
-        ticketErr.textContent = "工单创建失败,请稍后重试";
-        ticketSubmit.disabled = false;
-        ticketSubmit.textContent = "提交工单";
-      }
-    });
-
-
-    const refundMask = document.getElementById("refundMask");
-    const refundOrder = document.getElementById("refundOrder");
-    const refundReason = document.getElementById("refundReason");
-    const refundErr = document.getElementById("refundErr");
-    const refundSubmit = document.getElementById("refundSubmit");
-    const refundCancel = document.getElementById("refundCancel");
-    let refundTriggerBtn = null;
-
-    function openRefundModal(triggerBtn, draft) {
-      refundTriggerBtn = triggerBtn;
-      refundOrder.value = (draft && draft.order_id) || "";
-      refundReason.value = "";
-      refundErr.textContent = "";
-      refundSubmit.disabled = false;
-      refundSubmit.textContent = "提交退款";
-      refundMask.classList.add("open");
-    }
-    function closeRefundModal() { refundMask.classList.remove("open"); refundTriggerBtn = null; }
-    refundCancel.addEventListener("click", closeRefundModal);
-    refundMask.addEventListener("click", (e) => { if (e.target === refundMask) closeRefundModal(); });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && refundMask.classList.contains("open")) closeRefundModal();
-    });
-    refundSubmit.addEventListener("click", async () => {
-      const reason = refundReason.value;
-      if (!reason) { refundErr.textContent = "请选择退款原因"; return; }
-      refundErr.textContent = "";
-      refundSubmit.disabled = true;
-      refundSubmit.textContent = "提交中…";
-      try {
-        const resp = await fetch("/api/actions/create-refund", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: getConversationId(),
-            order_id: refundOrder.value, reason }),
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          if (refundTriggerBtn) refundTriggerBtn.disabled = true;
-          closeRefundModal();
-          addRow("bot").textContent = "退款申请已提交:" + data.ticket_no;
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        } else {
-          refundErr.textContent = "退款提交失败,请稍后重试";
-          refundSubmit.disabled = false;
-          refundSubmit.textContent = "提交退款";
-        }
-      } catch (e) {
-        refundErr.textContent = "退款提交失败,请稍后重试";
-        refundSubmit.disabled = false;
-        refundSubmit.textContent = "提交退款";
-      }
-    });
-
-
 
 
     function renderOrderCards(bubble, orders, onPick, selection) {
@@ -1305,7 +1085,7 @@
       { text: "抱歉,这个问题我暂时没有查到确切信息,不敢乱答。建议您联系人工客服进一步确认,以免给您错误的指引。",
         actions: [{ type: "transfer_human" }] },
       { text: "非常抱歉给您带来了不好的体验,我理解您的心情。您可以选择转接人工客服,或让我为您登记一张工单跟进处理。",
-        actions: [{ type: "transfer_human" }, { type: "create_ticket", draft: {} }] },
+        actions: [{ type: "transfer_human" }, { type: "create_ticket" }] },
     ];
 
     async function switchConversation(cid) {

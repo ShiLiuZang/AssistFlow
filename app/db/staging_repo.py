@@ -7,6 +7,9 @@ from app.db.models import (
 )
 
 
+STAGING_STATUSES = ("extracted", "kept", "discarded", "approved", "rejected")
+
+
 async def staging_stats() -> dict:
     """
     获取QA提取暂存区统计信息
@@ -31,7 +34,7 @@ async def staging_stats() -> dict:
         )
     return {
         "counts": {key: int(counts.get(key, 0))
-                   for key in ("extracted", "kept", "discarded")},
+                   for key in STAGING_STATUSES},
         "total": sum(int(value) for value in counts.values()),
         "batches": int(batches or 0),
         "latest_batch": latest,
@@ -43,7 +46,7 @@ async def list_staging_by_status(status: str) -> list[QaExtractionStaging]:
     按状态列出暂存区记录
 
     参数:
-        status: 状态（extracted/kept/discarded）
+        status: 状态（extracted/kept/discarded/approved/rejected）
 
     返回:
         暂存区记录列表，按ID升序

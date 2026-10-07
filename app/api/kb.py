@@ -6,7 +6,7 @@
 import datetime as dt
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core import jobs, retrieval
@@ -491,7 +491,7 @@ async def search(body: SearchIn) -> dict:
 
 
 @router.get("/staging")
-async def staging(limit: int = 30) -> dict:
+async def staging(limit: int = Query(30, ge=1, le=100)) -> dict:
     """
     QA暂存表查询接口
 
@@ -520,7 +520,7 @@ async def staging(limit: int = 30) -> dict:
         raise HTTPException(status_code=503, detail="对话暂存表尚未迁移或无法读取") from exc
 
     rows = {}
-    for st in ("extracted", "kept", "discarded", "approved", "rejected"):
+    for st in staging_repo.STAGING_STATUSES:
         rows[st] = [{"id": r.id, "batch_no": r.batch_no, "source_ref": r.source_ref,
                      "question": r.question, "answer": r.answer[:160]}
                     for r in (await staging_repo.list_staging_by_status(st))[:limit]]
