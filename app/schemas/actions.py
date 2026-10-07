@@ -14,7 +14,7 @@ class ResumeTicketRequest(BaseModel):
     conversation_id: int
     user_id: str
     confirmed: StrictBool
-    tool_call_id: str | None = None
+    tool_call_id: str
 
 
 class SelectOrderRequest(BaseModel):

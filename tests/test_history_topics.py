@@ -2,6 +2,8 @@
 测试历史会话归类的隔离存储
 覆盖数据持久化、多标签统计和非法标签拒绝
 """
+import sqlite3
+
 import pytest
 
 from app.core import history_topics
@@ -36,3 +38,41 @@ def test_history_topics_rejects_invalid_labels(tmp_path, monkeypatch):
     monkeypatch.setattr(history_topics, "DB_PATH", tmp_path / "topics.sqlite")
     with pytest.raises(ValueError):
         history_topics.save([{"message_id": 1, "text": "x", "labels": ["不在术语表"]}])
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_history_topics_closes_connections_after_use(tmp_path, monkeypatch, fail):
+    """写入、查ID和读取记录在成功或异常后都释放真实SQLite连接。"""
+    monkeypatch.setattr(history_topics, "DB_PATH", tmp_path / "topics.sqlite")
+    connect = sqlite3.connect
+    connections = []
+
+    def track_connection(*args, **kwargs):
+        db = connect(*args, **kwargs)
+        connections.append(db)
+        return db
+
+    monkeypatch.setattr(history_topics.sqlite3, "connect", track_connection)
+    row = {"message_id": 1, "labels": ["物流"]}
+    if fail:
+        # 缺少text使写入在建立连接后失败；读取缺表数据库也必须关闭连接。
+        with pytest.raises(KeyError, match="text"):
+            history_topics.save([row])
+        db = connect(history_topics.DB_PATH)
+        try:
+            db.execute("DROP TABLE history_topic_classifications")
+            db.commit()
+        finally:
+            db.close()
+        for read in (history_topics.existing_ids, history_topics.distribution):
+            with pytest.raises(sqlite3.OperationalError, match="no such table"):
+                read()
+    else:
+        assert history_topics.save([{**row, "text": "查物流"}]) == 1
+        assert history_topics.existing_ids() == {1}
+        assert history_topics.distribution()["total"] == 1
+
+    assert len(connections) == 3
+    for db in connections:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            db.execute("SELECT 1")

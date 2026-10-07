@@ -425,7 +425,7 @@ async def get_ticket_decision(conversation_id: int, call_id: str) -> dict | None
 
     设计说明:
         倒序查找最近的决策记录
-        支持graph和传统模式的决策消息
+        读取工单决策记录和图持久化的工具结果
     """
     records = await list_messages(conversation_id)
     for record in reversed(records):
@@ -437,7 +437,7 @@ async def get_ticket_decision(conversation_id: int, call_id: str) -> dict | None
 
 
 async def decide_ticket(conversation_id: int, user_id: str, call_id: str,
-                        confirmed: bool, *, graph: bool = False) -> dict:
+                        confirmed: bool) -> dict:
     """
     建单与决定同事务提交，相同调用的重试返回首次决定，不再次建单
 
@@ -446,7 +446,6 @@ async def decide_ticket(conversation_id: int, user_id: str, call_id: str,
         user_id: 用户ID
         call_id: 工具调用ID
         confirmed: 是否确认建单
-        graph: 是否为LangGraph模式
 
     返回:
         决策结果字典
@@ -495,13 +494,8 @@ async def decide_ticket(conversation_id: int, user_id: str, call_id: str,
                 result = {"confirmed": False, "message": "用户取消建单"}
 
             session.add(Message(conversation_id=conversation_id,
-                                role="ticket_decision" if graph else "tool",
+                                role="ticket_decision",
                                 content=json.dumps(result, ensure_ascii=False), tool_call_id=call_id))
-            if not graph:
-                session.add(Message(conversation_id=conversation_id, role="user",
-                                    content="确认提交工单" if confirmed else "取消建单"))
-                session.add(Message(conversation_id=conversation_id, role="assistant",
-                                    content=ticket_answer(result)))
             return result
 
 

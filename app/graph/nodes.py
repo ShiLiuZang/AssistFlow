@@ -283,7 +283,7 @@ def make_nodes(services):
                     snapshot=snapshot,
                 )
                 turn_saved = True
-            except Exception as e:
+            except Exception:
                 # 快照保存失败不影响主流程（静默失败）
                 pass
 
@@ -297,7 +297,7 @@ def make_nodes(services):
                         source=source,
                         reason=reason,
                     )
-                except Exception as e:
+                except Exception:
                     # 记录失败不影响主流程
                     pass
 
@@ -354,7 +354,7 @@ def make_nodes(services):
                 snapshot=snapshot,
             )
             turn_saved = True
-        except Exception as e:
+        except Exception:
             pass
 
         # 记录到低置信度问题池
@@ -367,7 +367,7 @@ def make_nodes(services):
                     source=source,
                     reason=reason,
                 )
-            except Exception as e:
+            except Exception:
                 pass
 
         return update(

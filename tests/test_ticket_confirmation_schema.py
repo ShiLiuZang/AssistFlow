@@ -1,6 +1,6 @@
 """
 测试工单确认请求的Schema验证
-覆盖布尔决策的严格类型检查和遗留兼容性
+覆盖布尔决策的严格类型检查和工具调用ID必填约束
 """
 import pytest
 from pydantic import ValidationError
@@ -14,6 +14,7 @@ def make_request(**overrides):
         "conversation_id": 1,
         "user_id": "u1",
         "confirmed": True,
+        "tool_call_id": "call-1",
     }
     values.update(overrides)
     return ResumeTicketRequest(**values)
@@ -41,8 +42,10 @@ def test_resume_ticket_rejects_client_tool_result():
         make_request(tool_result={"confirmed": True, "ticket_no": "T1"})
 
 
-def test_resume_ticket_call_id_remains_optional_for_legacy_lookup():
-    """测试遗留兼容：tool_call_id保持可选以支持旧版查找"""
-    request = make_request()
+def test_resume_ticket_rejects_missing_call_id():
+    """测试必填约束：缺失tool_call_id时校验失败"""
+    with pytest.raises(ValidationError) as error:
+        ResumeTicketRequest(conversation_id=1, user_id="u1", confirmed=True)
 
-    assert request.tool_call_id is None
+    assert error.value.errors()[0]["loc"] == ("tool_call_id",)
+    assert error.value.errors()[0]["type"] == "missing"

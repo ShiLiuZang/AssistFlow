@@ -6,6 +6,7 @@
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def existing_ids() -> set[int]:
     """
     if not available():
         return set()
-    with sqlite3.connect(DB_PATH) as db:
+    with closing(sqlite3.connect(DB_PATH)) as db, db:
         return {row[0] for row in db.execute("SELECT message_id FROM history_topic_classifications")}
 
 
@@ -78,7 +79,7 @@ def save(rows: list[dict]) -> int:
             raise ValueError("invalid history classification labels")
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
-    with sqlite3.connect(DB_PATH) as db:
+    with closing(sqlite3.connect(DB_PATH)) as db, db:
         db.execute("""
             CREATE TABLE IF NOT EXISTS history_topic_classifications (
                 message_id INTEGER PRIMARY KEY,
@@ -110,7 +111,7 @@ def _rows() -> list[tuple]:
     """
     if not available():
         raise FileNotFoundError("历史会话尚未归类")
-    with sqlite3.connect(DB_PATH) as db:
+    with closing(sqlite3.connect(DB_PATH)) as db, db:
         return db.execute(
             "SELECT message_id, text, labels, asked_at, classified_at "
             "FROM history_topic_classifications ORDER BY message_id"

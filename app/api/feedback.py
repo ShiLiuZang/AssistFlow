@@ -116,7 +116,7 @@ async def submit_feedback(request: FeedbackRequest) -> dict:
             detail=str(e),
         )
 
-    except Exception as e:
+    except Exception:
         # 未知异常
         raise HTTPException(
             status_code=500,

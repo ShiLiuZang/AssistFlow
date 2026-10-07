@@ -5,7 +5,6 @@ import asyncio
 
 import httpx
 from app.config import settings
-from app.kb import documents
 
 
 def map_result(
