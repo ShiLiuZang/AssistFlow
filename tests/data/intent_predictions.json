@@ -1,0 +1,11 @@
+[
+  {"intent": "投诉", "confidence": 0.99},
+  {"intent": "商品咨询", "confidence": 0.10},
+  {"intent": "物流", "confidence": 0.90},
+  {"intent": "订单", "confidence": 0.90},
+  {"intent": "退款退货", "confidence": 0.90},
+  {"intent": "售后", "confidence": 0.90},
+  {"intent": "投诉", "confidence": 0.90},
+  {"intent": "闲聊", "confidence": 0.90},
+  {"intent": "其他", "confidence": 0.90}
+]
