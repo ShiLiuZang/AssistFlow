@@ -1,4 +1,4 @@
-"""用已训练的 :8110 服务归类历史用户提问，结果写入隔离 SQLite。"""
+"""用配置的分类服务归类历史用户提问，结果写入隔离 SQLite。"""
 
 import asyncio
 import datetime as dt
@@ -8,12 +8,13 @@ from pathlib import Path
 
 import httpx
 
+from app.config import settings
 from app.core import history_topics
 from app.db import topic_repo
 from scripts.finetune.corpus_lib import dedupe, desensitize
 
 
-SERVICE = "http://127.0.0.1:8110"
+SERVICE = settings.classifier_url.rstrip("/")
 REPORT = Path("data/finetune/reports/history_classify_run.json")
 
 

@@ -12,8 +12,14 @@
 配置优先级：环境变量 > .env 文件 > 默认值
 """
 
+import logging
+from pathlib import Path
+
+from dotenv import dotenv_values
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -36,10 +42,11 @@ class Settings(BaseSettings):
     chat_thinking: str = "disabled"  # 思考模式，"disabled" 或 "enabled"（仅部分模型支持）
 
     # ==================== 数据库配置 ====================
-    mysql_database_url: str = (
-        "mysql+asyncmy://root:root@127.0.0.1:3308/minihelp"
-    )  # MySQL 异步连接 URL（使用 asyncmy 驱动）
+    mysql_database_url: str  # MySQL 异步连接 URL（使用 asyncmy 驱动，必填）
     graph_checkpoint_path: str = "data/graph-checkpoints.sqlite"  # LangGraph 检查点存储路径
+
+    # ==================== 分类服务配置 ====================
+    classifier_url: str = "http://127.0.0.1:8110"  # ONNX 分类服务基础 URL
 
     # ==================== 嵌入模型配置 ====================
     embed_model: str  # 嵌入模型名称，如 "text-embedding-3-small"
@@ -101,6 +108,21 @@ class Settings(BaseSettings):
                 self.langfuse_base_url,
             )
         )
+
+
+def warn_unknown_env_keys(env_file: str | Path = ".env") -> None:
+    """告警未定义的配置键；不插值、不记录配置值。"""
+    path = Path(env_file)
+    if not path.is_file():
+        return
+    known_keys = {name.lower() for name in Settings.model_fields}
+    unknown_keys = sorted(
+        key
+        for key in dotenv_values(path, encoding="utf-8", interpolate=False)
+        if key.lower() not in known_keys
+    )
+    if unknown_keys:
+        logger.warning("未知配置键：%s", ", ".join(unknown_keys))
 
 
 # 全局配置实例，应用启动时自动从 .env 读取

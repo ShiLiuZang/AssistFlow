@@ -11,6 +11,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.config import settings
 from app.core import jobs
 from app.core import topic_views
 from app.core.taxonomy import SEVERITY, TOPIC_NAMES
@@ -23,7 +24,7 @@ REPORTS = FINETUNE_DIR / "reports"
 DATASET = FINETUNE_DIR / "dataset"
 MODEL = FINETUNE_DIR / "model"
 ONNX = FINETUNE_DIR / "onnx"
-CLASSIFIER = "http://127.0.0.1:8110"
+CLASSIFIER = settings.classifier_url.rstrip("/")
 
 # 语料血缘：从原始捞取到最终标注的三阶段流水线
 LINEAGE = (
@@ -176,7 +177,7 @@ def _split_stats() -> dict:
 
 async def _probe_classifier() -> dict:
     """
-    探测8110端口的ONNX分类服务是否在线
+    探测配置的ONNX分类服务是否在线
 
     返回:
         包含在线状态和详细信息的字典
@@ -344,7 +345,7 @@ async def overview() -> dict:
          "status": gate(export.get("present", False),
                         export.get("passed") and health["online"]),
          "headline": (f"{export['checked']} 条预测与 torch 一致"
-                      f"(不一致 {export['mismatch']} 条) · :8110 "
+                      f"(不一致 {export['mismatch']} 条) · 分类器 "
                       f"{'在线' if health['online'] else '离线'}"
                       if export.get("present") else export.get("hint", "")),
          "note": "导出后必须逐条对齐 torch 才放行",
@@ -565,7 +566,7 @@ async def classify(body: ClassifyIn) -> dict:
         包含17类分数、过线标签、是否触发兜底的完整字典
 
     核心功能:
-        将一句话发送给8110端口的ONNX分类服务
+        将一句话发送给配置的ONNX分类服务
         返回17类各自的置信度分数及过线标签列表
 
     多标签机制:
@@ -594,7 +595,7 @@ async def classify(body: ClassifyIn) -> dict:
     except Exception as e:
         raise HTTPException(
             status_code=502,
-            detail=f"分类器服务不可用({type(e).__name__}),先拉起 :8110") from e
+            detail=f"分类器服务不可用({type(e).__name__}),先拉起分类服务") from e
 
     threshold = _threshold_in_use()
     # 按分数降序排列，方便前端展示

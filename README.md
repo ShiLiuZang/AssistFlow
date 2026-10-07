@@ -198,9 +198,12 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_API_KEY=...
 
-# Database (keep default when using docker-compose)
+# Database (required; this URL matches the bundled docker-compose setup)
 MYSQL_DATABASE_URL=mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_complete
 MILVUS_URI=http://127.0.0.1:19531
+
+# Optional: Topic classifier base URL
+CLASSIFIER_URL=http://127.0.0.1:8110
 
 # RAG Parameters
 RECALL_TOP_K=50
@@ -211,6 +214,8 @@ SUBQUERY_SPLIT=true
 ```
 
 > ⚠️ **Security**: Never commit `.env` with real credentials
+
+`MYSQL_DATABASE_URL` is required and has no default. `.env.example` uses the Settings default for `MILVUS_URI` (`http://127.0.0.1:19530`); the bundled Docker Compose maps Milvus to host port `19531`, so use the override shown above for that setup. At startup, unknown `.env` keys are logged by name only; the checkpoint setting is `GRAPH_CHECKPOINT_PATH`.
 
 ### 3. Start Data Services
 
@@ -254,8 +259,10 @@ Sample knowledge includes 6 markdown files:
 ### 5. Start Application
 
 ```bash
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
+
+Conversation locks (`app/core/conversation_lock.py`), rate limiting, and similar coordination state are held in process memory. The application currently supports a single process with one Uvicorn worker. Multiple instances require external locks and shared storage, which are outside this project's scope.
 
 Visit: **http://127.0.0.1:8000**
 

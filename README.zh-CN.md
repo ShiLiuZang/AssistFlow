@@ -198,9 +198,12 @@ RERANK_BASE_URL=https://api.siliconflow.cn/v1
 RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RERANK_API_KEY=...
 
-# 数据库（使用 docker-compose 时保持默认）
+# 数据库（必填；此 URL 对应项目自带的 docker-compose 配置）
 MYSQL_DATABASE_URL=mysql+asyncmy://root:root@127.0.0.1:3308/minihelp_complete
 MILVUS_URI=http://127.0.0.1:19531
+
+# 可选：主题分类服务基础地址
+CLASSIFIER_URL=http://127.0.0.1:8110
 
 # RAG 参数
 RECALL_TOP_K=50
@@ -211,6 +214,8 @@ SUBQUERY_SPLIT=true
 ```
 
 > ⚠️ **安全提示**：不要提交包含真实密钥的 `.env` 文件
+
+`MYSQL_DATABASE_URL` 是必填项，没有默认值。`.env.example` 中的 `MILVUS_URI` 与 Settings 默认值一致（`http://127.0.0.1:19530`）；项目自带的 Docker Compose 将 Milvus 映射到宿主机端口 `19531`，使用该配置时请按上面的示例覆盖地址。启动时会仅按键名告警 `.env` 中的未知配置键；检查点配置名为 `GRAPH_CHECKPOINT_PATH`。
 
 ### 3. 启动数据服务
 
@@ -254,8 +259,10 @@ uv run python -m scripts.tasks kb-vectorize
 ### 5. 启动应用
 
 ```bash
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
+
+会话锁（`app/core/conversation_lock.py`）、限流等协调状态保存在进程内存中。当前应用仅支持单进程部署，即 Uvicorn 使用单个 worker。多实例部署需要外部锁和共享存储，不在本项目范围内。
 
 访问：**http://127.0.0.1:8000**
 

@@ -226,7 +226,7 @@
       }
       if (jobSpecs["finetune-threshold-scan"]) pScan.appendChild(
         jobRow([jobSpecs["finetune-threshold-scan"]], load,
-          d.classifier.online ? ":8110 在线" : ":8110 离线，先去总览页拉起服务"));
+          d.classifier.online ? "分类器在线" : "分类器离线，先去总览页拉起服务"));
       body.appendChild(pScan);
 
 
@@ -274,7 +274,7 @@
       const pTry = panel("单句试分类：多标签机制现场看",
         "17 个类各自独立过线，过几个打几个——这就是多标签的机制来源。"
         + "要是 17 个分全都不过线，取分数最高的那个类兜底，保证每道题至少有一个标签。",
-        d.classifier.online ? ["pass", ":8110 在线"] : ["missing", ":8110 离线"]);
+        d.classifier.online ? ["pass", "分类器在线"] : ["missing", "分类器离线"]);
       const row = el("div", "tryrow");
       const input = el("input");
       input.placeholder = "输入一句用户问题，比如：买大了想退";

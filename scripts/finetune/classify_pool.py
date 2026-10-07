@@ -1,6 +1,6 @@
 
 """微调 旁路批处理:低置信度问题攒够一批,整批喂分类器归一次类,结果写 topic_classifications。
-实时对话主链路不调它。运行:make classify-pool(需 mysql + 分类器服务 :8110)。
+实时对话主链路不调它。运行:make classify-pool(需 mysql + 配置的分类器服务)。
 幂等:已归类的行(LEFT JOIN 命中)不重复归。定时跑 cron 示例:
   0 3 * * * cd /path/to/minihelp && make classify-pool >> log/classify-pool.log 2>&1"""
 import argparse
@@ -11,9 +11,10 @@ import pathlib
 
 import httpx
 
+from app.config import settings
 from app.db import topic_repo
 
-SERVICE = "http://127.0.0.1:8110"
+SERVICE = settings.classifier_url.rstrip("/")
 REPORTS = pathlib.Path("data/finetune/reports")
 
 

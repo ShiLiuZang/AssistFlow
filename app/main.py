@@ -37,7 +37,7 @@ from app.api.topics import router as topics_router  # 话题管理
 from app.api.observability import router as observability_router  # 观测数据
 
 # 核心服务导入
-from app.config import settings  # 配置管理
+from app.config import settings, warn_unknown_env_keys  # 配置管理
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
 from app.db import trace_repo  # 数据库操作
 from app.graph.adapters import make_services_with_mcp  # 服务容器和 MCP 工具集成
@@ -68,6 +68,8 @@ async def lifespan(app: FastAPI):
     2. 清理观测配置
     3. 关闭 Langfuse 客户端，刷新未上报的数据
     """
+    warn_unknown_env_keys()
+
     # 1. 从环境变量收集已配置的 MCP 服务器 URL
     # 仅包含非空 URL，支持逐步启用 MCP 服务器
     server_urls = {

@@ -1,16 +1,18 @@
 """重演 train.py 的阈值扫描:验证集 161 条经 ONNX 服务打分一次,
 九个候选线(0.30~0.70 步进 0.05)套同一张分数表各算一遍 micro-F1,谁高谁当选。
-前置:make classifier-up(:8110 在线)。用法:PYTHONPATH=. uv run python scripts/finetune/scan_threshold_replay.py
+前置:make classifier-up(分类服务在线)。用法:PYTHONPATH=. python scripts/finetune/scan_threshold_replay.py
 落 reports/threshold_scan.json 给验收页画九候选线(/acceptance/eval)。"""
 import datetime as dt
 import json
 import pathlib
 import urllib.request
 
+from app.config import settings
+
 VAL = "data/finetune/dataset/val.jsonl"
 MODEL_THRESHOLD = pathlib.Path("data/finetune/model/threshold.json")
 REPORTS = pathlib.Path("data/finetune/reports")
-SERVICE = "http://127.0.0.1:8110/classify"
+SERVICE = f"{settings.classifier_url.rstrip('/')}/classify"
 
 
 def main() -> None:

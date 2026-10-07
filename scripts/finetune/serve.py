@@ -1,4 +1,4 @@
-"""微调 推理服务:ONNX + FastAPI 独立进程 :8110,轻运行时(onnxruntime + tokenizers,不背 torch)。
+"""微调 推理服务:ONNX + FastAPI 独立进程,轻运行时(onnxruntime + tokenizers,不背 torch)。
 通过后台作业按钮启动；停止时调用 /api/jobs/classifier-up/stop。"""
 import json
 import pathlib
