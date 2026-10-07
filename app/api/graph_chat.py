@@ -1,28 +1,83 @@
 """
 图模式聊天API路由模块
 
-本模块实现基于LangGraph的状态图聊天接口，支持复杂的多步推理和状态管理。
+本模块实现基于LangGraph的状态图聊天接口，是系统唯一的聊天入口。
 核心功能包括：图状态持久化、会话历史同步、对话摘要调度、消息一致性校验。
-在系统中充当高级对话管理器，适用于需要多轮规划、工具编排和上下文压缩的场景。
-与chat.py的区别：使用图运行时管理状态，支持断点续传和自动摘要。
 """
 
+import json
 import logging
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.api.chat import graph_event_to_sse, restore_messages, make_sse
+from app.api.sse import graph_event_to_sse, make_sse
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
 from app.db import repository
 from app.core.conversation_lock import conversation_lock
 from app.graph.runtime import Runtime
 from app.schemas.chat import ChatRequest
+from app.tools.engine import classify_tool_result
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["graph-chat"])
+
+
+def restored_tool_status(content: str) -> str:
+    """
+    从工具消息内容中恢复工具执行状态
+
+    参数:
+        content: 工具消息的JSON字符串内容
+
+    返回:
+        "success" 或 "error"
+    """
+    try:
+        result = json.loads(content)
+    except (TypeError, ValueError):
+        return "error"
+
+    status = classify_tool_result(result)
+    return "success" if status == "success" else "error"
+
+
+def restore_messages(records: list) -> list:
+    """
+    将数据库消息记录恢复为LangChain消息对象列表
+
+    参数:
+        records: 数据库中的消息记录列表，每条记录包含role、content、tool_calls等字段
+
+    返回:
+        LangChain消息对象列表（HumanMessage、AIMessage、ToolMessage）
+    """
+    messages = []
+
+    for record in records:
+        if record.role == "user":
+            messages.append(HumanMessage(content=record.content or ""))
+        elif record.role == "assistant":
+            messages.append(
+                AIMessage(
+                    content=record.content or "",
+                    tool_calls=record.tool_calls or [],
+                    id=record.turn_message_id,
+                )
+            )
+        elif record.role == "tool":
+            content = record.content or ""
+            messages.append(
+                ToolMessage(
+                    content=content,
+                    tool_call_id=record.tool_call_id or "",
+                    status=restored_tool_status(content),
+                )
+            )
+    return messages
 
 
 def _thread_config(user_id: str, conversation_id: int) -> dict:

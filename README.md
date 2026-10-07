@@ -86,7 +86,6 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 ├── app/
 │   ├── api/                  # FastAPI routes (15 modules)
 │   │   ├── graph_chat.py     # LangGraph streaming chat
-│   │   ├── chat.py           # Basic chat with tool calls
 │   │   ├── conversations.py  # Conversation history
 │   │   ├── knowledge.py      # Knowledge retrieval & RAG eval
 │   │   ├── observability.py  # Execution traces & usage
@@ -120,7 +119,6 @@ An enterprise-grade e-commerce AI customer service system built with **FastAPI +
 │   │   ├── engine.py         # Execution with timeout/retry
 │   │   ├── order_tools.py    # Order query tool
 │   │   ├── ticket_tools.py   # Ticket creation tool
-│   │   ├── knowledge_tools.py# Knowledge retrieval tool
 │   │   ├── mcp_client.py     # MCP client & discovery
 │   │   ├── audit.py          # Tool invocation audit
 │   │   └── formatting.py     # Result formatting

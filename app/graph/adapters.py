@@ -14,55 +14,41 @@ Services 容器：
 """
 
 import json
-from typing import Literal
-from app.core.rerank import rerank_hits
-from app.core.llm import get_chat_model
-from app.tools.context import ToolContext
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
-from app.core.retrieval import (
-    search_knowledge,
-    search_knowledge_detailed,
+
+from app.core.evidence import answer_from_hits
+from app.core.intent import (
+    classify as classify_intent,
+    model_predictor,
 )
-from app.core.sufficiency import check_sufficient
+from app.core.llm import get_chat_model
+from app.core.memory import Message as ViewMessage, build_window
 from app.core.observability import (
     extract_model_name,
     extract_token_usage,
     span,
 )
-
-
-class Intent(BaseModel):
-    """意图分类结果"""
-    route: Literal[
-        "knowledge",  # 知识查询
-        "business",  # 业务操作
-        "complaint",  # 投诉
-        "chat",  # 闲聊
-    ]
+from app.core.prompts import CHAT_SYSTEM_PROMPT
+from app.core.rerank import rerank_hits
+from app.core.retrieval import search_knowledge_detailed
+from app.core.sufficiency import check_sufficient
+from app.tools.audit import AuditSink
+from app.tools.context import ToolContext
+from app.tools.mcp_client import MCPTransport, discover_mcp_tools
+from app.tools.order_tools import query_order
+from app.tools.orders import get_order, list_user_orders
+from app.tools.registry import Registry, ToolSpec
+from app.tools.ticket_tools import create_ticket
 
 
 class PolicyQueries(BaseModel):
     """政策查询扩展结果"""
     queries: list[str]  # 改写后的查询列表
-
-
-from app.tools.orders import get_order, list_user_orders
-from app.core.evidence import answer_from_hits
-from langchain_core.messages import SystemMessage, HumanMessage
-from app.core.memory import Message as ViewMessage, build_window
-from app.core.prompts import CHAT_SYSTEM_PROMPT
-from app.tools.order_tools import query_order
-from app.tools.registry import Registry, ToolSpec
-from app.tools.mcp_client import MCPTransport, discover_mcp_tools
-from app.tools.ticket_tools import create_ticket
-from dataclasses import dataclass
-from typing import Callable
-from app.core.intent import (
-    classify as classify_intent,
-    model_predictor,
-)
-from functools import partial
-from app.tools.audit import AuditSink
 
 
 @dataclass
@@ -78,10 +64,8 @@ class Services:
 
     属性：
         classify: 意图分类服务
-        retrieve: 知识检索服务（简单版本）
         answer: 答案生成服务
         agent: Agent 决策服务
-        tools: 工具执行函数字典
         list_orders: 订单列表查询
         get_order: 订单详情查询
         expand_policy: 政策查询扩展
@@ -94,10 +78,8 @@ class Services:
         rerank_policy: 政策重排序服务
     """
     classify: Callable
-    retrieve: Callable
     answer: Callable
     agent: Callable
-    tools: dict[str, Callable]
     list_orders: Callable
     get_order: Callable
     expand_policy: Callable
@@ -125,13 +107,11 @@ def make_services(registry: Registry | None = None) -> Services:
 
     return Services(
         classify=classify_detail,
-        retrieve=retrieve,
         answer=answer,
         agent=partial(agent, model_tools=registry.model_tools()),  # 绑定工具列表
         list_orders=list_orders,
         get_order=get_verified_order,
         expand_policy=expand_policy,
-        tools=registry.execution_tools(),
         registry=registry,
         retrieve_detailed=retrieve_detailed,
         check_sufficient=check_sufficient,
@@ -208,56 +188,6 @@ async def ticket_tool(
         工单创建结果
     """
     return await create_ticket.ainvoke(args)
-async def classify(query: str) -> str:
-    """
-    简单意图分类（已废弃）
-
-    使用 LLM 进行意图分类，返回路由标签。
-    已被 classify_detail 替代，保留用于兼容性。
-
-    Args:
-        query: 用户查询
-
-    Returns:
-        路由标签：knowledge, business, complaint, chat
-    """
-    model = get_chat_model().with_structured_output(
-        Intent,
-        method="function_calling",
-    )
-
-    result = await model.ainvoke([
-        (
-            "system",
-            "商品与政策咨询归 knowledge；"
-            "订单、退款操作归 business；"
-            "投诉归 complaint；"
-            "闲聊归 chat。",
-        ),
-        ("human", query),
-    ])
-
-    return result.route
-
-
-async def retrieve(query: str) -> list[dict]:
-    """
-    简单知识检索（已废弃）
-
-    返回检索结果列表（top-5）。
-    已被 retrieve_detailed 替代，保留用于兼容性。
-
-    Args:
-        query: 用户查询
-
-    Returns:
-        知识分块列表
-    """
-    return await search_knowledge(
-        query,
-        strategy="hybrid_rerank",
-        top_k=5,
-    )
 
 
 async def retrieve_detailed(

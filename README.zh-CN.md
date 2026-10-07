@@ -86,7 +86,6 @@
 ├── app/
 │   ├── api/                  # FastAPI 路由（15 个模块）
 │   │   ├── graph_chat.py     # LangGraph 流式聊天
-│   │   ├── chat.py           # 基础聊天与工具调用
 │   │   ├── conversations.py  # 会话历史
 │   │   ├── knowledge.py      # 知识检索与 RAG 评测
 │   │   ├── observability.py  # 执行追踪与用量
@@ -120,7 +119,6 @@
 │   │   ├── engine.py         # 执行引擎（超时/重试）
 │   │   ├── order_tools.py    # 订单查询工具
 │   │   ├── ticket_tools.py   # 工单创建工具
-│   │   ├── knowledge_tools.py# 知识检索工具
 │   │   ├── mcp_client.py     # MCP 客户端与发现
 │   │   ├── audit.py          # 工具调用审计
 │   │   └── formatting.py     # 结果格式化

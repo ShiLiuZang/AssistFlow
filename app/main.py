@@ -22,7 +22,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # API 路由导入
-from app.api.chat import router as chat_router  # 基础聊天接口（已废弃，被 graph_chat 替代）
 from app.api.graph_chat import router as graph_chat_router  # LangGraph 驱动的聊天接口
 from app.api.extract import router as extract_router  # 信息抽取接口
 from app.api.conversations import router as conversations_router  # 会话历史管理
@@ -147,8 +146,7 @@ app = FastAPI(
 
 # 注册 API 路由
 # 核心聊天接口
-app.include_router(chat_router)  # 基础聊天（已废弃）
-app.include_router(graph_chat_router)  # LangGraph 聊天（主要接口）
+app.include_router(graph_chat_router)  # LangGraph 聊天
 
 # 辅助功能接口
 app.include_router(extract_router)  # 信息抽取

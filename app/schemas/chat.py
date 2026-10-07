@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    """POST /api/chat 的请求体，由 FastAPI 在进入接口前自动校验。"""
+    """POST /api/graph-chat 的请求体，由 FastAPI 在进入接口前自动校验。"""
 
     user_id: str = Field(
         min_length=1,

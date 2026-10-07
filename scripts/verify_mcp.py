@@ -38,7 +38,7 @@ async def verify():
         item["function"]["name"]
         for item in services.agent.keywords["model_tools"]
     }
-    assert model_names == set(services.tools)
+    assert model_names == set(registry.execution_tools())
     assert set(REMOTE_TOOLS) <= model_names
     assert {"query_order", "create_ticket"} <= model_names
 
