@@ -1152,6 +1152,7 @@
           const data = JSON.parse(payload);
           if (data.event === "tool") on.tool && on.tool(data.name);
           else if (data.event === "citations") on.citations && on.citations(data.items || []);
+          else if (data.event === "replace") on.replace && on.replace(data.answer);
           else if (data.event === "interrupt") {
             if (data.conversation_id) setConversationId(data.conversation_id);
             on.interrupt && on.interrupt(data);
@@ -1192,6 +1193,13 @@
           ensureStructure();
           if (!textStarted) { textEl.innerHTML = ""; textStarted = true; }
           raw += delta;
+          textEl.innerHTML = renderMarkdown(raw);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        },
+        replace: (answer) => {
+          ensureStructure();
+          textStarted = true;
+          raw = answer;
           textEl.innerHTML = renderMarkdown(raw);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         },

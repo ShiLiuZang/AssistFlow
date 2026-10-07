@@ -5,6 +5,7 @@
 核心功能包括：图状态持久化、会话历史同步、对话摘要调度、消息一致性校验。
 """
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -24,6 +25,7 @@ from app.tools.engine import classify_tool_result
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["graph-chat"])
+_stream_tasks: set[asyncio.Task] = set()
 
 
 def restored_tool_status(content: str) -> str:
@@ -108,21 +110,49 @@ def schedule_graph_summary(user_id: str, conversation_id: int) -> None:
 async def stream_graph_events(
     runtime: Runtime, user_id: str, conversation_id: int, events: AsyncIterator[dict],
 ) -> AsyncIterator[str]:
-    """锁内运行并保存图消息，锁外按事件调度摘要、输出 SSE，跳过 end。"""
-    async with conversation_lock(user_id, conversation_id):
-        collected = [event async for event in events]
-        await _persist_graph_messages(runtime, user_id, conversation_id)
+    """后台任务持锁执行图并保存消息；队列实时交付 SSE，断连不取消任务。
 
-    completed = any(event.get("event") == "done" for event in collected)
-    interrupted_or_failed = any(
-        event.get("event") in {"interrupt", "error"} for event in collected
-    )
-    if completed and not interrupted_or_failed:
-        schedule_graph_summary(user_id, conversation_id)
+    done/interrupt/error 在保存后交付，避免保存失败仍报告成功；end 由外层
+    聊天/选单生成器映射为唯一的 [DONE]。后台任务异常交给外层编码错误帧。
+    """
+    queue: asyncio.Queue[dict | Exception | None] = asyncio.Queue()
 
-    for event in collected:
-        if event.get("event") != "end":
-            yield graph_event_to_sse(event, conversation_id)
+    async def produce():
+        try:
+            terminal = []
+            async with conversation_lock(user_id, conversation_id):
+                async for event in events:
+                    kind = event.get("event")
+                    if kind in {"done", "interrupt", "error"}:
+                        terminal.append(event)
+                    elif kind != "end":
+                        queue.put_nowait(event)
+                await _persist_graph_messages(runtime, user_id, conversation_id)
+
+            completed = any(event.get("event") == "done" for event in terminal)
+            interrupted_or_failed = any(
+                event.get("event") in {"interrupt", "error"} for event in terminal
+            )
+            if completed and not interrupted_or_failed:
+                schedule_graph_summary(user_id, conversation_id)
+            for event in terminal:
+                queue.put_nowait(event)
+        except Exception as error:
+            logger.exception("图执行或消息保存失败 conversation_id=%s", conversation_id)
+            queue.put_nowait(error)
+        finally:
+            queue.put_nowait(None)
+
+    task = asyncio.create_task(produce())
+    _stream_tasks.add(task)
+    task.add_done_callback(_stream_tasks.discard)
+    while True:
+        event = await queue.get()
+        if event is None:
+            break
+        if isinstance(event, Exception):
+            raise event
+        yield graph_event_to_sse(event, conversation_id)
 
 
 async def _chat_events(
@@ -176,10 +206,10 @@ async def stream_graph_chat(
     2. 从图快照或数据库恢复消息历史
     3. 计算已摘要的消息数量（covered_count）
     4. 如果图状态为空但有历史消息，初始化图状态
-    5. 调用runtime.stream_turn执行图运行并收集事件
+    5. 后台任务调用runtime.stream_turn执行图，队列实时转发事件
     6. 持久化图消息到数据库
     7. 如果对话正常完成（无中断或错误），调度摘要任务
-    8. 逐个产出事件（转换为SSE格式）
+    8. 保存成功后交付终结事件（转换为SSE格式）
 
     为什么使用会话锁：
     图状态是有状态的，并发请求可能导致状态不一致
@@ -202,9 +232,8 @@ async def stream_graph_chat(
     except Exception:
         logger.exception("图聊天失败 conversation_id=%s", conversation_id)
         yield 'event: error\ndata: {"message":"图执行或消息保存失败，请重试"}\n\n'
-    finally:
-        # 无论成功或失败，都发送流结束标记
-        yield "data: [DONE]\n\n"
+    # 消费者关闭时不能在 GeneratorExit 的 finally 中 yield；连接存活时必达。
+    yield "data: [DONE]\n\n"
 
 
 def count_covered_messages(records, graph_messages, summary_upto: int) -> int:

@@ -13,6 +13,12 @@ class _Lock:
 _locks = WeakValueDictionary()
 
 
+def owns_conversation_lock(user_id: str, conversation_id: str | int) -> bool:
+    """当前任务是否已持有会话锁；用于复用负责持久化的后台任务。"""
+    entry = _locks.get((str(user_id), str(conversation_id)))
+    return entry is not None and entry.owner is asyncio.current_task()
+
+
 @asynccontextmanager
 async def conversation_lock(user_id: str, conversation_id: str | int):
     key = (str(user_id), str(conversation_id))

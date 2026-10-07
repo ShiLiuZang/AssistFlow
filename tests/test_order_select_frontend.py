@@ -60,3 +60,51 @@ def test_pending_order_survives_reload_and_uses_bound_identity(cancelled):
             assert not errors
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize("answer, rendered", [("最终**答案**", "最终答案"), ("", "")])
+def test_sse_replace_overwrites_streamed_bubble(answer, rendered):
+    """浏览器先展示 delta；replace 替换文字和 Markdown，保留工具徽章。"""
+    html = Path("app/static/index.html").read_text(encoding="utf-8")
+    errors = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True, channel=os.environ.get("PLAYWRIGHT_CHANNEL", "msedge" if os.name == "nt" else None))
+        try:
+            page = browser.new_page()
+            page.on("pageerror", lambda error: errors.append(str(error)))
+
+            def intercept(route):
+                if route.request.url == "http://localhost:18765/":
+                    route.fulfill(status=200, content_type="text/html", body=html)
+                elif "/api/actions/pending?" in route.request.url:
+                    route.fulfill(status=200, content_type="application/json", body="null")
+                else:
+                    route.fulfill(status=200, content_type="application/json", body='{"items":[]}')
+
+            page.route("**/*", intercept)
+            page.goto("http://localhost:18765/")
+            page.wait_for_load_state("networkidle")
+            page.evaluate("""() => {
+              window.testBubble = addRow("bot");
+              const stream = new ReadableStream({start(controller) { window.testController = controller; }});
+              window.streamFinished = streamInto(window.testBubble, () => Promise.resolve(new Response(stream)));
+              const frames = 'data: {"event":"tool","name":"query_order"}\\n\\n'
+                + 'data: {"delta":"原始"}\\n\\ndata: {"delta":"回答"}\\n\\n';
+              window.testController.enqueue(new TextEncoder().encode(frames));
+            }""")
+            page.wait_for_function('window.testBubble.querySelector(".bubble-text").textContent === "原始回答"')
+            frames = (f'data: {json.dumps({"event": "replace", "answer": answer}, ensure_ascii=False)}\n\n'
+                      'data: {"event":"done","conversation_id":17}\n\ndata: [DONE]\n\n')
+            page.evaluate("""async (frames) => {
+              window.testController.enqueue(new TextEncoder().encode(frames));
+              window.testController.close();
+              await window.streamFinished;
+            }""", frames)
+            assert page.locator(".bubble-text").inner_text() == rendered
+            assert page.locator(".tool-badge").inner_text() == "🔧 调用了 query_order"
+            assert page.locator(".bubble-text strong").count() == int(bool(answer))
+            assert page.evaluate("getConversationId()") == 17
+            assert not errors
+        finally:
+            browser.close()

@@ -241,8 +241,8 @@ async def stream_order_selection(
             "event": "error",
             "message": "订单选择或消息保存失败，请检查当前待处理状态",
         })
-    finally:
-        yield "data: [DONE]\n\n"
+    # 连接存活时成功/失败均结束；关闭生成器时后台图与持久化继续。
+    yield "data: [DONE]\n\n"
 
 
 @router.get("/pending")

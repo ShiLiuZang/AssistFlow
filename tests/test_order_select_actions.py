@@ -79,6 +79,52 @@ def test_save_failure_does_not_emit_success(monkeypatch):
     assert '"event": "error"' in output
     assert '订单选择或消息保存失败，请检查当前待处理状态' in output
     assert '"event": "done"' not in output
-    assert '"delta"' not in output
+    # 文字实时发出后无法撤回；保存失败仍必须不发 done，并以 error/[DONE] 收尾。
+    assert output.startswith('data: {"delta": "完成"}\n\n')
+    assert output.count('"delta"') == 1
     assert "private" not in output
     assert output.count('[DONE]') == 1
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_selection_stream_resumes_real_graph_and_persists_messages(monkeypatch, cancelled):
+    """真实主图恢复选单，验证共享后台任务不会与运行时的会话锁死锁。"""
+    from app.core.intent import Intent
+    from tests.test_graph_flow import chat, database, events
+    from tests.test_graph_integration import fake_services, runtime
+
+    scheduled = Mock()
+    monkeypatch.setattr(graph_chat, "schedule_graph_summary", scheduled)
+
+    async def run():
+        async with database(monkeypatch) as cid:
+            s = fake_services(Intent.REFUND)
+            r = runtime(s)
+            initial = events(await chat(r, cid, "我要退款"))
+            card = initial[-1]
+            assert card["event"] == "interrupt"
+            before = await r.get_state("u1", cid)
+            request = actions.SelectOrderRequest(
+                user_id="u1", conversation_id=cid, request_id=card["request_id"],
+                cancelled=cancelled, order_id=None if cancelled else "ORD-1001",
+            )
+            async def collect():
+                return [frame async for frame in actions.stream_order_selection(request, r)]
+
+            frames = await asyncio.wait_for(collect(), timeout=2)
+            emitted = events(frames)
+            snapshot = await r.get_state("u1", cid)
+            assert not snapshot.next
+            assert await r.pending_interrupt("u1", cid) is None
+            assert [event["name"] for event in emitted if event.get("event") == "node"] == snapshot.values["trace"][len(before.values["trace"]):]
+            assert [event for event in emitted if "delta" in event] == [{"delta": snapshot.values["answer"]}]
+            assert emitted[-1] == {"event": "done", "conversation_id": cid,
+                                   "request_id": card["request_id"], "message_id": snapshot.values["message_id"]}
+            assert snapshot.values["message_id"] == (None if cancelled else f"msg_{cid}_{card['request_id']}")
+            assert frames[-1] == "data: [DONE]\n\n"
+            records = await graph_chat.repository.list_messages(cid)
+            assert [record.role for record in records] == ["user", "graph_sync", "assistant"]
+            assert records[-1].content == snapshot.values["answer"]
+            scheduled.assert_called_once_with("u1", cid)
+            s.agent.assert_not_awaited()
+    asyncio.run(run())
