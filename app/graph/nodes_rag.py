@@ -4,7 +4,7 @@ from app.config import settings
 from app.core.confidence import evidence_gate
 from app.core.observability import span
 from app.core.retrieval import retrieve_policy_detailed
-from app.db import repository
+from app.db import flywheel_repo
 from app.graph.state import ConversationState
 
 # 置信度不足时的拒答模板
@@ -25,7 +25,7 @@ async def _save_turn_and_capture_low_confidence(
     turn_saved = False
 
     try:
-        await repository.save_turn(
+        await flywheel_repo.save_turn(
             owner=state["user_id"],
             conversation=str(state["conversation_id"]),
             message_id=message_id,
@@ -40,7 +40,7 @@ async def _save_turn_and_capture_low_confidence(
 
     if capture and turn_saved:
         try:
-            await repository.capture_low_confidence(
+            await flywheel_repo.capture_low_confidence(
                 owner=state["user_id"],
                 conversation=str(state["conversation_id"]),
                 message_id=message_id,

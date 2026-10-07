@@ -8,7 +8,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.db import repository
+from app.db import conversation_repo
 
 
 router = APIRouter(tags=["conversations"])
@@ -27,7 +27,7 @@ async def list_conversations(user_id: str) -> list[dict]:
 
     返回格式为字典列表，便于前端展示会话卡片
     """
-    conversations = await repository.list_conversations(user_id)
+    conversations = await conversation_repo.list_conversations(user_id)
 
     return [
         {
@@ -62,7 +62,7 @@ async def list_messages(
     - 会话不存在或不属于该用户时返回404
     """
     # 校验会话存在性和所属权
-    conversation = await repository.get_conversation(
+    conversation = await conversation_repo.get_conversation(
         conversation_id,
         user_id,
     )
@@ -74,7 +74,7 @@ async def list_messages(
         )
 
     # 查询对话消息（不包括tool角色）
-    messages = await repository.list_dialog_messages(conversation_id)
+    messages = await conversation_repo.list_dialog_messages(conversation_id)
 
     return [
         {

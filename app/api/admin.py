@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from app.api import acceptance, kb, observability
 from app.api.knowledge import REPORT_PATH
 from app.config import settings
-from app.db import repository
+from app.db import knowledge_repo, topic_repo
 from app.db.database import SessionLocal
 from app.db.models import Review
 
@@ -70,7 +70,7 @@ async def _kb_card() -> dict:
     """
     card = _card("kb", "知识库", "/kb", "材料切块、录入、向量化与检索自测")
     try:
-        stats = await repository.knowledge_stats()
+        stats = await knowledge_repo.knowledge_stats()
         milvus = await kb.milvus_state()
     except Exception:
         card["note"] = "知识库统计读取失败，请检查数据库结构与连接。"
@@ -260,7 +260,7 @@ async def _topics_card() -> dict:
     """
     card = _card("topics", "主题分布", "/topics", "旁路分类结果中的 17 类问题分布")
     try:
-        dist = await repository.topic_distribution()
+        dist = await topic_repo.topic_distribution()
     except Exception:
         card["note"] = "主题归类表读取失败，请检查 微调 迁移与数据库连接。"
         return card

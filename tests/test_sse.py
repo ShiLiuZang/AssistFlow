@@ -60,7 +60,7 @@ def test_shared_finalization_saves_before_summary_and_terminal_sse(monkeypatch, 
     received = asyncio.Event()
     saved = AsyncMock(side_effect=lambda *_: order.append("saved"))
     scheduled = Mock(side_effect=lambda *_: order.append("summary"))
-    monkeypatch.setattr(graph_chat.repository, "persist_graph_messages", saved)
+    monkeypatch.setattr(graph_chat.conversation_repo, "persist_graph_messages", saved)
     monkeypatch.setattr(graph_chat, "schedule_persisted_summary", scheduled)
     messages = [object()]
     runtime = SimpleNamespace(get_state=AsyncMock(return_value=SimpleNamespace(values={"messages": messages})))

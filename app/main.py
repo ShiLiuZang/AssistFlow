@@ -39,7 +39,7 @@ from app.api.observability import router as observability_router  # 观测数据
 # 核心服务导入
 from app.config import settings  # 配置管理
 from app.core.summarizer import close_persisted_summaries  # 对话摘要持久化
-from app.db import repository  # 数据库操作
+from app.db import trace_repo  # 数据库操作
 from app.graph.adapters import make_services_with_mcp  # 服务容器和 MCP 工具集成
 from app.graph.checkpoint import persistent_runtime  # 图运行时和检查点管理
 from app.tools.mcp_client import StreamableHTTPTransport  # MCP HTTP 传输层
@@ -90,8 +90,8 @@ async def lifespan(app: FastAPI):
     # 3. 注入数据落库回调
     # audit_sink: 记录工具调用参数和结果，用于审计和重放
     # trace_sink: 记录执行追踪 span，用于性能分析和调试
-    services.audit_sink = repository.insert_tool_audit
-    services.trace_sink = repository.insert_trace_span
+    services.audit_sink = trace_repo.insert_tool_audit
+    services.trace_sink = trace_repo.insert_trace_span
 
     # 4. 记录 MCP 工具发现异常
     for issue in issues:

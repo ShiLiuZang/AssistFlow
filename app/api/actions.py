@@ -18,7 +18,7 @@ from app.schemas.actions import ResumeTicketRequest, SelectOrderRequest
 from app.api.sse import make_sse, graph_event_to_sse
 from app.api.graph_chat import _persist_graph_messages, schedule_graph_summary, stream_graph_events
 from app.core.conversation_lock import conversation_lock
-from app.db import repository
+from app.db import conversation_repo, ticket_repo, trace_repo
 from app.graph.runtime import Runtime
 from app.tools.audit import (
     build_ticket_decision_audit,
@@ -68,7 +68,7 @@ async def stream_ticket_decision(
     核心逻辑：
     1. 获取会话锁和图快照
     2. 校验当前中断与请求是否匹配
-    3. 调用repository.decide_ticket保存决策并执行（确认时创建工单）
+    3. 调用ticket_repo.decide_ticket保存决策并执行（确认时创建工单）
     4. 生成审计记录
     5. 恢复或继续图执行：
        - 有待处理中断：恢复图执行
@@ -88,7 +88,7 @@ async def stream_ticket_decision(
     try:
         # 使用trace span追踪整个操作，并获取会话锁
         async with (
-            span("ticket_action", repository.insert_trace_span),
+            span("ticket_action", trace_repo.insert_trace_span),
             conversation_lock(request.user_id, request.conversation_id),
         ):
             call_id = str(tool_call["id"])
@@ -97,7 +97,7 @@ async def stream_ticket_decision(
             pending = await runtime.pending_interrupt(request.user_id, request.conversation_id)
 
             # 查询是否已有保存的决策
-            saved = await repository.get_ticket_decision(request.conversation_id, call_id)
+            saved = await ticket_repo.get_ticket_decision(request.conversation_id, call_id)
 
             # 校验中断匹配性
             if pending and pending.get("tool_call_id") != call_id and saved is None:
@@ -110,10 +110,10 @@ async def stream_ticket_decision(
             # 执行工单决策（保存到数据库，确认时创建工单）
             async with span(
                 "ticket_decision",
-                repository.insert_trace_span,
+                trace_repo.insert_trace_span,
             ):
                 started = time.monotonic()
-                result = await repository.decide_ticket(
+                result = await ticket_repo.decide_ticket(
                     request.conversation_id,
                     request.user_id,
                     call_id,
@@ -136,7 +136,7 @@ async def stream_ticket_decision(
                 )
             else:
                 await emit_tool_audit(
-                    repository.insert_tool_audit,
+                    trace_repo.insert_tool_audit,
                     audit_record,
                 )
 
@@ -173,7 +173,7 @@ async def stream_ticket_decision(
                 ))
             else:
                 # 无中断，产出答案和done事件
-                frames.append(make_sse({"delta": repository.ticket_answer(result)}))
+                frames.append(make_sse({"delta": ticket_repo.ticket_answer(result)}))
                 frames.append(make_sse({"event": "done", "conversation_id": request.conversation_id}))
 
             # 判断图轮次是否完成
@@ -270,7 +270,7 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
     避免在查询待处理操作时，其他请求修改图状态
     """
     # 校验会话存在性
-    if await repository.get_conversation(conversation_id, user_id) is None:
+    if await conversation_repo.get_conversation(conversation_id, user_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
     runtime = getattr(http_request.app.state, "graph_runtime", None)
@@ -289,7 +289,7 @@ async def pending_ticket(conversation_id: int, user_id: str, http_request: Reque
 
         # 工单确认中断
         if pending:
-            saved = await repository.get_ticket_decision(conversation_id, pending["tool_call_id"])
+            saved = await ticket_repo.get_ticket_decision(conversation_id, pending["tool_call_id"])
             return {**pending, "conversation_id": conversation_id,
                     "confirmed": saved["confirmed"] if saved else None}
 
@@ -321,7 +321,7 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
     - 找不到对应工具调用时返回409
     """
     # 校验会话存在性
-    conversation = await repository.get_conversation(request.conversation_id, request.user_id)
+    conversation = await conversation_repo.get_conversation(request.conversation_id, request.user_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -332,7 +332,7 @@ async def resume_ticket(request: ResumeTicketRequest, http_request: Request) -> 
     call_id = request.tool_call_id
 
     # 从消息历史中查找对应的工具调用
-    records = await repository.list_messages(request.conversation_id)
+    records = await conversation_repo.list_messages(request.conversation_id)
     tool_call = next((call for record in reversed(records) for call in record.tool_calls or []
                       if call.get("id") == call_id and call.get("name") == "create_ticket"), None)
     if tool_call is None:
@@ -368,7 +368,7 @@ async def select_order(
     - 图服务未启动时返回503
     """
     # 校验会话存在性
-    conversation = await repository.get_conversation(
+    conversation = await conversation_repo.get_conversation(
         request.conversation_id,
         request.user_id,
     )

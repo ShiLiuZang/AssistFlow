@@ -10,7 +10,8 @@ from sqlalchemy import update
 
 from app.api import graph_chat
 from app.core import summarizer
-from app.db import repository
+from app.db import conversation_repo
+from app.db import database as db
 from app.db.models import Conversation
 from tests.test_graph_flow import chat, database, runtime, services
 
@@ -30,12 +31,12 @@ def test_next_turn_loads_saved_summary(monkeypatch):
                 first = await chat(graph, conversation_id, "第一轮问题")
                 assert '"event": "done"' in "".join(first)
 
-                rows = await repository.list_messages(conversation_id)
+                rows = await conversation_repo.list_messages(conversation_id)
                 boundary = max(
                     row.id for row in rows
                     if row.role in ("user", "assistant", "tool")
                 )
-                async with repository.SessionLocal() as session, session.begin():
+                async with db.SessionLocal() as session, session.begin():
                     await session.execute(
                         update(Conversation)
                         .where(Conversation.id == conversation_id)

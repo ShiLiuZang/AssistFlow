@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from app.api.review import router as review_router
 from app.core.flywheel import process_pending
 from app.core.trusted_sources import validate_review_source
-from app.db import repository
+from app.db import flywheel_repo, knowledge_repo, review_repo
 from app.kb.review_publish import publish_review
 from tests.test_graph_flow import database
 
@@ -27,27 +27,27 @@ def test_normalization_idempotent_and_rejects_unoffered_match(monkeypatch):
         async with database(monkeypatch) as cid:
             for n in (1, 2):
                 message_id = f"msg_{cid}_p{n}"
-                await repository.save_turn("u1", str(cid), message_id, f"p{n}", "退货运费谁出", [])
-                await repository.capture_low_confidence("u1", str(cid), message_id, "user_feedback")
+                await flywheel_repo.save_turn("u1", str(cid), message_id, f"p{n}", "退货运费谁出", [])
+                await flywheel_repo.capture_low_confidence("u1", str(cid), message_id, "user_feedback")
 
             async def normalize(question, candidates):
                 return {"question": "退货运费谁承担", "suggestion": "待审核", "matched_id": candidates[0]["id"] if candidates else None}
 
             stats = await process_pending(normalize)
             assert (stats["created"], stats["merged"], stats["skipped"]) == (1, 1, 0)
-            rows = await repository.list_review_queue()
+            rows = await review_repo.list_review_queue()
             assert len(rows) == 1 and rows[0]["occurrence_count"] == 2
             assert (await process_pending(normalize))["created"] == 0
 
             message_id = f"msg_{cid}_p3"
-            await repository.save_turn("u1", str(cid), message_id, "p3", "质量问题退货运费谁出", [])
-            await repository.capture_low_confidence("u1", str(cid), message_id, "user_feedback")
+            await flywheel_repo.save_turn("u1", str(cid), message_id, "p3", "质量问题退货运费谁出", [])
+            await flywheel_repo.capture_low_confidence("u1", str(cid), message_id, "user_feedback")
             async def invented(question, candidates):
                 return {"question": question, "suggestion": "", "matched_id": 999999}
             result = await process_pending(invented)
             assert result["skipped"] == 1
-            assert len(await repository.list_unmatched_questions()) == 1
-            assert (await repository.list_review_queue())[0]["occurrence_count"] == 2
+            assert len(await flywheel_repo.list_unmatched_questions()) == 1
+            assert (await review_repo.list_review_queue())[0]["occurrence_count"] == 2
 
     asyncio.run(run())
 
@@ -56,9 +56,9 @@ def test_review_without_token_and_same_chunk_recovery(monkeypatch):
     """测试审核流程：无token验证和相同块恢复"""
     async def run():
         async with database(monkeypatch) as cid:
-            await repository.save_turn("u1", str(cid), "msg_1_r1", "r1", "退货运费谁出", [])
-            pool_id = await repository.capture_low_confidence("u1", str(cid), "msg_1_r1", "user_feedback")
-            review_id, _ = await repository.merge_question(pool_id, "退货运费谁出", "所有退货免运费", None, set())
+            await flywheel_repo.save_turn("u1", str(cid), "msg_1_r1", "r1", "退货运费谁出", [])
+            pool_id = await flywheel_repo.capture_low_confidence("u1", str(cid), "msg_1_r1", "user_feedback")
+            review_id, _ = await flywheel_repo.merge_question(pool_id, "退货运费谁出", "所有退货免运费", None, set())
             app = FastAPI()
             app.include_router(review_router)
 
@@ -78,8 +78,8 @@ def test_review_without_token_and_same_chunk_recovery(monkeypatch):
                 payload = {"approved_answer": "所有退货免运费", "source_ref": SOURCE}
                 invalid = await api.post(f"/api/review/{review_id}/approve", json=payload)
                 assert invalid.status_code == 422
-                assert (await repository.get_review_detail(review_id))["status"] == "pending"
-                assert (await repository.knowledge_stats())["total"] == 0
+                assert (await review_repo.get_review_detail(review_id))["status"] == "pending"
+                assert (await knowledge_repo.knowledge_stats())["total"] == 0
                 index.upsert.assert_not_awaited()
 
                 payload["approved_answer"] = ANSWER
@@ -91,7 +91,7 @@ def test_review_without_token_and_same_chunk_recovery(monkeypatch):
                 assert frozen["source_ref"] == SOURCE
                 assert frozen["source_digest"] == validate_review_source("退货运费谁出", ANSWER, SOURCE)
                 assert frozen["publish_error"] == "RuntimeError"
-                pending = await repository.list_pending_chunks()
+                pending = await knowledge_repo.list_pending_chunks()
                 assert len(pending) == 1
                 chunk_id = pending[0].id
                 assert pending[0].answer == ANSWER
@@ -104,7 +104,7 @@ def test_review_without_token_and_same_chunk_recovery(monkeypatch):
                     assert recovered.json()["status"] == "approved"
                     assert recovered.json()["chunk_id"] == chunk_id
                     assert recovered.json()["publish_error"] is None
-                    stats = await repository.knowledge_stats()
+                    stats = await knowledge_repo.knowledge_stats()
                     assert (stats["total"], stats["pending"], stats["done"]) == (1, 0, 1)
                 assert index.upsert.await_count == index.visible.await_count == 3
                 assert [call.args[0]["id"] for call in index.upsert.await_args_list] == [chunk_id] * 3

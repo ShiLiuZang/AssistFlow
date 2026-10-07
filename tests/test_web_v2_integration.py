@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.api.feedback import router as feedback_router
 from app.api.review import router as review_router
 from app.core.flywheel import process_pending
-from app.db import repository
+from app.db import conversation_repo, flywheel_repo
+from app.db import database as db
 from app.db.models import Base, LowConfidenceQuestion, Review, Turn
 
 
@@ -21,7 +22,7 @@ async def isolated_db(monkeypatch):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    monkeypatch.setattr(repository, "SessionLocal", factory)
+    monkeypatch.setattr(db, "SessionLocal", factory)
     try:
         yield factory
     finally:
@@ -42,8 +43,8 @@ async def stored_counts(factory):
 def test_feedback_pool_merge_and_readonly_stats(monkeypatch):
     async def run():
         async with isolated_db(monkeypatch) as factory:
-            cid = await repository.create_conversation("v2-test")
-            await repository.save_turn("v2-test", str(cid), "v2-test-message", "v2-test-request", "退货运费谁出", [])
+            cid = await conversation_repo.create_conversation("v2-test")
+            await flywheel_repo.save_turn("v2-test", str(cid), "v2-test-message", "v2-test-request", "退货运费谁出", [])
             app = FastAPI()
             app.include_router(feedback_router)
             app.include_router(review_router)

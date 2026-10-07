@@ -27,7 +27,7 @@ def test_selection_http_forwards_choice_after_saving(monkeypatch, cancelled):
     scheduled = Mock()
     monkeypatch.setattr(graph_chat, "_persist_graph_messages", saved)
     monkeypatch.setattr(graph_chat, "schedule_persisted_summary", scheduled)
-    monkeypatch.setattr(actions.repository, "get_conversation", AsyncMock(return_value=object()))
+    monkeypatch.setattr(actions.conversation_repo, "get_conversation", AsyncMock(return_value=object()))
     app = FastAPI()
     app.include_router(actions.router)
     app.state.graph_runtime = runtime
@@ -45,7 +45,7 @@ def test_selection_http_forwards_choice_after_saving(monkeypatch, cancelled):
 
 def test_other_conversation_cannot_resume(monkeypatch):
     """测试权限检查：用户不能恢复其他人的会话"""
-    monkeypatch.setattr(actions.repository, "get_conversation", AsyncMock(return_value=None))
+    monkeypatch.setattr(actions.conversation_repo, "get_conversation", AsyncMock(return_value=None))
     stream = Mock()
     app = FastAPI()
     app.include_router(actions.router)
@@ -122,7 +122,7 @@ def test_selection_stream_resumes_real_graph_and_persists_messages(monkeypatch, 
                                    "request_id": card["request_id"], "message_id": snapshot.values["message_id"]}
             assert snapshot.values["message_id"] == (None if cancelled else f"msg_{cid}_{card['request_id']}")
             assert frames[-1] == "data: [DONE]\n\n"
-            records = await graph_chat.repository.list_messages(cid)
+            records = await graph_chat.conversation_repo.list_messages(cid)
             assert [record.role for record in records] == ["user", "graph_sync", "assistant"]
             assert records[-1].content == snapshot.values["answer"]
             scheduled.assert_called_once_with("u1", cid)

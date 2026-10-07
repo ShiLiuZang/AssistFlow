@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api import review, kb, jobs, knowledge
 from app.core import trusted_sources, evaluation
-from app.db import repository
+from app.db import knowledge_repo, review_repo, staging_repo
 from app.db.models import Review, QaExtractionStaging
 from app.kb.review_publish import publish_review
 from tests.test_kb_read_queries import database
@@ -61,11 +61,11 @@ def test_review_approve_partial_retry_same_chunk_and_reject(monkeypatch,tmp_path
             async with client() as api:
                 bad=await api.post('/api/review/1/approve',json={'approved_answer':'编造答案','source_ref':'returns-policy.md'})
                 assert bad.status_code==422
-                assert (await repository.get_review_detail(1))['status']=='pending'
+                assert (await review_repo.get_review_detail(1))['status']=='pending'
                 payload={'approved_answer':answer,'source_ref':'returns-policy.md'}
                 partial=await api.post('/api/review/1/approve',json=payload)
                 assert partial.status_code==202 and partial.json()['status']=='publishing'
-                pending=await repository.list_pending_chunks()
+                pending=await knowledge_repo.list_pending_chunks()
                 assert len(pending)==1
                 assert (await api.post('/api/review/1/reject')).status_code==409
                 index.fail=False
@@ -73,10 +73,10 @@ def test_review_approve_partial_retry_same_chunk_and_reject(monkeypatch,tmp_path
                 assert done.status_code==200 and done.json()['status']=='approved'
                 assert done.json()['chunk_id']==pending[0].id
                 assert (await api.post('/api/review/1/publish')).status_code==200
-                assert len(set(index.ids))==1 and not await repository.list_pending_chunks()
+                assert len(set(index.ids))==1 and not await knowledge_repo.list_pending_chunks()
                 rejected=await api.post('/api/review/2/reject')
                 assert rejected.json()['status']=='rejected'
-                assert (await repository.knowledge_stats())['total']==1
+                assert (await knowledge_repo.knowledge_stats())['total']==1
     asyncio.run(run())
 
 
@@ -87,8 +87,8 @@ def test_candidate_partial_recovery_and_kept_only(monkeypatch,tmp_path):
     vector=AsyncMock(side_effect=RuntimeError('一次性嵌入故障'))
     monkeypatch.setattr(kb.dualwrite,'vectorize_pending',vector)
     async def complete():
-        rows=await repository.list_pending_chunks()
-        for row in rows:await repository.mark_chunk_vectorized(row.id,str(row.id))
+        rows=await knowledge_repo.list_pending_chunks()
+        for row in rows:await knowledge_repo.mark_chunk_vectorized(row.id,str(row.id))
         return len(rows)
     async def run():
         async with database(monkeypatch) as factory:
@@ -97,12 +97,12 @@ def test_candidate_partial_recovery_and_kept_only(monkeypatch,tmp_path):
                 await session.commit()
             async with client() as api:
                 first=await api.post('/api/kb/staging/approve',json={'ids':[1]})
-                assert first.status_code==502 and (await repository.knowledge_stats())['pending']==1
-                assert (await repository.list_staging_by_ids([1]))[0].status=='kept'
+                assert first.status_code==502 and (await knowledge_repo.knowledge_stats())['pending']==1
+                assert (await staging_repo.list_staging_by_ids([1]))[0].status=='kept'
                 vector.side_effect=complete
                 done=await api.post('/api/kb/staging/approve',json={'ids':[1]})
                 assert done.status_code==200 and done.json()['approved']==1
-                assert (await repository.knowledge_stats())['total']==1
+                assert (await knowledge_repo.knowledge_stats())['total']==1
                 assert (await api.post('/api/kb/staging/approve',json={'ids':[1]})).status_code==409
                 assert (await api.post('/api/kb/staging/reject',json={'ids':[2]})).json()['rejected']==1
     asyncio.run(run())

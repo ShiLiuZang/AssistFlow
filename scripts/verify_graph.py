@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 from sqlalchemy import func, select
 
 from app.config import settings
-from app.db import repository
+from app.db import database
 from app.db.database import engine
 from app.db.models import Ticket
 from app.graph.adapters import make_services
@@ -29,7 +29,7 @@ def parse(response):
 
 
 async def count_tickets(cid):
-    async with repository.SessionLocal() as session:
+    async with database.SessionLocal() as session:
         return await session.scalar(select(func.count()).select_from(Ticket).where(Ticket.conversation_id == cid))
 
 

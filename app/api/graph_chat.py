@@ -16,7 +16,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.api.sse import graph_event_to_sse, make_sse
 from app.core.summarizer import schedule_persisted_summary, summarize_dialog
-from app.db import repository
+from app.db import conversation_repo
 from app.core.conversation_lock import conversation_lock
 from app.graph.runtime import Runtime
 from app.schemas.chat import ChatRequest
@@ -93,11 +93,11 @@ async def _persist_graph_messages(
         user_id: 用户标识
         conversation_id: 会话ID
 
-    从图快照中提取消息列表，调用repository持久化到数据库
+    从图快照中提取消息列表，调用conversation_repo持久化到数据库
     这是图状态与数据库的同步点，确保消息不会因图重启而丢失
     """
     snapshot = await runtime.get_state(user_id, conversation_id)
-    await repository.persist_graph_messages(
+    await conversation_repo.persist_graph_messages(
         conversation_id, user_id, snapshot.values.get("messages", []),
     )
 
@@ -160,11 +160,11 @@ async def _chat_events(
 ) -> AsyncIterator[dict]:
     """在共享收尾函数持有的会话锁内恢复历史并执行聊天轮次。"""
     snapshot = await runtime.get_state(request.user_id, conversation_id)
-    conversation = await repository.get_conversation(conversation_id, request.user_id)
+    conversation = await conversation_repo.get_conversation(conversation_id, request.user_id)
     if conversation is None:
         raise ValueError("会话不存在")
 
-    records = await repository.list_messages(conversation_id)
+    records = await conversation_repo.list_messages(conversation_id)
     graph_messages = (
         restore_messages(records)
         if not snapshot.values
@@ -321,10 +321,10 @@ async def graph_chat(
 
     # 首次聊天，创建新会话
     if request.conversation_id is None:
-        conversation_id = await repository.create_conversation(request.user_id)
+        conversation_id = await conversation_repo.create_conversation(request.user_id)
     else:
         # 续聊，校验会话存在性
-        conversation = await repository.get_conversation(
+        conversation = await conversation_repo.get_conversation(
             request.conversation_id,
             request.user_id,
         )

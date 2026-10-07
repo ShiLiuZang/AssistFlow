@@ -15,7 +15,7 @@ from langchain_core.messages import AIMessage
 from app.api import actions, graph_chat
 from app.api.actions import stream_ticket_decision
 from app.api.graph_chat import restore_messages
-from app.db import repository
+from app.db import conversation_repo, ticket_repo
 from app.schemas.actions import ResumeTicketRequest
 from tests.test_graph_flow import database, call, chat, runtime, services, ticket_count, events
 from tests.test_order_select_resume import setup_runtime
@@ -37,7 +37,7 @@ def test_ticket_decision_resumes_graph_without_extra_dialog_messages(monkeypatch
             request = ResumeTicketRequest(conversation_id=cid, user_id="u1", confirmed=confirmed,
                                           tool_call_id=item["id"])
             frames = [frame async for frame in stream_ticket_decision(request, item, graph_runtime)]
-            records = await repository.list_messages(cid)
+            records = await conversation_repo.list_messages(cid)
             history = restore_messages(records)
             assert [message.type for message in history] == ["human", "ai", "tool", "ai"]
             assert history[0].content == "建单"
@@ -52,7 +52,7 @@ def test_ticket_decision_resumes_graph_without_extra_dialog_messages(monkeypatch
 
             retry = [frame async for frame in stream_ticket_decision(request, item, graph_runtime)]
             assert retry == frames
-            assert len(await repository.list_messages(cid)) == len(records)
+            assert len(await conversation_repo.list_messages(cid)) == len(records)
             assert await ticket_count() == int(confirmed)
     asyncio.run(run())
 
@@ -61,9 +61,9 @@ def test_ticket_decision_resumes_graph_without_extra_dialog_messages(monkeypatch
 @pytest.mark.parametrize("runtime_present", [False, True])
 def test_ticket_actions_require_runtime(monkeypatch, endpoint, runtime_present):
     """图运行时未挂载或为None时返回503，不再使用数据库消息恢复。"""
-    monkeypatch.setattr(repository, "get_conversation", AsyncMock(return_value=object()))
+    monkeypatch.setattr(conversation_repo, "get_conversation", AsyncMock(return_value=object()))
     lookup = AsyncMock(side_effect=AssertionError("不应查询数据库待确认工单"))
-    monkeypatch.setattr(repository, "list_messages", lookup)
+    monkeypatch.setattr(conversation_repo, "list_messages", lookup)
     app = FastAPI()
     app.include_router(actions.router)
     if runtime_present:
@@ -84,8 +84,8 @@ def test_resume_rejects_missing_call_id_before_lookup(monkeypatch):
     """HTTP请求缺少tool_call_id时返回422，不再从消息历史推断调用。"""
     owner = AsyncMock()
     lookup = AsyncMock()
-    monkeypatch.setattr(repository, "get_conversation", owner)
-    monkeypatch.setattr(repository, "list_messages", lookup)
+    monkeypatch.setattr(conversation_repo, "get_conversation", owner)
+    monkeypatch.setattr(conversation_repo, "list_messages", lookup)
     app = FastAPI()
     app.include_router(actions.router)
     app.state.graph_runtime = SimpleNamespace()
@@ -103,11 +103,11 @@ def test_pending_without_interrupt_ignores_unresolved_database_call(monkeypatch)
     """数据库存在未决工具调用时，无图中断仍返回None。"""
     async def run():
         async with database(monkeypatch) as cid:
-            await repository.append_message(cid, "assistant", "", tool_calls=[call("call-1")])
-            records = await repository.list_messages(cid)
+            await conversation_repo.append_message(cid, "assistant", "", tool_calls=[call("call-1")])
+            records = await conversation_repo.list_messages(cid)
             assert records[0].tool_calls == [call("call-1")]
             lookup = AsyncMock(side_effect=AssertionError("不应回退到数据库消息"))
-            monkeypatch.setattr(repository, "list_messages", lookup)
+            monkeypatch.setattr(conversation_repo, "list_messages", lookup)
             graph_runtime = runtime(services())
             request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(graph_runtime=graph_runtime)))
             assert await actions.pending_ticket(cid, "u1", request) is None
@@ -123,15 +123,15 @@ def test_ticket_decision_without_graph_interrupt_does_not_create_ticket(monkeypa
     async def run():
         async with database(monkeypatch) as cid:
             item = call("call-1")
-            await repository.append_message(cid, "assistant", "", tool_calls=[item])
+            await conversation_repo.append_message(cid, "assistant", "", tool_calls=[item])
             request = ResumeTicketRequest(conversation_id=cid, user_id="u1", confirmed=True,
                                           tool_call_id=item["id"])
             frames = [frame async for frame in stream_ticket_decision(request, item, runtime(services()))]
             assert frames[0].startswith("event: error\n")
             assert frames[-1] == "data: [DONE]\n\n"
             assert await ticket_count() == 0
-            assert await repository.get_ticket_decision(cid, item["id"]) is None
-            assert len(await repository.list_messages(cid)) == 1
+            assert await ticket_repo.get_ticket_decision(cid, item["id"]) is None
+            assert len(await conversation_repo.list_messages(cid)) == 1
     asyncio.run(run())
     scheduled.assert_not_called()
 
@@ -160,7 +160,7 @@ def test_ticket_retry_continues_graph_after_decision_was_saved(monkeypatch, conf
             assert failed[-1] == "data: [DONE]\n\n"
             assert (await graph_runtime.get_state("u1", cid)).next == ("agent",)
             assert await graph_runtime.pending_interrupt("u1", cid) is None
-            assert (await repository.get_ticket_decision(cid, item["id"]))["confirmed"] is confirmed
+            assert (await ticket_repo.get_ticket_decision(cid, item["id"]))["confirmed"] is confirmed
             assert await ticket_count() == int(confirmed)
             scheduled.assert_not_called()
 
@@ -172,7 +172,7 @@ def test_ticket_retry_continues_graph_after_decision_was_saved(monkeypatch, conf
             assert frames[-1] == "data: [DONE]\n\n"
             assert not (await graph_runtime.get_state("u1", cid)).next
             assert await ticket_count() == int(confirmed)
-            records = await repository.list_messages(cid)
+            records = await conversation_repo.list_messages(cid)
             history = restore_messages(records)
             assert [message.type for message in history] == ["human", "ai", "tool", "ai"]
             assert history[2].tool_call_id == item["id"]
@@ -197,9 +197,9 @@ def test_graph_chat_precheck_uses_pending_graph_interrupt(monkeypatch, kind, det
         result = asyncio.run(graph_runtime.run_turn("建单", "u1", str(cid)))
         assert result["__interrupt__"][0].value["kind"] == kind
 
-    monkeypatch.setattr(repository, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=cid)))
+    monkeypatch.setattr(conversation_repo, "get_conversation", AsyncMock(return_value=SimpleNamespace(id=cid)))
     lookup = AsyncMock(side_effect=AssertionError("预检不应从数据库消息推断中断"))
-    monkeypatch.setattr(repository, "list_messages", lookup)
+    monkeypatch.setattr(conversation_repo, "list_messages", lookup)
     started = Mock()
 
     async def stream(request, conversation_id, current_runtime):

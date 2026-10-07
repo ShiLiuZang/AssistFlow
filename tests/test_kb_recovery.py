@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-from app.db import repository
+from app.db import knowledge_repo
+from app.db import database as db
 from app.db.models import Base, KnowledgeChunk
 from app.kb.documents import Chunk
 from app.kb import dualwrite
@@ -34,7 +35,7 @@ def test_partial_build_reuses_ids_and_repairs_neighbors(monkeypatch):
             self.session.flush()
         async def commit(self):
             self.session.commit()
-    monkeypatch.setattr(repository, "SessionLocal", LocalSession)
+    monkeypatch.setattr(db, "SessionLocal", LocalSession)
     chunks = [Chunk("A", "Q", answer, "A / Q", "faq") for answer in ["one", "two"]]
     first = asyncio.run(dualwrite.write_pending(chunks[:1]))
     all_ids = asyncio.run(dualwrite.write_pending(chunks))
@@ -59,8 +60,8 @@ def test_second_batch_failure_then_resume(monkeypatch):
     async def acall(fn):
         return fn()
     stored = {}
-    monkeypatch.setattr(repository, "list_pending_chunks", pending)
-    monkeypatch.setattr(repository, "mark_chunk_vectorized", mark)
+    monkeypatch.setattr(knowledge_repo, "list_pending_chunks", pending)
+    monkeypatch.setattr(knowledge_repo, "mark_chunk_vectorized", mark)
     monkeypatch.setattr(dualwrite.milvus_client, "acall", acall)
     monkeypatch.setattr(dualwrite.milvus_client, "ensure_collection", lambda *a, **k: None)
     monkeypatch.setattr(dualwrite.milvus_client, "flush", lambda *a, **k: None)

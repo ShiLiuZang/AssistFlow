@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api import kb
 from app.core import trusted_sources
-from app.db import repository
+from app.db import knowledge_repo, staging_repo
+from app.db import database as db
 from app.db.models import Base, QaExtractionStaging
 
 
@@ -21,7 +22,7 @@ async def database(monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    monkeypatch.setattr(repository, "SessionLocal", factory)
+    monkeypatch.setattr(db, "SessionLocal", factory)
     try:
         yield factory
     finally:
@@ -34,7 +35,7 @@ def client():
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-@pytest.mark.skip(reason="C: app/db/repository.py:1589 staging_stats.counts 遗漏 approved/rejected，保留五种状态计数断言")
+@pytest.mark.skip(reason="C: app/db/staging_repo.py:10 staging_stats.counts 遗漏 approved/rejected，保留五种状态计数断言")
 def test_candidate_full_answer_all_counts_and_source_boundaries(monkeypatch, tmp_path):
     answer = "可信退货条件。" * 35
     (tmp_path / "returns-policy.md").write_text("# 条件\n" + answer, encoding="utf-8")
@@ -59,7 +60,7 @@ def test_candidate_full_answer_all_counts_and_source_boundaries(monkeypatch, tmp
                 assert len(response["rows"]["kept"]) == 1
                 assert len(response["rows"]["kept"][0]["answer"]) == 160
             # 当前没有 staging 详情/材料 HTTP 接口，完整记录和来源校验使用现存仓储及校验器。
-            rows = {row.id: row for row in await repository.list_staging_by_ids(list(range(1, 10)))}
+            rows = {row.id: row for row in await staging_repo.list_staging_by_ids(list(range(1, 10)))}
             detail = rows[2]
             assert detail.answer == answer and detail.status == "kept"
             digest = trusted_sources.validate_review_source(detail.question, detail.answer, detail.source_ref)
@@ -72,14 +73,14 @@ def test_candidate_full_answer_all_counts_and_source_boundaries(monkeypatch, tmp
                 trusted_sources.validate_review_source(rows[8].question, rows[8].answer, rows[8].source_ref)
             with pytest.raises(ValueError, match="脱敏"):
                 trusted_sources.validate_review_source(rows[9].question, rows[9].answer, rows[9].source_ref)
-            assert await repository.list_staging_by_ids([999]) == []
-            assert len(await repository.list_staging_by_status("kept")) == 5
-            assert (await repository.knowledge_stats())["total"] == 0
+            assert await staging_repo.list_staging_by_ids([999]) == []
+            assert len(await staging_repo.list_staging_by_status("kept")) == 5
+            assert (await knowledge_repo.knowledge_stats())["total"] == 0
     asyncio.run(run())
 
 
 def test_staging_unavailable_stats_is_sanitized(monkeypatch):
-    monkeypatch.setattr(repository, "staging_stats", AsyncMock(side_effect=RuntimeError("offline")))
+    monkeypatch.setattr(staging_repo, "staging_stats", AsyncMock(side_effect=RuntimeError("offline")))
 
     async def run():
         async with client() as api:
@@ -90,8 +91,8 @@ def test_staging_unavailable_stats_is_sanitized(monkeypatch):
 
 @pytest.mark.skip(reason="C: app/api/kb.py:494 未约束 staging limit 为 1..100，0 和 101 未返回 422")
 def test_bounded_parameters_and_unavailable_queries(monkeypatch):
-    monkeypatch.setattr(repository, "staging_stats", AsyncMock(return_value={}))
-    monkeypatch.setattr(repository, "list_staging_by_status", AsyncMock(return_value=[]))
+    monkeypatch.setattr(staging_repo, "staging_stats", AsyncMock(return_value={}))
+    monkeypatch.setattr(staging_repo, "list_staging_by_status", AsyncMock(return_value=[]))
 
     async def run():
         async with client() as api:
@@ -117,7 +118,7 @@ def test_preview_then_ingest_original_without_vectorization(monkeypatch):
                 assert before["total"] >= 1 and before["duplicates"] == 0 and before["dedup_known"]
                 assert before["chunks"][0]["seq"] == 1
                 assert before["chunks"][0]["chars"] == len(before["chunks"][0]["answer"])
-                assert (await repository.knowledge_stats())["total"] == 0
+                assert (await knowledge_repo.knowledge_stats())["total"] == 0
 
                 response = await api.post("/api/kb/ingest", json={**payload, "vectorize": False})
                 assert response.status_code == 200
@@ -125,7 +126,7 @@ def test_preview_then_ingest_original_without_vectorization(monkeypatch):
                 assert saved["inserted"] == before["total"] and saved["skipped"] == 0
                 assert len(saved["ids"]) == saved["inserted"] and saved["vectorized"] is None
                 assert saved["chunk_stats"]["pending"] == saved["inserted"]
-                pending = {row.id: row for row in await repository.list_pending_chunks()}
+                pending = {row.id: row for row in await knowledge_repo.list_pending_chunks()}
                 for chunk_id in saved["ids"]:
                     detail = pending[chunk_id]
                     assert detail.vectorize_status == "pending" and detail.vector_id is None
@@ -135,9 +136,9 @@ def test_preview_then_ingest_original_without_vectorization(monkeypatch):
                 assert repeated["ids"] == [] and repeated["vectorized"] is None
                 after = (await api.post("/api/kb/preview", json=payload)).json()
                 assert after["duplicates"] == before["total"]
-                assert (await repository.knowledge_stats())["total"] == before["total"]
+                assert (await knowledge_repo.knowledge_stats())["total"] == before["total"]
                 for invalid in ("", "# 只有标题", "x" * 40001):
                     assert (await api.post("/api/kb/ingest", json={"text": invalid, "vectorize": False})).status_code == 400
-                assert (await repository.knowledge_stats())["total"] == before["total"]
+                assert (await knowledge_repo.knowledge_stats())["total"] == before["total"]
     asyncio.run(run())
     vectorize.assert_not_awaited()

@@ -12,7 +12,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.api.graph_chat import stream_graph_chat
-from app.db import repository
+from app.db import conversation_repo
+from app.db import database as db
 from app.db.models import Base, Ticket
 from app.graph.build import build_graph
 from app.graph.runtime import Runtime
@@ -33,9 +34,9 @@ async def database(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    monkeypatch.setattr(repository, "SessionLocal", async_sessionmaker(engine, expire_on_commit=False))
+    monkeypatch.setattr(db, "SessionLocal", async_sessionmaker(engine, expire_on_commit=False))
     try:
-        yield await repository.create_conversation("u1")
+        yield await conversation_repo.create_conversation("u1")
     finally:
         await engine.dispose()
 
@@ -82,7 +83,7 @@ async def chat(r, cid, text="建单"):
 
 async def ticket_count():
     """只查询 database() 替换后的一次性数据库。"""
-    async with repository.SessionLocal() as session:
+    async with db.SessionLocal() as session:
         return await session.scalar(select(func.count()).select_from(Ticket))
 
 

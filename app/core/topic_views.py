@@ -5,12 +5,12 @@ import asyncio
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core import history_topics
-from app.db import repository
+from app.db import topic_repo
 
 
 async def distribution() -> dict:
     try:
-        result = await repository.topic_distribution()
+        result = await topic_repo.topic_distribution()
         if result["total"] or not history_topics.available():
             return result
     except SQLAlchemyError:
@@ -21,9 +21,9 @@ async def distribution() -> dict:
 
 async def questions(label: str, page: int = 1, size: int = 20) -> dict:
     try:
-        business = await repository.topic_distribution()
+        business = await topic_repo.topic_distribution()
         if business["total"] or not history_topics.available():
-            return await repository.topic_questions(label, page=page, size=size)
+            return await topic_repo.topic_questions(label, page=page, size=size)
     except SQLAlchemyError:
         if not history_topics.available():
             raise
