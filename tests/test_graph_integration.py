@@ -16,6 +16,7 @@ from app.core.intent import Intent, Prediction, ROUTES
 from app.graph.build import build_graph
 from app.graph.runtime import Runtime
 from app.graph.adapters import make_tool_registry
+from app.graph import adapters
 from app.api import graph_chat
 from app.api.sse import graph_event_to_sse
 from app.core.evidence import REFUSAL
@@ -198,6 +199,22 @@ def test_agent_tokens_arrive_before_graph_and_persistence_complete(monkeypatch):
 def test_chat_model_requests_stream_usage():
     assert get_chat_model().stream_usage is True
     assert get_chat_model(streaming=True).stream_usage is True
+
+
+def test_agent_model_enables_streaming_and_usage(monkeypatch):
+    reply = AIMessage(content="订单信息")
+    bound_model = SimpleNamespace(ainvoke=AsyncMock(return_value=reply))
+
+    def bind_tools(model, tools):
+        assert model.streaming is True
+        assert model.stream_usage is True
+        assert tools == []
+        return bound_model
+
+    monkeypatch.setattr("langchain_openai.ChatOpenAI.bind_tools", bind_tools)
+    result = asyncio.run(adapters.agent([HumanMessage(content="订单状态")], model_tools=[]))
+    assert result is reply
+    bound_model.ainvoke.assert_awaited_once()
 
 
 @pytest.mark.parametrize("refused", [False, True])

@@ -21,6 +21,7 @@ def get_chat_model(*, streaming: bool = False) -> ChatOpenAI:
     根据服务器配置创建 LLM 客户端
 
     不会在创建时发起模型请求，仅配置客户端参数。
+    显式 streaming=False 会硬性关闭流式回调，agent 必须使用 streaming=True。
 
     Args:
         streaming: 是否允许调用方使用流式输出（默认 False）

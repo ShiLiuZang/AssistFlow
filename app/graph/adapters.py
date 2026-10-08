@@ -398,7 +398,7 @@ async def agent(
     Returns:
         AIMessage（可能包含 tool_calls）
     """
-    model = get_chat_model().bind_tools(model_tools)
+    model = get_chat_model(streaming=True).bind_tools(model_tools)
     return await model.ainvoke(
         build_windowed_agent_messages(messages, summary_text, covered_count)
     )
